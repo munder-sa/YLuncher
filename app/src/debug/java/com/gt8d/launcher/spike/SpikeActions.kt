@@ -1,14 +1,20 @@
 package com.gt8d.launcher.spike
 
+import android.accessibilityservice.AccessibilityService
+import android.app.ActivityOptions
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.media.MediaMetadata
 import android.media.session.MediaSessionManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
+import android.view.WindowManager
 import com.gt8d.launcher.media.MediaListenerService
 
 object SpikeActions {
@@ -24,6 +30,9 @@ object SpikeActions {
             "media_dump" -> runMediaDump(appCtx)
             "overlay_on" -> SpikeOverlay.show(appCtx)
             "overlay_off" -> SpikeOverlay.hide(appCtx)
+            "toggle_split" -> runToggleSplit()
+            "info" -> runInfo(appCtx)
+            "freeform" -> runFreeform(appCtx, extras)
             else -> Log.w(TAG, "unknown step: $step")
         }
     }
@@ -142,11 +151,86 @@ object SpikeActions {
         }
     }
 
+    private fun runToggleSplit() {
+        val service = SpikeAccessibilityService.instance
+        if (service == null) {
+            Log.w(TAG, "FAIL toggle_split service-not-enabled")
+            return
+        }
+        val result = service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN)
+        Log.i(TAG, "toggle_split result=$result")
+    }
+
+    private fun runInfo(ctx: Context) {
+        val contentResolver = ctx.contentResolver
+        val packageManager = ctx.packageManager
+        val wm = ctx.getSystemService(WindowManager::class.java)
+        Log.i(TAG, "info enable_freeform_support=${Settings.Global.getInt(contentResolver, "enable_freeform_support", 0)}")
+        Log.i(TAG, "info force_resizable_activities=${Settings.Global.getInt(contentResolver, "force_resizable_activities", 0)}")
+        Log.i(TAG, "info FEATURE_FREEFORM_WINDOW_MANAGEMENT=${packageManager.hasSystemFeature(PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT)}")
+        Log.i(TAG, "info FEATURE_PICTURE_IN_PICTURE=${packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)}")
+        Log.i(TAG, "info currentWindowMetrics.bounds=${wm.currentWindowMetrics.bounds}")
+    }
+
+    private fun runFreeform(ctx: Context, extras: Bundle?) {
+        val left = extras?.getString("left").orEmpty()
+        val right = extras?.getString("right").orEmpty()
+        val ratio = readInt(extras, "ratio", 50)
+        val delay = readDelayMs(extras)
+
+        if (left.isBlank() || right.isBlank()) {
+            Log.w(TAG, "FAIL freeform missing args left='$left' right='$right'")
+            return
+        }
+
+        val bounds = ctx.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds
+        val w = bounds.width()
+        val h = bounds.height()
+        val splitX = w * ratio / 100
+        val leftRect = Rect(0, 0, splitX, h)
+        val rightRect = Rect(splitX, 0, w, h)
+
+        val leftIntent = ctx.packageManager.getLaunchIntentForPackage(left)
+        if (leftIntent == null) {
+            Log.w(TAG, "FAIL not-installed $left")
+            return
+        }
+        leftIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val leftOptions = ActivityOptions.makeBasic().setLaunchBounds(leftRect)
+        startSafe(ctx, "left:$left", leftIntent, leftOptions.toBundle())
+
+        mainHandler.postDelayed({
+            val rightIntent = ctx.packageManager.getLaunchIntentForPackage(right)
+            if (rightIntent == null) {
+                Log.w(TAG, "FAIL not-installed $right")
+                return@postDelayed
+            }
+            rightIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            val rightOptions = ActivityOptions.makeBasic().setLaunchBounds(rightRect)
+            startSafe(ctx, "right:$right", rightIntent, rightOptions.toBundle())
+
+            mainHandler.postDelayed({
+                Log.i(TAG, "freeform bounds requested left=$leftRect right=$rightRect")
+            }, 1000L)
+        }, delay)
+    }
+
     fun startSafe(ctx: Context, target: String, intent: Intent) {
         val appCtx = ctx.applicationContext
         val flagsHex = "0x${Integer.toHexString(intent.flags)}"
         try {
             appCtx.startActivity(intent)
+            Log.i(TAG, "START $target flags=$flagsHex -> ok")
+        } catch (e: Exception) {
+            Log.w(TAG, "START $target flags=$flagsHex -> FAIL ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    fun startSafe(ctx: Context, target: String, intent: Intent, options: Bundle?) {
+        val appCtx = ctx.applicationContext
+        val flagsHex = "0x${Integer.toHexString(intent.flags)}"
+        try {
+            appCtx.startActivity(intent, options)
             Log.i(TAG, "START $target flags=$flagsHex -> ok")
         } catch (e: Exception) {
             Log.w(TAG, "START $target flags=$flagsHex -> FAIL ${e.javaClass.simpleName}: ${e.message}")
@@ -159,6 +243,15 @@ object SpikeActions {
             is Number -> v.toLong()
             is String -> v.toLongOrNull() ?: 300L
             else -> 300L
+        }
+    }
+
+    private fun readInt(extras: Bundle?, key: String, default: Int): Int {
+        if (extras == null || !extras.containsKey(key)) return default
+        return when (val v = extras.get(key)) {
+            is Number -> v.toInt()
+            is String -> v.toIntOrNull() ?: default
+            else -> default
         }
     }
 

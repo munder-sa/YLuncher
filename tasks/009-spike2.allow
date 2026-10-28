@@ -1,0 +1,6 @@
+write app/src/debug/AndroidManifest.xml
+write app/src/debug/java/com/gt8d/launcher/spike/SpikeActions.kt
+create app/src/debug/java/com/gt8d/launcher/spike/SpikeAccessibilityService.kt
+create app/src/debug/res/xml/spike_accessibility.xml
+command /home/munde/tools/gradle-run.sh assembleDebug
+command /home/munde/tools/gradle-run.sh test

@@ -1,0 +1,3 @@
+write app/src/debug/java/com/gt8d/launcher/spike/SpikePanelActivity.kt
+command /home/munde/tools/gradle-run.sh assembleDebug
+command /home/munde/tools/gradle-run.sh test
