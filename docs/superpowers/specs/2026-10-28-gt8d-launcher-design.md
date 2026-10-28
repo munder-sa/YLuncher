@@ -11,6 +11,7 @@
 |---|---|---|
 | r1 | 2026-10-28 | 初版（分割は `FLAG_ACTIVITY_LAUNCH_ADJACENT` で開く前提） |
 | r2 | 2026-10-28 | 家での実験の結果を反映（`docs/superpowers/spikes/home-spikes.md`、`vendor-split-entry.md`）。公式 API では分割を作れないことが判明したため、**メーカーの分割入口（`com.sd.factoryconfig/.SplitActivity`、以下「E」）**で開く方式に変更。退避策として**純正のアプリペアをアクセシビリティで押す方式（以下「D」）**を追加。セットごとの比率、切り替えの幕、起動時の扱い、メーカー入口のまとめ役（`VendorBridge`）、設定 v2 への移行を追加 |
+| r2.1 | 2026-10-28 | レビュー反映：パネルの転送判定（分割を開いている最中は転送しない）、暖かい／冷えた起動の見分け方、リンク振り分けでの前面の判定方法、全画面ブラウザは別タスク、実験⑮、TVer のパッケージ名を確定 |
 
 ---
 
@@ -112,6 +113,7 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 - **行き先の予告**：幕の中央に次のセットの**配置図**（左右のブロックを比率どおりに描き、アイコンとアプリ名を置く。パネルならパネルの図）。上にセット名（32sp 以上）、下に巡回の位置の点（●○○）。背景はパネルと同じ壁紙を暗めにしたもの。ぼかし等の重い効果は使わない
 - **待ち時間**：0.8 秒を超えたら、配置図の下に細いライム色（`Palette.Accent`）の進行線を出す。0.8 秒未満では出さない（ちらつき防止）
 - **幕を外す合図**：左右の両方のパッケージが前面化したこと（`ForegroundWatcher`、§5.5）。右がパネルなら、パネルの分割内での `onResume` も合図にする。合図が得られないときは時間で外す（暖かい起動 0.8 秒、冷えた起動 3.5 秒）。外すときは 150ms でフェードアウト
+- **暖かい／冷えた起動の見分け方**：他アプリのタスクの有無は自作アプリから見えないため、自作アプリのプロセスが「起動してから、そのパッケージを前面化させた（または前面化を見た）か」の記録で判定する（`SetRunner`・パネルからの起動、`ForegroundWatcher` が見た前面化）。左右の両方に記録があれば暖かい起動、どちらかに無ければ冷えた起動。自作のパッケージ（パネル）は、自分のタスク（`ActivityManager.appTasks`）があれば暖かい起動とする。**見分けられないときは冷えた起動（3.5 秒）に寄せる**。いずれも 4 秒の安全タイマーが上限
 - **安全タイマー（必須）**：幕は、**最初の呼び出しから合計 4 秒で必ず外れる**。`ForegroundWatcher` の結果と無関係の独立したタイマー。`EdgeStripService` の停止・例外の場合も必ず外す（`finally` 相当）。4 秒で外れたら失敗として記録する。4 秒の根拠：冷えた起動の実測が約 2.5〜3 秒
 - **呼び直し**：4 秒以内に片側が欠けていたら、1回だけ呼び直す。呼び直しで幕を延長しない（残り時間があれば幕の下で、なければ幕なしで裏で行う）
 - **連続スワイプ**：幕の表示中のスワイプは行き先を更新する（配置図が切り替わる）。起動は実行中のものが終わってから、最後の行き先だけを実行する
@@ -151,7 +153,14 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 
 ### 4.7 内蔵ブラウザ（URL 受け口）
 - 既定のブラウザ（RoleManager の ROLE_BROWSER）として http/https の VIEW を受ける
-- E にはパッケージ名しか渡せないため、**分割の右側の自作アプリは「パネルのタスク」1つにまとめ、内蔵ブラウザはその上に重ねる**（ブラウザを閉じるとパネルに戻る）
+- E にはパッケージ名しか渡せないため、**分割の右側の自作アプリは「パネルのタスク」1つにまとめ、分割の右に出すブラウザはその上に重ねる**（ブラウザを閉じるとパネルに戻る）
+- **全画面で開くブラウザは、パネルのタスクに重ねず別のタスクで開く**（全画面用の別名の Activity、別の `taskAffinity`）。「戻る」で閉じると、下にあるホームや元のアプリにそのまま戻る（パネルが分割の外で出てくる経路をなくす）
+- **前面の判定方法**：手がかりは ①自作の HomeActivity・PanelActivity の再開状態と `isInMultiWindowMode`、②`SetRunner` が最後に開いたセットの記録（左右のパッケージ）、③`ForegroundWatcher` の直近の前面化イベント、④リンクを送ってきたアプリ（`BrowserActivity` の `referrer`）。判定の順：
+  1. ホームが再開中 → 「ホーム」
+  2. パネルが分割の中で再開中 → 「アプリ ｜ パネル」
+  3. 最後に開いたセットが「アプリ ｜ アプリ」で、その後に別のアプリの前面化が無く、送り元がその左右のどちらか → 「アプリ ｜ アプリ」
+  4. 送り元が分かる → その送り元を X として「全画面アプリ X」
+  5. **分からない → 内蔵ブラウザを全画面で開く**（誤って分割を崩すより安全なため）
 - 開き方（設定で選択）：
   - 既定：内蔵ブラウザで分割
     - 前面がホームのとき：内蔵ブラウザを全画面で開く
@@ -194,11 +203,11 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 | ForegroundWatcher | 指定パッケージの前面化を待つ（幕を外す合図、片側欠けの検知） | `UsageStatsManager`（`ACTIVITY_RESUMED`） |
 | TransitionCurtain | 切り替えの幕（配置図、進行線、フェード、4 秒の安全タイマー） | `EdgeStripService` のオーバーレイ |
 | HomeActivity | 既定のホーム（左アイコン一覧＋右パネル）。起動画面（§4.8） | `category.HOME` |
-| PanelActivity | **自作アプリのランチャー用の入口**（MAIN/LAUNCHER、表示名「GT8D パネル」）。分割の右側。**分割の外（`isInMultiWindowMode == false`）で開かれたら HomeActivity へ転送して閉じる** | resizeable |
+| PanelActivity | **自作アプリのランチャー用の入口**（MAIN/LAUNCHER、表示名「GT8D パネル」）。分割の右側。**分割の外（`isInMultiWindowMode == false`）にいるときの転送**：起動直後には判定しない。`SetRunner` の「分割を開いている最中」の印（同じプロセス内の共有状態、開始時刻つき）があるあいだは転送しない。印が消えた（完了または 4 秒の安全タイマー）あとも分割の外なら HomeActivity へ転送して閉じる。印が無いときに分割の外で開かれたら、1.5 秒待って分割に入らなければ転送する（冷えた起動では E がパネルをいったん全画面で起動するため。§5.3） | resizeable、`onMultiWindowModeChanged` |
 | PanelContent | パネルの Composable。**右がパネルのときの最小幅 516dp でも崩れない**。車接続時の解像度でも崩れない | Compose |
 | MediaWatcher | 再生セッションの監視と操作 | NotificationListenerService、MediaSessionManager |
 | EdgeStripService | 左右の帯を常駐。幕を出す役も兼ねる（帯の窓は幕より上） | フォアグラウンドサービス（specialUse）、`TYPE_APPLICATION_OVERLAY` |
-| BrowserActivity | URL受け口・内蔵ブラウザ。パネルのタスクの上に重ねる（`taskAffinity` をパネルと同じにし `NEW_TASK` を付けない） | WebView、ROLE_BROWSER |
+| BrowserActivity | URL受け口・内蔵ブラウザ。分割の右に出すときはパネルのタスクの上に重ねる（`taskAffinity` をパネルと同じにし `NEW_TASK` を付けない）。全画面のときは別名の Activity（別の `taskAffinity`）で別タスクに開く。`referrer` で送り元を取る | WebView、ROLE_BROWSER |
 | LinkRouter | URL の振り分け（§4.7） | — |
 | AppPairService（D 用） | 純正ホームのペアの走査とクリック。**D のときだけ使う**。タッチ探索は使わない（タッチの挙動を変えない）。画面内容の読み取りあり | AccessibilityService |
 | SettingsActivity | 設定画面 §6 | Compose |
@@ -337,7 +346,7 @@ enum class LinkMode { InAppSplit, Chrome }
 - リンク：内蔵ブラウザで分割、Chromeドメイン＝`accounts.google.com`
 - 操作：帯幅 8px、光る ON、長押し 1000ms
 - 起動時：車との接続を待たない（実験⑩⑪で見直す）
-- パッケージ名（GT8D の `pm list packages` で確定済み）：Video=`com.zdj.videoplayer`、VLC=`org.videolan.vlc`、U-NEXT=`jp.unext.mediaplayer`、Prime Video=`com.amazon.avod.thirdpartyclient`、TVer=`jp.hamitv.hamiand1`（要確認）、ABEMA=`tv.abema`、Apple Music=`com.apple.android.music`、NewPipe=`org.schabi.newpipe`、YouTube=`com.google.android.youtube`、Chrome=`com.android.chrome`、Googleマップ=`com.google.android.apps.maps`
+- パッケージ名（GT8D の `pm list packages` で確定済み）：Video=`com.zdj.videoplayer`、VLC=`org.videolan.vlc`、U-NEXT=`jp.unext.mediaplayer`、Prime Video=`com.amazon.avod.thirdpartyclient`、TVer=`jp.hamitv.hamiand1`（端末の APK でラベル「TVer」を確認）、ABEMA=`tv.abema`、Apple Music=`com.apple.android.music`、NewPipe=`org.schabi.newpipe`、YouTube=`com.google.android.youtube`、Chrome=`com.android.chrome`、Googleマップ=`com.google.android.apps.maps`
 
 ---
 
@@ -407,6 +416,7 @@ Muse への共通ルール：ダーク背景で映える色づかい。
 | ⑫ | 使用状況へのアクセスで、分割中の左右の前面化イベントが届くか | E の後、左右両方の `ACTIVITY_RESUMED` が 4 秒以内に取れる | ForegroundWatcher を使わない扱い（§5.5） |
 | ⑬ | 幕（オーバーレイ）の下でも E の処理が普通に進むか | 幕を出したまま E を呼んで、分割が成立する | 幕の種類・出し方を調整 |
 | ⑭ | 起動直後に最後のセットを開くまでの所要時間 | 10 秒以内に分割が成立する | 上限時間を見直す |
+| ⑮ | 右パネルのセットを冷えた状態で開く（自作アプリのタスクが無い状態から） | パネルが途中でホームに転送されず、分割の右に入る | 転送の待ち時間・印の扱いを調整 |
 
 ---
 
@@ -430,7 +440,10 @@ Muse への共通ルール：ダーク背景で映える色づかい。
   - 幕：前面化の通知が来なくても 4 秒で必ず外れる（テスト用の時計）、呼び直しで延長しない
   - `SetRunner`：連続スワイプで行き先が更新され、起動は最後の行き先だけ
   - 起動画面：3 秒以内の「ホームのまま使う」で E を呼ばない、呼んだあとの取り消しで分割が出たらホームに戻す
-  - `PanelActivity`：分割の外で開かれたらホームへ転送
+  - `PanelActivity`：「分割を開いている最中」の印があるあいだは転送しない。印が消えても分割の外ならホームへ転送。印が無ければ 1.5 秒待って分割に入らないときだけ転送
+  - 暖かい／冷えた起動の見分け：記録が両方あれば暖かい、片方でも無ければ冷えた、見分けられなければ冷えた
+  - リンクの前面判定：判定の5段階（ホーム／アプリ｜パネル／アプリ｜アプリ／全画面 X／不明→全画面ブラウザ）
+  - ブラウザの戻り方：全画面のブラウザから戻るとホーム（別タスクなのでパネルを経由しない）。分割の右のブラウザから戻るとパネル（転送されない）
 - **実機確認（GT8D、adb＋scrcpy）**：§4 の各操作、§7 のエラー時の動き、§10.3 の実験、幕の見え方・冷えた起動・連続スワイプ・取り消しをチェックリストで確認。純正ホームが映らないことは `screenrecord --output-format=raw-frames` のコマ送りで確認できる
 - 車での確認は納車後に §10.2 として実施
 
