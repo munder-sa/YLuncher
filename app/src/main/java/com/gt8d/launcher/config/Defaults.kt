@@ -14,9 +14,9 @@ object Defaults {
     const val PKG_MAPS = "com.google.android.apps.maps"
 
     private val defaultScreenSets = listOf(
-        ScreenSet("set1", Slot.App(PKG_YOUTUBE), Slot.Panel),
-        ScreenSet("set2", Slot.App(PKG_YOUTUBE), Slot.App(PKG_APPLE_MUSIC)),
-        ScreenSet("set3", Slot.App(PKG_YOUTUBE), Slot.App(PKG_MAPS)),
+        ScreenSet("set1", Slot.App(PKG_YOUTUBE), Slot.Panel, SplitRatio.R6_4),
+        ScreenSet("set2", Slot.App(PKG_YOUTUBE), Slot.App(PKG_APPLE_MUSIC), SplitRatio.R6_4),
+        ScreenSet("set3", Slot.App(PKG_YOUTUBE), Slot.App(PKG_MAPS), SplitRatio.R5_5),
     )
 
     private val defaultHomeApps = listOf(
@@ -49,7 +49,7 @@ object Defaults {
     )
 
     fun build(installed: Set<String>): LauncherConfig = LauncherConfig(
-        version = 1,
+        version = CONFIG_VERSION,
         screenSets = defaultScreenSets,
         homeApps = defaultHomeApps.filter { it in installed },
         panelApps = defaultPanelApps.filter { it in installed },
@@ -57,6 +57,7 @@ object Defaults {
         idleApp = PKG_APPLE_MUSIC,
         link = LinkConfig(),
         gesture = GestureConfig(),
+        boot = BootConfig(),
     )
 }
 

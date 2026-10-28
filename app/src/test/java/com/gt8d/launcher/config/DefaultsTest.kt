@@ -24,12 +24,12 @@ class DefaultsTest {
     fun build_allInstalled_matchesSpec() {
         val cfg = Defaults.build(allPackages)
 
-        assertEquals(1, cfg.version)
+        assertEquals(2, cfg.version)
         assertEquals(
             listOf(
-                ScreenSet("set1", Slot.App(Defaults.PKG_YOUTUBE), Slot.Panel),
-                ScreenSet("set2", Slot.App(Defaults.PKG_YOUTUBE), Slot.App(Defaults.PKG_APPLE_MUSIC)),
-                ScreenSet("set3", Slot.App(Defaults.PKG_YOUTUBE), Slot.App(Defaults.PKG_MAPS)),
+                ScreenSet("set1", Slot.App(Defaults.PKG_YOUTUBE), Slot.Panel, SplitRatio.R6_4),
+                ScreenSet("set2", Slot.App(Defaults.PKG_YOUTUBE), Slot.App(Defaults.PKG_APPLE_MUSIC), SplitRatio.R6_4),
+                ScreenSet("set3", Slot.App(Defaults.PKG_YOUTUBE), Slot.App(Defaults.PKG_MAPS), SplitRatio.R5_5),
             ),
             cfg.screenSets,
         )

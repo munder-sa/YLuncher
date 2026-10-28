@@ -13,6 +13,10 @@ object ConfigCodec {
 
     fun decode(json: String): LauncherConfig? = runCatching {
         val decoded = format.decodeFromString(LauncherConfig.serializer(), json)
-        if (decoded.version > 1) null else decoded
+        when {
+            decoded.version > CONFIG_VERSION -> null
+            decoded.version < CONFIG_VERSION -> decoded.copy(version = CONFIG_VERSION)
+            else -> decoded
+        }
     }.getOrNull()
 }

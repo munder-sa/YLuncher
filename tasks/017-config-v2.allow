@@ -1,0 +1,9 @@
+write app/src/main/java/com/gt8d/launcher/config/Model.kt
+write app/src/main/java/com/gt8d/launcher/config/ConfigCodec.kt
+write app/src/main/java/com/gt8d/launcher/config/Defaults.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigCodecTest.kt
+write app/src/test/java/com/gt8d/launcher/config/DefaultsTest.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigRepositoryTest.kt
+create app/src/test/java/com/gt8d/launcher/config/SplitRatioTest.kt
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug
