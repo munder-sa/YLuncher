@@ -18,6 +18,7 @@
 - applicationId・パッケージ：`com.gt8d.launcher`
 - UI 文言は日本語
 - ダーク固定（背景は黒系、パネルは濃いグレー）。ライトテーマは作らない
+- 配色は `design/assets/README.md` のパレットに合わせる：背景 `#0B0B0F`〜`#17171D`、パネル `#2E2E38`、アクセント `#8FE63B`（ライムグリーン）
 - タッチ領域は最小 72dp 角、本文 20sp 以上、時計は特大
 - リアルタイムぼかし等の重いエフェクトは使わない
 - `com.android.launcher3` は Recents 担当として残す。コード・手順のどこでも無効化・削除しない
@@ -72,7 +73,7 @@ app/src/test/java/com/gt8d/launcher/...                       JVM テスト
 scripts/setup-device.ps1          初回セットアップ（adb）
 docs/superpowers/spikes/home-spikes.md     実験①〜⑦の結果
 docs/superpowers/checklists/device-check.md 実機確認チェックリスト
-design/assets/                    Muse 素材の元データ（README のみ先に置く）
+design/assets/                    Muse 素材の元データ（作成済み。アイコン・代替ジャケット・壁紙）
 ```
 
 ---
@@ -80,7 +81,7 @@ design/assets/                    Muse 素材の元データ（README のみ先�
 ### Task 0: プロジェクト土台
 
 **Files:**
-- Create: `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml`, `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/java/com/gt8d/launcher/LauncherApp.kt`, `design/assets/README.md`
+- Create: `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml`, `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/java/com/gt8d/launcher/LauncherApp.kt`, `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`, `app/src/main/res/drawable/ic_launcher_background.xml`, `app/src/main/res/drawable/ic_launcher_foreground.xml`, `app/src/main/res/drawable/ic_launcher_monochrome.xml`, `app/src/main/res/drawable/artwork_placeholder.xml`, `app/src/main/res/drawable-nodpi/wallpaper.png`
 - Test: `app/src/test/java/com/gt8d/launcher/SmokeTest.kt`
 
 **Interfaces:**
@@ -88,7 +89,7 @@ design/assets/                    Muse 素材の元データ（README のみ先�
 
 - [ ] **Step 1:** Gradle ラッパー付きで単一 `app` モジュールを作る（Global Constraints の SDK・JDK・applicationId）。依存：compose BOM、material3、material-icons-extended、activity-compose、datastore、kotlinx-serialization-json、junit4、robolectric、compose ui-test-junit4（testImplementation）。`unitTests.isIncludeAndroidResources = true`
 - [ ] **Step 2:** 署名設定：ルートの `keystore.properties`（`storeFile` はリポジトリ外の絶対パス）があれば release に適用、無ければ debug 署名
-- [ ] **Step 3:** `design/assets/README.md` に仕様 §9.1 の Muse 素材3点（アプリアイコン・代替ジャケット・ダーク壁紙）と形式を転記
+- [ ] **Step 3:** Muse 素材を res に変換：`icon_background/foreground/monochrome.svg` → 各 VectorDrawable、`mipmap-anydpi-v26/ic_launcher.xml`（adaptive-icon。background・foreground・monochrome を指定）、`artwork_placeholder.svg` → `drawable/artwork_placeholder.xml`、`wallpaper.png` → `drawable-nodpi/wallpaper.png`。VectorDrawable は SVG の `mask` 非対応のため、monochrome は evenOdd パス版（Muse 修正版）を使う。変換後、Android Studio のプレビューでグリフの抜けが残っていることを確認
 - [ ] **Step 4:** `SmokeTest.smoke_runs()` で `assertEquals(2, 1 + 1)`
 - [ ] **Step 5:** Run `.\gradlew.bat test assembleDebug` → BUILD SUCCESSFUL
 - [ ] **Step 6:** Commit `chore: Android プロジェクトの土台`
@@ -233,7 +234,7 @@ SpikeActivity は捨てコード。ボタンを並べるだけの画面でよい
 **Interfaces:**
 - Consumes: `NowPlaying`、`MediaWatcher` の操作（Task 5）、`LauncherConfig`（Task 2）
 - Produces:
-  - `object Dims { val MinTouch = 72.dp; val BodyText = 20.sp }`、`@Composable fun LauncherTheme(content)`
+  - `object Dims { val MinTouch = 72.dp; val BodyText = 20.sp }`、`object Palette { val Background0 = Color(0xFF0B0B0F); val Background1 = Color(0xFF17171D); val Panel = Color(0xFF2E2E38); val Accent = Color(0xFF8FE63B) }`、`@Composable fun LauncherTheme(content)`
   - `@Composable fun MediaCard(now: NowPlaying?, idleApp: AppInfo?, onAction: (MediaAction) -> Unit, onLaunch: (String) -> Unit)`
   - `@Composable fun IconGrid(apps: List<AppInfo>, columns: Int, onLaunch: (String) -> Unit, onAdd: (() -> Unit)?)`
   - `@Composable fun Dock(status: DockStatus, dockApps: List<AppInfo>, showCar: Boolean, onHome, onSplit, onCar, onAppList, onAppListLongPress, onLaunch: (String) -> Unit)`、`data class DockStatus(val wifiOn: Boolean, val bluetoothOn: Boolean?)`（BT 許可なしは null＝アイコン非表示）
@@ -241,6 +242,7 @@ SpikeActivity は捨てコード。ボタンを並べるだけの画面でよい
   - `data class AppInfo(val pkg: String, val label: String, val icon: ImageBitmap?, val installed: Boolean)`、`enum class MediaAction { Play, Pause, Next, Prev, Favorite }`、`MediaAction.Seek` は `onSeek(ms)` で別引数
 
 - [ ] **Step 1: failing tests**
+  - `palette_matchesDesign`：Palette の4色が上の値と一致
   - `mediaCard_idle_showsClockAndIdleApp`：now=null → 時計ノード（testTag `clock`）と idleApp ラベル
   - `mediaCard_playing_showsTitleArtistControls`：曲名・アーティスト・前/再生/次ボタン、`hasFavorite=false` で ☆ が無い
   - `mediaCard_unknownDuration_noProgressBar`（testTag `progress` が無い）
@@ -250,7 +252,7 @@ SpikeActivity は捨てコード。ボタンを並べるだけの画面でよい
   - `panel_needsPermission_showsBanner`
   - `panel_narrowWidth_noOverflow`：幅 576dp 相当（3:7 の右）で全ボタンが表示され、各ボタンの幅・高さ ≥ 72dp
 - [ ] **Step 2:** FAIL を確認
-- [ ] **Step 3:** 実装。色は黒系背景／濃いグレーのパネル。アイコンは Material Symbols（Home、ViewColumn（分割）、DirectionsCar、Apps、SkipPrevious、PlayArrow、Pause、SkipNext、StarBorder）。ジャケット無しは `R.drawable.artwork_placeholder`（Muse 素材が届くまでは単色の仮 VectorDrawable）
+- [ ] **Step 3:** 実装。色は `Palette`（背景 Background0/1、カード Panel、進行バー・再生/一時停止ボタンは Accent）。アイコンは Material Symbols（Home、ViewColumn（分割）、DirectionsCar、Apps、SkipPrevious、PlayArrow、Pause、SkipNext、StarBorder）。ジャケット無しは `R.drawable.artwork_placeholder`（Task 0 で変換済み）
 - [ ] **Step 4:** PASS を確認
 - [ ] **Step 5:** Commit `feat(ui): テーマとパネル部品`
 
@@ -271,7 +273,7 @@ SpikeActivity は捨てコード。ボタンを並べるだけの画面でよい
   - `appList_alwaysIncludesStockLauncher`：起動可能アプリ一覧に Launcher3 が無いケースでも「純正ランチャー」項目がある
   - `appList_sortedByLabel`
 - [ ] **Step 2:** FAIL を確認
-- [ ] **Step 3:** 実装。HomeActivity＝左 `IconGrid`（homeApps、大きめ列数）＋右 `PanelContent`。2本指の左右スワイプで `SetRunner.next/prev`（おまけ扱い）。HOME 起動時：初回起動のみ `SetRunner.open(SetNavigator.clamp(lastSetIndex))`（SafetyGuard が退避中なら何もしない）。Manifest に `<queries>`（MAIN/LAUNCHER、http VIEW）。分割ボタン＝設定のセット新規作成画面（Task 10）を開き、保存後そのセットを open
+- [ ] **Step 3:** 実装。HomeActivity と PanelActivity の背景は `R.drawable.wallpaper`（`ContentScale.Crop`、中央基準）。HomeActivity＝左 `IconGrid`（homeApps、大きめ列数）＋右 `PanelContent`。2本指の左右スワイプで `SetRunner.next/prev`（おまけ扱い）。HOME 起動時：初回起動のみ `SetRunner.open(SetNavigator.clamp(lastSetIndex))`（SafetyGuard が退避中なら何もしない）。Manifest に `<queries>`（MAIN/LAUNCHER、http VIEW）。分割ボタン＝設定のセット新規作成画面（Task 10）を開き、保存後そのセットを open
 - [ ] **Step 4:** PASS を確認し、GT8D に入れて既定のホームに設定 → ホーム表示・パネル表示・アイコン起動を scrcpy で確認
 - [ ] **Step 5:** Commit `feat(ui): ホーム・パネル画面・アプリ一覧`
 
@@ -298,7 +300,7 @@ SpikeActivity は捨てコード。ボタンを並べるだけの画面でよい
   - `classify_longPress_isHome`：移動 4dp・1100ms
   - `classify_tapOrDiagonal_isNone`（Review Focus 5）：移動 4dp・100ms／内向き 60dp・縦 50dp／外向き 60dp
 - [ ] **Step 2:** FAIL を確認
-- [ ] **Step 3:** 実装。左右に幅 `stripWidthPx`・高さ全面の `TYPE_APPLICATION_OVERLAY` 窓（`FLAG_NOT_FOCUSABLE`）。glow=ON なら押下中に帯を白 30% でフェード表示。BootReceiver（`BOOT_COMPLETED`）と HomeActivity/PanelActivity の onResume で `ensureRunning`。通知は「GT8D Launcher 動作中」1件
+- [ ] **Step 3:** 実装。左右に幅 `stripWidthPx`・高さ全面の `TYPE_APPLICATION_OVERLAY` 窓（`FLAG_NOT_FOCUSABLE`）。glow=ON なら押下中に帯を `Palette.Accent` の不透明度 30% でフェード表示。BootReceiver（`BOOT_COMPLETED`）と HomeActivity/PanelActivity の onResume で `ensureRunning`。通知は「GT8D Launcher 動作中」1件
 - [ ] **Step 4:** PASS を確認し、GT8D で分割中・パネル中・ホームの3状態で 次／前／ホーム が効くことを確認
 - [ ] **Step 5:** Commit `feat(edge): スワイプ帯`
 
