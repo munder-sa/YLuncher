@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- YLuncher - placeholder artwork shown when a track has no album art.
+     1024x1024. The app icon's right (music) panel, enlarged:
+     a slate tile with a lime music note on the icon's dark background. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#17171D"/>
+      <stop offset="1" stop-color="#0B0B0F"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
+  <rect x="232" y="232" width="560" height="560" rx="96" fill="#2E2E38"/>
+  <!-- music note glyph (Material Symbols music_note path, 24-grid) -->
+  <g transform="translate(312 312) scale(16.7)" fill="#8FE63B">
+    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+  </g>
+</svg>
