@@ -61,6 +61,17 @@ object SafetyGuard {
     }
 
     @Synchronized
+    fun markStable(context: Context) {
+        val current = load(context)
+        save(
+            context,
+            current.copy(
+                crashes = emptyList(),
+            ),
+        )
+    }
+
+    @Synchronized
     fun clear(context: Context) {
         val current = load(context)
         save(

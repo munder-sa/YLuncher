@@ -1,0 +1,5 @@
+write app/src/main/java/com/gt8d/launcher/safety/SafetyGuard.kt
+write app/src/main/java/com/gt8d/launcher/LauncherApp.kt
+write app/src/test/java/com/gt8d/launcher/safety/SafetyGuardTest.kt
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug
