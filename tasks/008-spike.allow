@@ -1,0 +1,8 @@
+create app/src/debug/AndroidManifest.xml
+create app/src/debug/java/com/gt8d/launcher/spike/SpikeActions.kt
+create app/src/debug/java/com/gt8d/launcher/spike/SpikeOverlay.kt
+create app/src/debug/java/com/gt8d/launcher/spike/SpikeReceiver.kt
+create app/src/debug/java/com/gt8d/launcher/spike/SpikeActivity.kt
+create app/src/debug/java/com/gt8d/launcher/spike/SpikePanelActivity.kt
+command /home/munde/tools/gradle-run.sh assembleDebug
+command /home/munde/tools/gradle-run.sh test
