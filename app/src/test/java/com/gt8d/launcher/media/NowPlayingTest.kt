@@ -1,0 +1,115 @@
+package com.gt8d.launcher.media
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class NowPlayingTest {
+
+    private fun snapshot(
+        pkg: String = "com.example.music",
+        appLabel: String = "Music",
+        title: String? = "Song",
+        artist: String? = "Artist",
+        durationMs: Long = 180_000L,
+        positionMs: Long = 0L,
+        positionUpdatedAt: Long = 1000L,
+        speed: Float = 1.0f,
+        playing: Boolean = false,
+        hasFavoriteAction: Boolean = false,
+    ) = SessionSnapshot(
+        pkg = pkg,
+        appLabel = appLabel,
+        title = title,
+        artist = artist,
+        artwork = null,
+        durationMs = durationMs,
+        positionMs = positionMs,
+        positionUpdatedAt = positionUpdatedAt,
+        speed = speed,
+        playing = playing,
+        hasFavoriteAction = hasFavoriteAction,
+    )
+
+    @Test
+    fun pick_prefersPlaying() {
+        val appleMusic = snapshot(pkg = "com.apple.android.music", appLabel = "Apple Music", playing = false)
+        val youtube = snapshot(pkg = "com.google.android.youtube", appLabel = "YouTube", playing = true)
+
+        val picked = pickSession(listOf(appleMusic, youtube), lastActivePkg = "com.apple.android.music")
+        assertEquals(youtube, picked)
+
+        val youtube2 = snapshot(pkg = "com.google.android.youtube", appLabel = "YouTube", playing = true)
+        val applePlaying = snapshot(pkg = "com.apple.android.music", appLabel = "Apple Music", playing = true)
+        val pickedMultiple = pickSession(listOf(youtube2, applePlaying), lastActivePkg = "com.apple.android.music")
+        assertEquals(applePlaying, pickedMultiple)
+    }
+
+    @Test
+    fun pick_fallsBackToLastActive() {
+        val appleMusic = snapshot(pkg = "com.apple.android.music", appLabel = "Apple Music", playing = false)
+        val youtube = snapshot(pkg = "com.google.android.youtube", appLabel = "YouTube", playing = false)
+
+        val picked = pickSession(listOf(appleMusic, youtube), lastActivePkg = "com.google.android.youtube")
+        assertEquals(youtube, picked)
+    }
+
+    @Test
+    fun pick_none_returnsNull() {
+        assertNull(pickSession(emptyList(), lastActivePkg = "com.apple.android.music"))
+
+        val appleMusic = snapshot(pkg = "com.apple.android.music", appLabel = "Apple Music", playing = false)
+        assertNull(pickSession(listOf(appleMusic), lastActivePkg = "com.google.android.youtube"))
+        assertNull(pickSession(listOf(appleMusic), lastActivePkg = null))
+    }
+
+    @Test
+    fun toNowPlaying_unknownDuration_hidesProgress() {
+        val negDuration = snapshot(
+            pkg = "com.example.radio",
+            appLabel = "RadioApp",
+            title = null,
+            artist = "   ",
+            durationMs = -1L,
+            playing = true,
+            hasFavoriteAction = true,
+        ).toNowPlaying()
+        assertNull(negDuration.durationMs)
+        assertEquals("RadioApp", negDuration.title)
+        assertNull(negDuration.artist)
+        assertEquals(true, negDuration.hasFavorite)
+
+        val zeroDuration = snapshot(
+            pkg = "com.example.radio",
+            appLabel = "RadioApp",
+            title = "  ",
+            artist = null,
+            durationMs = 0L,
+            playing = false,
+            hasFavoriteAction = false,
+        ).toNowPlaying()
+        assertNull(zeroDuration.durationMs)
+        assertEquals("RadioApp", zeroDuration.title)
+        assertNull(zeroDuration.artist)
+        assertEquals(false, zeroDuration.hasFavorite)
+    }
+
+    @Test
+    fun positionAt_interpolatesAndClamps() {
+        val s = snapshot(
+            playing = true,
+            speed = 1.0f,
+            positionUpdatedAt = 1000L,
+            positionMs = 10000L,
+            durationMs = 12000L,
+        )
+        assertEquals(12000L, positionAt(s, nowMs = 6000L))
+        assertEquals(11000L, positionAt(s, nowMs = 2000L))
+
+        val paused = s.copy(playing = false, positionMs = 15000L)
+        assertEquals(12000L, positionAt(paused, nowMs = 6000L))
+
+        val unknownDuration = s.copy(durationMs = -1L, positionMs = 10000L)
+        assertEquals(15000L, positionAt(unknownDuration, nowMs = 6000L))
+    }
+}
