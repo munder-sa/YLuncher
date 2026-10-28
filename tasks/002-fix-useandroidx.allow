@@ -1,0 +1,12 @@
+write gradle.properties
+write settings.gradle.kts
+write build.gradle.kts
+write gradle/libs.versions.toml
+write app/build.gradle.kts
+write app/src/main/AndroidManifest.xml
+write app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+write app/src/main/res/drawable/ic_launcher_background.xml
+write app/src/main/res/drawable/ic_launcher_foreground.xml
+write app/src/main/res/drawable/ic_launcher_monochrome.xml
+write app/src/main/res/drawable/artwork_placeholder.xml
+command /home/munde/tools/gradle-run.sh test assembleDebug

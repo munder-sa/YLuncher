@@ -22,4 +22,5 @@ Thumbs.db
 keystore.properties
 
 # agy-run のバックアップ
+.agy-bak/
 *.bak-agy-*

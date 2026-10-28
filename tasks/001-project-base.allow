@@ -1,7 +1,15 @@
 create settings.gradle.kts
 create build.gradle.kts
 create gradle/libs.versions.toml
-create-dir app/
+create app/build.gradle.kts
+create app/src/main/AndroidManifest.xml
+create app/src/main/java/com/gt8d/launcher/LauncherApp.kt
+create app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+create app/src/main/res/drawable/ic_launcher_background.xml
+create app/src/main/res/drawable/ic_launcher_foreground.xml
+create app/src/main/res/drawable/ic_launcher_monochrome.xml
+create app/src/main/res/drawable/artwork_placeholder.xml
+create app/src/test/java/com/gt8d/launcher/SmokeTest.kt
 command mkdir -p {ROOT}/app/src/main/res/drawable-nodpi
 command cp {ROOT}/design/assets/wallpaper.png {ROOT}/app/src/main/res/drawable-nodpi/wallpaper.png
 command /home/munde/tools/gradle-run.sh test assembleDebug

@@ -8,7 +8,7 @@
 - `design/assets/` の元データ(読むだけ)
 - JDK 17 と Android SDK は用意済み。Gradle は必ず `/home/munde/tools/gradle-run.sh <引数>` で実行する(環境変数を整えて `./gradlew` を呼ぶ)。`./gradlew` を直接呼ばない
 
-## 作るもの(これ以外のファイルは作らない・変更しない)
+## 作るもの(これ以外のファイルは作らない・変更しない。許可外の書込みは拒否され、そこで停止する)
 
 - `settings.gradle.kts`、`build.gradle.kts`、`gradle/libs.versions.toml`、`app/build.gradle.kts`
 - `app/src/main/AndroidManifest.xml`(Activity はまだ無い。`<application>` のみ)
@@ -17,6 +17,8 @@
 - `app/src/main/res/drawable/ic_launcher_background.xml`、`ic_launcher_foreground.xml`、`ic_launcher_monochrome.xml`、`artwork_placeholder.xml`
 - `app/src/main/res/drawable-nodpi/wallpaper.png`(`design/assets/wallpaper.png` のコピー)
 - `app/src/test/java/com/gt8d/launcher/SmokeTest.kt`
+
+以上で全部。`strings.xml`、`themes.xml`、`proguard-rules.pro` などは作らない(Manifest の `android:label` は文字列リテラル `GT8D Launcher`、テーマ指定は不要)。`wallpaper.png` は下の `cp` で置く(Write では作れない)。
 
 ## 制約
 
