@@ -1,0 +1,5 @@
+create app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+create app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/main/java/com/gt8d/launcher/config/ConfigRepository.kt
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug

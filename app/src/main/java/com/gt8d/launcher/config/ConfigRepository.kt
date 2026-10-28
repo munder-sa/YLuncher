@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.Serializer
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import com.gt8d.launcher.sets.LastIndexStore
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -20,14 +21,14 @@ import kotlinx.coroutines.runBlocking
 class ConfigRepository(
     private val file: File,
     private val installed: () -> Set<String>,
-) {
+) : LastIndexStore {
     private val lastSetFile = File(file.parentFile, "last_set_index.txt")
 
     private val dataStore: DataStore<LauncherConfig> = createDataStore()
 
     val config: Flow<LauncherConfig> = dataStore.data.map { it.resolve(installed()) }
 
-    var lastSetIndex: Int
+    override var lastSetIndex: Int
         get() = runCatching {
             if (lastSetFile.exists()) {
                 lastSetFile.readText().trim().toInt()
