@@ -112,4 +112,24 @@ class NowPlayingTest {
         val unknownDuration = s.copy(durationMs = -1L, positionMs = 10000L)
         assertEquals(15000L, positionAt(unknownDuration, nowMs = 6000L))
     }
+
+    @Test
+    fun nowPlaying_positionAt_interpolates() {
+        val playing = NowPlaying(
+            pkg = "com.example.music",
+            title = "Song",
+            artist = "Artist",
+            artwork = null,
+            durationMs = 10000L,
+            playing = true,
+            hasFavorite = false,
+            positionMs = 1000L,
+            positionUpdatedAt = 2000L,
+            speed = 1f,
+        )
+        assertEquals(4000L, playing.positionAt(nowMs = 5000L))
+
+        val paused = playing.copy(playing = false)
+        assertEquals(1000L, paused.positionAt(nowMs = 5000L))
+    }
 }

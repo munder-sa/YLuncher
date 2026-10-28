@@ -1,0 +1,11 @@
+create app/src/main/java/com/gt8d/launcher/ui/theme/Theme.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/PanelModels.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/MediaCard.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/IconGrid.kt
+create app/src/test/java/com/gt8d/launcher/ui/theme/PaletteTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/MediaCardTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/IconGridTest.kt
+write app/src/main/java/com/gt8d/launcher/media/NowPlaying.kt
+write app/src/test/java/com/gt8d/launcher/media/NowPlayingTest.kt
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug

@@ -24,6 +24,9 @@ data class NowPlaying(
     val durationMs: Long?,
     val playing: Boolean,
     val hasFavorite: Boolean,
+    val positionMs: Long = 0L,
+    val positionUpdatedAt: Long = 0L,
+    val speed: Float = 1f,
 )
 
 fun SessionSnapshot.toNowPlaying(): NowPlaying = NowPlaying(
@@ -34,7 +37,23 @@ fun SessionSnapshot.toNowPlaying(): NowPlaying = NowPlaying(
     durationMs = durationMs.takeIf { it > 0L },
     playing = playing,
     hasFavorite = hasFavoriteAction,
+    positionMs = positionMs,
+    positionUpdatedAt = positionUpdatedAt,
+    speed = speed,
 )
+
+fun NowPlaying.positionAt(nowMs: Long): Long {
+    val raw = if (playing) {
+        positionMs + ((nowMs - positionUpdatedAt) * speed).toLong()
+    } else {
+        positionMs
+    }
+    return if (durationMs != null && durationMs > 0L) {
+        raw.coerceIn(0L, durationMs)
+    } else {
+        raw.coerceAtLeast(0L)
+    }
+}
 
 fun positionAt(s: SessionSnapshot, nowMs: Long): Long {
     val raw = if (s.playing) {

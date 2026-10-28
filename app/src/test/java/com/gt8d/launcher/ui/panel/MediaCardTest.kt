@@ -1,0 +1,187 @@
+package com.gt8d.launcher.ui.panel
+
+import android.app.Application
+import android.content.ComponentName
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ActivityInfo
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import com.gt8d.launcher.media.NowPlaying
+import com.gt8d.launcher.ui.theme.LauncherTheme
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.ExternalResource
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
+class MediaCardTest {
+
+    @get:Rule(order = 0)
+    val registerActivityRule = object : ExternalResource() {
+        override fun before() {
+            val app = ApplicationProvider.getApplicationContext<Application>()
+            val shadowPm = Shadows.shadowOf(app.packageManager)
+            val cn = ComponentName(app.packageName, ComponentActivity::class.java.name)
+            shadowPm.addOrUpdateActivity(
+                ActivityInfo().apply {
+                    name = cn.className
+                    packageName = cn.packageName
+                },
+            )
+            shadowPm.addIntentFilterForActivity(
+                cn,
+                IntentFilter(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                },
+            )
+        }
+    }
+
+    @get:Rule(order = 1)
+    val rule = createComposeRule()
+
+    @Test
+    fun mediaCard_idle_showsClockAndIdleApp() {
+        var launchedPkg: String? = null
+        val idleApp = AppInfo(
+            pkg = "com.apple.android.music",
+            label = "Apple Music",
+            icon = null,
+            installed = true,
+        )
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(
+                    now = null,
+                    idleApp = idleApp,
+                    positionMs = 0L,
+                    onAction = {},
+                    onSeek = {},
+                    onLaunch = { launchedPkg = it },
+                )
+            }
+        }
+
+        rule.onNodeWithTag("clock").assertIsDisplayed()
+        rule.onNodeWithText("Apple Music").assertIsDisplayed()
+        rule.onNodeWithTag("idle_app").performClick()
+        assertEquals("com.apple.android.music", launchedPkg)
+    }
+
+    @Test
+    fun mediaCard_playing_showsTitleArtistControls() {
+        var hasFavorite by mutableStateOf(false)
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(
+                    now = NowPlaying(
+                        pkg = "com.apple.android.music",
+                        title = "Test Song",
+                        artist = "Test Artist",
+                        artwork = null,
+                        durationMs = 180_000L,
+                        playing = true,
+                        hasFavorite = hasFavorite,
+                    ),
+                    idleApp = null,
+                    positionMs = 30_000L,
+                    onAction = {},
+                    onSeek = {},
+                    onLaunch = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("title").assertIsDisplayed()
+        rule.onNodeWithText("Test Song").assertIsDisplayed()
+        rule.onNodeWithTag("artist").assertIsDisplayed()
+        rule.onNodeWithText("Test Artist").assertIsDisplayed()
+        rule.onNodeWithTag("btn_prev").assertIsDisplayed()
+        rule.onNodeWithTag("btn_playpause").assertIsDisplayed()
+        rule.onNodeWithTag("btn_next").assertIsDisplayed()
+        rule.onNodeWithTag("btn_favorite").assertDoesNotExist()
+
+        hasFavorite = true
+        rule.waitForIdle()
+        rule.onNodeWithTag("btn_favorite").assertIsDisplayed()
+    }
+
+    @Test
+    fun mediaCard_unknownDuration_noProgressBar() {
+        var durationMs by mutableStateOf<Long?>(null)
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(
+                    now = NowPlaying(
+                        pkg = "com.apple.android.music",
+                        title = "Radio Stream",
+                        artist = "Station",
+                        artwork = null,
+                        durationMs = durationMs,
+                        playing = true,
+                        hasFavorite = false,
+                    ),
+                    idleApp = null,
+                    positionMs = 10_000L,
+                    onAction = {},
+                    onSeek = {},
+                    onLaunch = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("progress").assertDoesNotExist()
+
+        durationMs = 120_000L
+        rule.waitForIdle()
+        rule.onNodeWithTag("progress").assertIsDisplayed()
+    }
+
+    @Test
+    fun mediaCard_playPause_sendsActions() {
+        var playing by mutableStateOf(true)
+        val actions = mutableListOf<MediaAction>()
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(
+                    now = NowPlaying(
+                        pkg = "com.apple.android.music",
+                        title = "Song",
+                        artist = "Artist",
+                        artwork = null,
+                        durationMs = 120_000L,
+                        playing = playing,
+                        hasFavorite = false,
+                    ),
+                    idleApp = null,
+                    positionMs = 0L,
+                    onAction = { actions.add(it) },
+                    onSeek = {},
+                    onLaunch = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("btn_playpause").performClick()
+        assertEquals(listOf(MediaAction.Pause), actions)
+
+        playing = false
+        rule.waitForIdle()
+        rule.onNodeWithTag("btn_playpause").performClick()
+        assertEquals(listOf(MediaAction.Pause, MediaAction.Play), actions)
+    }
+}
