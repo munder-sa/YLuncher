@@ -1,0 +1,8 @@
+create app/src/main/java/com/gt8d/launcher/time/Time.kt
+create app/src/main/java/com/gt8d/launcher/curtain/CurtainController.kt
+create app/src/main/java/com/gt8d/launcher/curtain/CurtainContent.kt
+create app/src/test/java/com/gt8d/launcher/time/FakeScheduler.kt
+create app/src/test/java/com/gt8d/launcher/curtain/CurtainControllerTest.kt
+create app/src/test/java/com/gt8d/launcher/curtain/CurtainContentTest.kt
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug
