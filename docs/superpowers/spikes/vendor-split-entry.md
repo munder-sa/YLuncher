@@ -41,7 +41,18 @@ adb shell "am start -n com.sd.factoryconfig/.SplitActivity --es split_shortcur_p
 **余計な画面の条件**: 指定したアプリのどちらかに**タスクがまだ無い**(その起動で初めて開く/強制停止・再起動のあと)とき。ランチャーは、そのアプリをまず全画面で起動し、ホームの分割選択の画面を経て、`launchExistingSplitPair` で分割する(ログ: `SplitScreenManager: start mRightPackageName=...` から `launchTasks ... launchExistingSplitPair` まで約 2.5 秒)。両方のタスクがあれば、暗い画面 約 0.5 秒だけ。
 
 - 車ではエンジンをかけるたびに再起動するので、**各アプリの最初の1回は必ず余計な画面が出る**。対策が必要(改訂仕様で扱う)
-- 再起動後の動作: 端末の設定変更は不要(呼ぶだけ)なので、そのまま動く見込み(未確認。次の再起動で確認する)
+### 自作アプリを既定のホームにしたまま動くか(H1・H2)
+
+debug の `SpikeActivity` に HOME の intent-filter を付け、`cmd package set-home-activity` で既定のホームにして確認(実験後、純正 `QuickstepLauncher` に戻した)。
+
+| 実験 | 結果 | 画面の流れ |
+|---|---|---|
+| H1 通常時(純正ランチャーのプロセスは以前から動いている) | **合格**。YouTube｜Apple Music 3:2 | Spike → 暗い画面 → 分割。純正ホームは映らない |
+| H2 **再起動直後**(`QuickstepLauncher` の画面が一度も作られていない。`dumpsys` で 0 件) | **合格**。YouTube｜Apple Music 3:2。受け口は純正ランチャーのプロセス(Recents 担当として常駐)内で `onReceive action:com.android.intent.ext.main.split.two.screen` | Spike → 暗い画面 → YouTube の起動(全画面)→ **自作のホーム(Spike)** → 分割。冷えた起動で「純正ホーム+選択画面」が出ていたステップに、**既定のホーム(自作)が出る**。純正ホームは1コマも映らない |
+
+- `factoryconfig` は uid 1000(system)。ブロードキャストは保護されていない(`Sending non-protected broadcast ... from system`)
+- 再起動後も、端末の設定変更なしで動く(E は呼ぶだけ)
+- 結論: **自作アプリを既定のホームのまま、E で分割を作れる**。元の仕様の構成(自作のホーム+パネル、Launcher3 は Recents 担当)を保てる
 
 ## 画面とショートカットの正体
 

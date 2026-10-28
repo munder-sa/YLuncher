@@ -1,0 +1,3 @@
+write app/src/debug/AndroidManifest.xml
+command /home/munde/tools/gradle-run.sh assembleDebug
+command /home/munde/tools/gradle-run.sh test
