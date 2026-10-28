@@ -234,14 +234,15 @@ fun interface Cancellable { fun cancel() }
   - `data class CurtainTarget(val setName: String, val left: SlotPreview, val right: SlotPreview, val ratio: SplitRatio, val position: Int, val count: Int)`
   - `enum class HideReason { Ready, Timed, Safety, Failed }`
   - `interface CurtainView { fun show(target: CurtainTarget); fun update(target: CurtainTarget); fun showProgress(); fun hide(reason: HideReason) }`
-  - `class CurtainController(scheduler: Scheduler, view: CurtainView) { fun show(target: CurtainTarget, expectedMs: Long, watcherAvailable: Boolean); fun update(target: CurtainTarget); fun ready(); fun fail(); val isShowing: Boolean; var onSafetyTimeout: (() -> Unit)? }`
+  - `class CurtainController(scheduler: Scheduler, view: CurtainView) { fun show(target: CurtainTarget, expectedMs: Long, watcherAvailable: Boolean); fun update(target: CurtainTarget); fun ready(); fun fail(); val isShowing: Boolean; var onHidden: ((HideReason) -> Unit)? }`（**どの理由で外れても** 1 回呼ばれる）
   - 定数 `SAFETY_MS = 4000L`、`PROGRESS_AFTER_MS = 800L`
   - `@Composable fun CurtainContent(target: CurtainTarget, showProgress: Boolean)`
 
-規則：`show` で安全タイマー（4000ms）と進行線タイマー（800ms）を開始。`watcherAvailable==false` のときだけ `expectedMs` で `hide(Timed)`。`update` はタイマーを延長しない。`ready()` は即 `hide(Ready)`。安全タイマーで `hide(Safety)` し `onSafetyTimeout` を呼ぶ。hide 後は全タイマーを取り消す。
+規則：`show` で安全タイマー（4000ms）と進行線タイマー（800ms）を開始。`watcherAvailable==false` のときだけ `expectedMs` で `hide(Timed)`。`update` はタイマーを延長しない。`ready()` は即 `hide(Ready)`。安全タイマーで `hide(Safety)`。どの hide でも `view.hide(reason)` のあと `onHidden(reason)` を 1 回呼び、全タイマーを取り消す。
 
 - [ ] **Step 1:** failing tests
-  - `safety_hidesAt4000_evenWithoutReady`（3999ms で表示中、4000ms で `Safety`、`onSafetyTimeout` 1 回）
+  - `safety_hidesAt4000_evenWithoutReady`（3999ms で表示中、4000ms で `Safety`、`onHidden(Safety)` 1 回）
+  - `onHidden_calledOnceForEveryReason`（Ready・Timed・Safety・Failed のそれぞれで 1 回だけ）
   - `update_doesNotExtendSafety`（3000ms で update → 4000ms で Safety）
   - `timedHide_whenWatcherUnavailable_atExpected`（expected 800 → 800ms で `Timed`）、`noTimedHide_whenWatcherAvailable`
   - `ready_hidesImmediately_andCancelsTimers`、`progress_shownAfter800_only`
@@ -302,7 +303,7 @@ fun interface Cancellable { fun cancel() }
 3. `selector.current()`：Vendor→`vendor.open`、AppPair→`appPair.open`、LeftOnly→`apps.startApp(left,false)`＋`messenger.showSplitUnavailable()`
 4. 200ms ごとに `watcher.bothResumed(l, r, startedAt)` を確認（右が Panel のときは `panelResumedInSplit()` も右の合図）。揃ったら `curtain.ready()`・`selector.onSuccess()`・`warm.markForeground` 両方・`opening=null`
 5. 3000ms で未成立かつ watcher が使えるなら 1 回だけ同じ方式で呼び直す（幕は延長しない）
-6. `curtain.onSafetyTimeout` → `selector.onFailure(Timeout, countable = watcher.available())`・`messenger.showSwitchFailed()`・`opening=null`
+6. `curtain.onHidden(reason)` → **理由に関係なく** `opening=null` にし、保留中の行き先を処理する（手順 8）。理由が `Safety` のときだけ `selector.onFailure(Timeout, countable = watcher.available())`・`messenger.showSwitchFailed()`。`Timed`（使用状況が使えず時間で外れた）は成功にも失敗にも数えない
 7. `Failed(reason)` が返ったら幕を `fail()`、`selector.onFailure(reason, countable=true)`、左だけ全画面＋`showSplitUnavailable()`
 8. 実行中（`opening != null`）の `next/prev/open` は行き先だけ更新（`curtain.update`）。完了または失敗の後、最後の行き先が今のセットと違えばそれを開く
 9. `home()`：幕を短く出し `startHome()`、すぐ `curtain.ready()`
@@ -318,6 +319,7 @@ fun interface Cancellable { fun cancel() }
   - `notReady_retriesOnceAt3000_noCurtainExtension`（vendor 2 回、安全タイマーは 4000 のまま）
   - `safety_recordsCountableFailureOnlyWhenWatcherAvailable`
   - `openingFlag_setDuringOpen_clearedAfter`
+  - `watcherUnavailable_timedHide_clearsOpening_andRunsPendingTarget`（watcher 使えない・expected 800。実行中に next → 800ms の Timed で `opening==null`、保留中の行き先で vendor が 2 回目に呼ばれる。失敗回数は増えない）
   - `home_startsHome_andHidesCurtain`
   - `unresizeableApp_opensLeftOnly`
   - `openForBoot_doesNotShowCurtain`
@@ -481,7 +483,8 @@ PanelForwarder の規則（仕様 §5.2）：分割の中なら何もしない�
 - [ ] **Step 4:** ⑬ 幕の下で E が成立するか（`screenrecord --output-format=raw-frames` のコマ送りで、純正ホームが1コマも映らないこと）
 - [ ] **Step 5:** ⑭ 起動直後に最後のセットが 10 秒以内に開くか（ユーザーに再起動とワイヤレスデバッグの有効化を依頼）
 - [ ] **Step 6:** ⑮ 右パネルのセットを冷えた状態（`am force-stop com.gt8d.launcher` 後ではなく、パネルのタスクが無い状態）で開き、パネルが途中でホームに転送されないこと
-- [ ] **Step 7:** `first-checks.md` に ⑫〜⑮ の「合格／不合格・観察・対処」を記録。不合格なら該当タスクのコードを直す指示書を作って委譲
+- [ ] **Step 6b:** 分割非対応の判定の確認：Prime Video・ABEMA・U-NEXT・TVer の `resizeMode` を記録し、実際に E で「アプリ｜パネル」に入れて分割で動くかを確認。`resizeMode` が非対応でも分割で動くアプリがあれば、`isResizeable` の判定を緩める（例：判定に使わず警告だけにする）指示書を作る
+- [ ] **Step 7:** `first-checks.md` に ⑫〜⑮・Step 6b の「合格／不合格・観察・対処」を記録。不合格なら該当タスクのコードを直す指示書を作って委譲
 - [ ] **Step 8:** `device-check.md` に仕様 §4（操作表・幕・起動時・リンク）、§7.1（全行）、§7.2 の確認項目をチェックボックスで列挙し、GT8D で確認
 - [ ] **Step 9:** `gradle-run.sh test assembleRelease` → BUILD SUCCESSFUL
 - [ ] **Step 10:** Commit `feat: セットアップと実機の最初の確認`
