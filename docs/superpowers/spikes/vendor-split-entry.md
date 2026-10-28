@@ -2,9 +2,46 @@
 
 方法: 読み取りのみ。`dumpsys package`、APK の取り出し(`pm path` → `adb pull`、作業はリポジトリ外)、SDK の `dexdump -d` による逆アセンブル(jadx は未導入。GitHub からの取得がサンドボックスで不可のため)。端末の設定変更・試し撃ちはしていない。
 
-## 判定: **入口なし(不合格)**
+## 判定: **入口あり(合格)** — `com.sd.factoryconfig/.SplitActivity`
 
-分割を外部から開ける exported な Activity / Receiver / Service と extras は見つからなかった。手順4(試し撃ち)は、入口候補が無いため行っていない。
+当初 Launcher3 と MainAiBox だけを調べて「入口なし」としたが、ユーザーが純正の「ホーム画面のウィジェット設定」の一覧で見つけた「プラント設定」(= `com.sd.factoryconfig`、英語名 FactoryConfig、v1.3.8)に、**外部から起動できる分割の入口**があった。
+
+### 呼び出し方(試し撃ちで確認)
+```
+adb shell "am start -n com.sd.factoryconfig/.SplitActivity --es split_shortcur_package 'com.google.android.youtube|com.apple.android.music' --es split_percent 3:2"
+```
+- `split_shortcur_package`(綴りは原文のまま): `左のパッケージ|右のパッケージ`
+- `split_percent`: `"1:1"` / `"2:3"` / `"3:2"` / `"3:7"` / `"7:3"`(左:右)。`SplitActivity` が `persist.splitscreen.percent` に書いてから分割する
+- `SplitActivity` は `MAIN` の intent-filter を持つ(exported)。ランチャーの一覧には出ない(LAUNCHER カテゴリが無い)
+
+### 仕組み(`SplitActivity.onCreate` の逆アセンブル)
+1. extras `split_shortcur_package` を `\|` で分割 → 左右のパッケージ
+2. `split_percent` があれば `persist.splitscreen.percent` に設定(システム権限)
+3. 顧客設定 `ro.board.reverse.custom` が `mmb` で始まるときだけ、先に Recents/QuickstepLauncher を開く(この端末は `zhiduojing-wireless` なので開かない)
+4. ブロードキャスト `com.android.intent.ext.main.split.two.screen`(extras `setting_key_split_screen_l` / `setting_key_split_screen_r` = パッケージ名)を送る。Launcher3 が実行時に登録した受信側で分割を開く
+- ホームのペアのショートカットは、同アプリの `SplitAppActivity`(比率 1:1/2:3/3:2/3:7/7:3 を選んで `ShortcutManager.requestPinShortcut`)が作る
+
+### 試し撃ちの結果
+| 試験 | 結果 |
+|---|---|
+| YouTube｜Apple Music、3:2 | **本物の分割**(`mode=multi-window`、タイトルバーなし)、左 60%・右 40% |
+| YouTube｜com.gt8d.launcher、1:1 | 自作アプリ(パッケージ名指定。ランチャー用 Activity が開く)を右に置けた |
+| Googleマップ｜Apple Music、7:3 を録画しながら | `screenrecord --output-format=raw-frames`(240x136)をコマ送りで確認。切り替え前の画面 → クロスフェード1コマ → 新しい分割。**純正ホームも `SplitActivity` の画面も1コマも映らない** |
+
+### 自作アプリから呼ぶ実験(E1〜E4。debug の `vendor_split` step、帯のオーバーレイを表示した状態でブロードキャスト受信側から `startActivity`)
+
+| 実験 | 結果 | 画面の流れ(`screenrecord` 生フレームのコマ送り) |
+|---|---|---|
+| E1 自作アプリから YouTube｜Apple Music 3:2(起点はホーム) | **合格**。`resolveActivity` で `SplitActivity(exported=true)` を検出、`startActivity` 成功、分割 60:40 | 起点のホーム → 分割 |
+| E2 分割(YouTube｜Apple Music)→ Googleマップ｜自作アプリ 7:3 | 分割は 70:30 で成立。ただし**途中に余計な画面** | 薄いグレー → **自作アプリが全画面** → **純正ホーム+「アプリケーションの選択」** → 分割 |
+| E2b 分割(Googleマップ｜自作)→ YouTube｜Apple Music 3:2 | **合格** | 元の分割 → **暗い無地 約 0.5 秒**(`SplitActivity` の画面)→ 新しい分割。ホームは映らない |
+| E3 Apple Music を強制停止 → YouTube｜Apple Music 3:2 | 分割は成立し、**右側も空にならない**(D の問題は起きない)。ただし途中に余計な画面 | 暗い画面 → Apple Music の起動画面(全画面)→ **純正ホーム+「アプリケーションの選択」** → 分割 |
+| E4 分割(YouTube｜Apple Music)→ YouTube｜自作アプリ 2:3 | **合格**。比率 40:60 | 元の分割 → 暗い無地(数コマ)→ 新しい分割 |
+
+**余計な画面の条件**: 指定したアプリのどちらかに**タスクがまだ無い**(その起動で初めて開く/強制停止・再起動のあと)とき。ランチャーは、そのアプリをまず全画面で起動し、ホームの分割選択の画面を経て、`launchExistingSplitPair` で分割する(ログ: `SplitScreenManager: start mRightPackageName=...` から `launchTasks ... launchExistingSplitPair` まで約 2.5 秒)。両方のタスクがあれば、暗い画面 約 0.5 秒だけ。
+
+- 車ではエンジンをかけるたびに再起動するので、**各アプリの最初の1回は必ず余計な画面が出る**。対策が必要(改訂仕様で扱う)
+- 再起動後の動作: 端末の設定変更は不要(呼ぶだけ)なので、そのまま動く見込み(未確認。次の再起動で確認する)
 
 ## 画面とショートカットの正体
 

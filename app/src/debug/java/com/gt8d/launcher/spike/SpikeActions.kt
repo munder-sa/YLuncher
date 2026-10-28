@@ -21,6 +21,7 @@ import com.gt8d.launcher.media.MediaListenerService
 object SpikeActions {
     private const val TAG = "GT8D-SPIKE"
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val VALID_SPLIT_PERCENTS = setOf("1:1", "2:3", "3:2", "3:7", "7:3")
 
     fun run(ctx: Context, step: String, extras: Bundle?) {
         val appCtx = ctx.applicationContext
@@ -37,6 +38,7 @@ object SpikeActions {
             "freeform_hidden" -> runFreeformHidden(appCtx, extras)
             "home_dump" -> runHomeDump()
             "click_label" -> runClickLabel(extras)
+            "vendor_split" -> runVendorSplit(appCtx, extras)
             else -> Log.w(TAG, "unknown step: $step")
         }
     }
@@ -383,6 +385,36 @@ object SpikeActions {
             val result = clickNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             Log.i(TAG, "click_label result=$result on=$firstText/$firstDesc")
         }, wait)
+    }
+
+    private fun runVendorSplit(ctx: Context, extras: Bundle?) {
+        val left = extras?.getString("left").orEmpty()
+        val right = extras?.getString("right").orEmpty()
+        if (left.isBlank() || right.isBlank()) {
+            Log.w(TAG, "FAIL vendor_split missing args left='$left' right='$right'")
+            return
+        }
+        val percent = extras?.getString("percent") ?: "1:1"
+        if (percent !in VALID_SPLIT_PERCENTS) {
+            Log.w(TAG, "FAIL vendor_split bad-percent $percent")
+            return
+        }
+
+        val intent = Intent().setComponent(
+            ComponentName("com.sd.factoryconfig", "com.sd.factoryconfig.SplitActivity"),
+        )
+        val resolved = ctx.packageManager.resolveActivity(intent, 0)
+        val resolveDesc = resolved?.activityInfo?.let { "${it.name}(exported=${it.exported})" } ?: "null"
+        Log.i(TAG, "vendor_split resolve=$resolveDesc")
+        if (resolved == null) {
+            Log.w(TAG, "FAIL vendor_split entry-missing")
+            return
+        }
+
+        intent.putExtra("split_shortcur_package", "$left|$right")
+        intent.putExtra("split_percent", percent)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startSafe(ctx, "vendor_split $left|$right percent=$percent", intent)
     }
 
     fun startSafe(ctx: Context, target: String, intent: Intent) {

@@ -1,0 +1,4 @@
+write app/src/debug/AndroidManifest.xml
+write app/src/debug/java/com/gt8d/launcher/spike/SpikeActions.kt
+command /home/munde/tools/gradle-run.sh assembleDebug
+command /home/munde/tools/gradle-run.sh test
