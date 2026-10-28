@@ -1,0 +1,128 @@
+package com.gt8d.launcher.foreground
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ForegroundWatcherTest {
+
+    private class FakeForegroundEvents(
+        private val available: Boolean = true,
+        private val events: List<ResumeEvent> = emptyList(),
+    ) : ForegroundEvents {
+        override fun available(): Boolean = available
+        override fun resumedSince(sinceMs: Long): List<ResumeEvent> = events
+    }
+
+    @Test
+    fun bothResumed_trueOnlyWhenBothAfterSince() {
+        val bothAfter = ForegroundWatcher(
+            FakeForegroundEvents(
+                available = true,
+                events = listOf(
+                    ResumeEvent("a", 1100L),
+                    ResumeEvent("b", 1200L),
+                ),
+            ),
+        )
+        assertTrue(bothAfter.bothResumed("a", "b", 1000L))
+
+        val onlyOne = ForegroundWatcher(
+            FakeForegroundEvents(
+                available = true,
+                events = listOf(
+                    ResumeEvent("a", 1100L),
+                ),
+            ),
+        )
+        assertFalse(onlyOne.bothResumed("a", "b", 1000L))
+
+        val oneBeforeSince = ForegroundWatcher(
+            FakeForegroundEvents(
+                available = true,
+                events = listOf(
+                    ResumeEvent("a", 900L),
+                    ResumeEvent("b", 1200L),
+                ),
+            ),
+        )
+        assertFalse(oneBeforeSince.bothResumed("a", "b", 1000L))
+    }
+
+    @Test
+    fun unavailable_bothResumedFalse_andLastNull() {
+        val watcher = ForegroundWatcher(
+            FakeForegroundEvents(
+                available = false,
+                events = listOf(
+                    ResumeEvent("a", 1100L),
+                    ResumeEvent("b", 1200L),
+                ),
+            ),
+        )
+        assertFalse(watcher.available())
+        assertFalse(watcher.bothResumed("a", "b", 1000L))
+        assertNull(watcher.lastForegroundSince(1000L))
+    }
+
+    @Test
+    fun lastForegroundSince_returnsLatest() {
+        val watcher = ForegroundWatcher(
+            FakeForegroundEvents(
+                available = true,
+                events = listOf(
+                    ResumeEvent("a", 1100L),
+                    ResumeEvent("b", 1300L),
+                    ResumeEvent("c", 1200L),
+                ),
+            ),
+        )
+        assertEquals("b", watcher.lastForegroundSince(1000L))
+        assertNull(watcher.lastForegroundSince(1400L))
+    }
+
+    @Test
+    fun warm_bothMarked_800() {
+        val tracker = WarmTracker(ownPkg = "com.gt8d.launcher", ownTaskExists = { false })
+        tracker.markForeground("a")
+        tracker.markForeground("b")
+
+        assertTrue(tracker.isWarm("a"))
+        assertTrue(tracker.isWarm("b"))
+        assertEquals(800L, tracker.expectedDelayMs("a", "b"))
+    }
+
+    @Test
+    fun cold_oneUnmarked_3500() {
+        val tracker = WarmTracker(ownPkg = "com.gt8d.launcher", ownTaskExists = { false })
+        tracker.markForeground("a")
+
+        assertTrue(tracker.isWarm("a"))
+        assertFalse(tracker.isWarm("b"))
+        assertEquals(3500L, tracker.expectedDelayMs("a", "b"))
+        assertEquals(3500L, tracker.expectedDelayMs("b", "a"))
+    }
+
+    @Test
+    fun ownPkg_warmWhenOwnTaskExists() {
+        val own = "com.gt8d.launcher"
+        val tracker = WarmTracker(ownPkg = own, ownTaskExists = { true })
+        tracker.markForeground("x")
+
+        assertTrue(tracker.isWarm(own))
+        assertEquals(800L, tracker.expectedDelayMs("x", own))
+    }
+
+    @Test
+    fun ownPkg_coldWhenNoTask_3500() {
+        val own = "com.gt8d.launcher"
+        val tracker = WarmTracker(ownPkg = own, ownTaskExists = { false })
+        tracker.markForeground("x")
+        tracker.markForeground(own)
+
+        assertFalse(tracker.isWarm(own))
+        assertEquals(3500L, tracker.expectedDelayMs("x", own))
+    }
+}

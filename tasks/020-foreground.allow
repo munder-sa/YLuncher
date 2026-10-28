@@ -1,0 +1,6 @@
+create app/src/main/java/com/gt8d/launcher/foreground/ForegroundWatcher.kt
+create app/src/main/java/com/gt8d/launcher/foreground/UsageStatsForegroundEvents.kt
+create app/src/test/java/com/gt8d/launcher/foreground/ForegroundWatcherTest.kt
+write app/src/main/AndroidManifest.xml
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug
