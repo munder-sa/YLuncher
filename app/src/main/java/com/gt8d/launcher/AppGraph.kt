@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import com.gt8d.launcher.apps.AppCatalog
+import com.gt8d.launcher.boot.BootSequence
 import com.gt8d.launcher.config.ConfigRepository
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.config.LauncherConfig
@@ -14,13 +15,16 @@ import com.gt8d.launcher.curtain.CurtainController
 import com.gt8d.launcher.curtain.CurtainTarget
 import com.gt8d.launcher.curtain.CurtainView
 import com.gt8d.launcher.curtain.HideReason
+import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.foreground.ForegroundWatcher
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
 import com.gt8d.launcher.foreground.WarmTracker
+import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.sets.Messenger
 import com.gt8d.launcher.sets.Opening
+import com.gt8d.launcher.sets.SetNavigator
 import com.gt8d.launcher.sets.SetRunner
 import com.gt8d.launcher.sets.SetRunnerDeps
 import com.gt8d.launcher.split.AndroidActivityLauncher
@@ -156,6 +160,23 @@ object AppGraph {
     }
 
     private val forwarders = CopyOnWriteArrayList<WeakReference<PanelForwarder>>()
+
+    var bootHandled: Boolean = false
+
+    val boot: BootSequence by lazy {
+        var readyAtOpen = 0
+        BootSequence(
+            scheduler = MainThreadScheduler(),
+            safetyActive = { SafetyGuard.isFallbackActive(app) },
+            openLast = {
+                readyAtOpen = runner.readyCount
+                runner.openForBoot(config.lastSetIndex)
+            },
+            splitAppeared = { runner.readyCount > readyAtOpen },
+            goHome = { runner.openForBoot(SetNavigator.HOME) },
+            record = { msg -> DiagLog.d("Boot", msg) },
+        )
+    }
 
     val forwarderFactory: () -> PanelForwarder = {
         PanelForwarder(

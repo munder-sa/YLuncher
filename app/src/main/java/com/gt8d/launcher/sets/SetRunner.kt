@@ -72,6 +72,9 @@ class SetRunner(private val d: SetRunnerDeps) {
     var lastOpenedPair: Pair<String, String>? = null
         private set
 
+    var readyCount: Int = 0
+        private set
+
     private var pending: Int? = null
     private var waitKind: WaitKind = WaitKind.None
     private var panelResumed: Boolean = false
@@ -282,6 +285,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                     DiagLog.d("SetRunner", "waitBoth ready left=$left right=$right")
                     waitKind = WaitKind.None
                     cancelTimers()
+                    readyCount++
                     d.selector.onSuccess()
                     d.warm.markForeground(left)
                     d.warm.markForeground(right)
@@ -330,6 +334,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                     DiagLog.d("SetRunner", "waitSingle ready pkg=$pkg")
                     waitKind = WaitKind.None
                     cancelTimers()
+                    readyCount++
                     d.warm.markForeground(pkg)
                     if (useCurtain) {
                         d.curtain.ready()
@@ -391,7 +396,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         activeTimers.clear()
     }
 
-    private fun targetFor(index: Int): CurtainTarget {
+    fun targetFor(index: Int): CurtainTarget {
         val sets = d.config().screenSets
         val count = sets.size + 1
         if (index == SetNavigator.HOME) {

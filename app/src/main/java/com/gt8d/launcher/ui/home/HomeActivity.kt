@@ -1,9 +1,11 @@
 package com.gt8d.launcher.ui.home
 
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -11,36 +13,68 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.R
+import com.gt8d.launcher.apps.stockLauncherIntent
+import com.gt8d.launcher.boot.BootPhase
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
+import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.panel.IconGrid
 import com.gt8d.launcher.ui.panel.PanelScreen
+import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.theme.Palette
 
 class HomeActivity : ComponentActivity() {
+    companion object {
+        const val BOOT_WINDOW_MS = 180_000L
+    }
+
     private val activityLauncher by lazy { AndroidActivityLauncher(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (SafetyGuard.isFallbackActive(this)) {
+            setContent {
+                LauncherTheme {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Palette.Background0),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "安全のため純正ランチャーを使っています",
+                            fontSize = Dims.BodyText,
+                            color = Color.White,
+                        )
+                    }
+                }
+            }
+            return
+        }
         setContent {
             LauncherTheme {
                 val latestConfig by AppGraph.latestConfig.collectAsState()
                 val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
                 val installedPkgs = remember(config) { AppGraph.catalog.installed() }
                 val homeApps = config.homeApps.map { AppGraph.catalog.info(it, installedPkgs) }
+                val bootPhase by AppGraph.boot.phase.collectAsState()
+                val secondsLeft by AppGraph.boot.secondsLeft.collectAsState()
 
                 Box(
                     modifier = Modifier
@@ -90,6 +124,17 @@ class HomeActivity : ComponentActivity() {
                             )
                         }
                     }
+
+                    if (bootPhase == BootPhase.Countdown || bootPhase == BootPhase.Opening) {
+                        BootScreen(
+                            target = AppGraph.runner.targetFor(AppGraph.config.lastSetIndex),
+                            secondsLeft = secondsLeft,
+                            opening = bootPhase == BootPhase.Opening,
+                            onOpenNow = AppGraph.boot::openNow,
+                            onStayHome = AppGraph.boot::stayHome,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                    }
                 }
             }
         }
@@ -97,6 +142,16 @@ class HomeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (SafetyGuard.isFallbackActive(this)) {
+            runCatching { startActivity(stockLauncherIntent()) }
+            return
+        }
         EdgeStripService.ensureRunning(this)
+        if (!AppGraph.bootHandled) {
+            AppGraph.bootHandled = true
+            if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && AppGraph.config.lastSetIndex != 0) {
+                AppGraph.boot.start()
+            }
+        }
     }
 }

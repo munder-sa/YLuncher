@@ -1,0 +1,11 @@
+create app/src/main/java/com/gt8d/launcher/boot/BootSequence.kt
+create app/src/main/java/com/gt8d/launcher/ui/home/BootScreen.kt
+create app/src/test/java/com/gt8d/launcher/boot/BootSequenceTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/BootScreenTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityTest.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/java/com/gt8d/launcher/edge/BootReceiver.kt
+command /home/munde/tools/gradle-run.sh test

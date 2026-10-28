@@ -423,4 +423,19 @@ class SetRunnerTest {
         assertNull(env.runner.opening.value)
         assertEquals(0, env.selector.state.consecutiveFailures)
     }
+
+    @Test
+    fun readyCount_incrementsWhenSplitReady() {
+        val env = TestEnv()
+        assertEquals(0, env.runner.readyCount)
+
+        env.runner.open(2)
+        assertEquals(0, env.runner.readyCount)
+
+        env.events.events.add(ResumeEvent("youtube", 250L))
+        env.events.events.add(ResumeEvent("applemusic", 280L))
+        env.scheduler.advanceBy(200L)
+
+        assertEquals(1, env.runner.readyCount)
+    }
 }
