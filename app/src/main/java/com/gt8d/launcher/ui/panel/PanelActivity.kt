@@ -17,8 +17,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.R
+import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.split.AndroidActivityLauncher
+import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.theme.LauncherTheme
 
@@ -32,7 +34,17 @@ class PanelActivity : ComponentActivity() {
         inSplitState = isInMultiWindowMode
         setContent {
             LauncherTheme {
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .twoFingerSwipe { action ->
+                            when (action) {
+                                EdgeAction.Next -> AppGraph.runner.next()
+                                EdgeAction.Prev -> AppGraph.runner.prev()
+                                else -> Unit
+                            }
+                        },
+                ) {
                     Image(
                         painter = painterResource(id = R.drawable.wallpaper),
                         contentDescription = null,

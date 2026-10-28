@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import com.gt8d.launcher.ui.apps.AppListEntry
 import com.gt8d.launcher.ui.panel.AppInfo
 import java.util.concurrent.ConcurrentHashMap
 
@@ -20,6 +21,20 @@ class AppCatalog(private val context: Context) {
         }.getOrDefault(emptySet())
     }
 
+    fun launchables(): List<AppListEntry> {
+        val pm = context.packageManager
+        return runCatching {
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            pm.queryIntentActivities(intent, 0).mapNotNull { resolveInfo ->
+                val ai = resolveInfo.activityInfo ?: return@mapNotNull null
+                val pkg = ai.packageName ?: return@mapNotNull null
+                val cls = ai.name ?: return@mapNotNull null
+                val label = resolveInfo.loadLabel(pm)?.toString() ?: pkg
+                AppListEntry(pkg = pkg, cls = cls, label = label)
+            }
+        }.getOrDefault(emptyList())
+    }
+
     fun label(pkg: String): String {
         val pm = context.packageManager
         return runCatching {
@@ -28,17 +43,16 @@ class AppCatalog(private val context: Context) {
         }.getOrDefault(pkg)
     }
 
-    fun info(pkg: String): AppInfo {
-        val installedPkgs = installed()
+    fun info(pkg: String, installedPkgs: Set<String>): AppInfo {
         return AppInfo(
             pkg = pkg,
             label = label(pkg),
-            icon = loadIcon(pkg),
+            icon = icon(pkg),
             installed = pkg in installedPkgs,
         )
     }
 
-    private fun loadIcon(pkg: String): ImageBitmap? {
+    fun icon(pkg: String): ImageBitmap? {
         iconCache[pkg]?.let { return it }
         return runCatching {
             val bitmap = context.packageManager

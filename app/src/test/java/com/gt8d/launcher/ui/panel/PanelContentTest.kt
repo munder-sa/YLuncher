@@ -138,7 +138,7 @@ class PanelContentTest {
         }
         rule.setContent {
             LauncherTheme {
-                Box(modifier = Modifier.size(576.dp, 800.dp)) {
+                Box(modifier = Modifier.size(516.dp, 800.dp)) {
                     PanelContent(
                         state = PanelState(
                             now = NowPlaying(
@@ -179,7 +179,7 @@ class PanelContentTest {
             val bounds = node.getBoundsInRoot()
             assertTrue("$tag width (${bounds.width}) < 72.dp", bounds.width >= 72.dp)
             assertTrue("$tag height (${bounds.height}) < 72.dp", bounds.height >= 72.dp)
-            assertTrue("$tag right (${bounds.right}) > 576.dp", bounds.right <= 576.dp)
+            assertTrue("$tag right (${bounds.right}) > 516.dp", bounds.right <= 516.dp)
         }
     }
 

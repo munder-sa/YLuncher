@@ -22,8 +22,10 @@ import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.R
 import com.gt8d.launcher.config.Defaults
+import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.split.AndroidActivityLauncher
+import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.panel.IconGrid
 import com.gt8d.launcher.ui.panel.PanelScreen
 import com.gt8d.launcher.ui.theme.LauncherTheme
@@ -37,9 +39,20 @@ class HomeActivity : ComponentActivity() {
             LauncherTheme {
                 val latestConfig by AppGraph.latestConfig.collectAsState()
                 val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
-                val homeApps = config.homeApps.map { AppGraph.catalog.info(it) }
+                val installedPkgs = remember(config) { AppGraph.catalog.installed() }
+                val homeApps = config.homeApps.map { AppGraph.catalog.info(it, installedPkgs) }
 
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .twoFingerSwipe { action ->
+                            when (action) {
+                                EdgeAction.Next -> AppGraph.runner.next()
+                                EdgeAction.Prev -> AppGraph.runner.prev()
+                                else -> Unit
+                            }
+                        },
+                ) {
                     Image(
                         painter = painterResource(id = R.drawable.wallpaper),
                         contentDescription = null,

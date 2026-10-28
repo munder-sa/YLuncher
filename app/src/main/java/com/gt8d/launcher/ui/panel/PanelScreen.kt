@@ -13,15 +13,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.apps.stockLauncherIntent
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.media.positionAt
+import com.gt8d.launcher.ui.apps.AppListScreen
+import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
+import com.gt8d.launcher.ui.apps.buildAppList
 import kotlinx.coroutines.delay
 
 @Composable
@@ -33,6 +38,29 @@ fun PanelScreen(
     val latestConfig by AppGraph.latestConfig.collectAsState()
     val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
     val now by MediaWatcher.nowPlaying.collectAsState()
+    var showAppList by remember { mutableStateOf(false) }
+
+    if (showAppList) {
+        val entries = remember(showAppList) {
+            buildAppList(AppGraph.catalog.launchables(), context.packageName)
+        }
+        AppListScreen(
+            entries = entries,
+            iconFor = { pkg -> AppGraph.catalog.icon(pkg) },
+            onLaunch = { entry ->
+                if (entry == STOCK_LAUNCHER_ENTRY) {
+                    runCatching {
+                        context.startActivity(stockLauncherIntent())
+                    }
+                } else {
+                    onLaunchApp(entry.pkg)
+                }
+                showAppList = false
+            },
+            onClose = { showAppList = false },
+        )
+        return
+    }
 
     var positionMs by remember(now) {
         mutableLongStateOf(now?.positionAt(SystemClock.elapsedRealtime()) ?: 0L)
@@ -51,9 +79,10 @@ fun PanelScreen(
     }
 
     val catalog = AppGraph.catalog
-    val idleApp = catalog.info(config.idleApp)
-    val panelApps = config.panelApps.map { catalog.info(it) }
-    val dockApps = config.dockApps.map { catalog.info(it) }
+    val installedPkgs = remember(config) { AppGraph.catalog.installed() }
+    val idleApp = catalog.info(config.idleApp, installedPkgs)
+    val panelApps = config.panelApps.map { catalog.info(it, installedPkgs) }
+    val dockApps = config.dockApps.map { catalog.info(it, installedPkgs) }
 
     val wifiOn = runCatching {
         context.getSystemService(WifiManager::class.java)?.isWifiEnabled == true
@@ -104,12 +133,12 @@ fun PanelScreen(
         },
         onSeek = { ms -> MediaWatcher.seekTo(ms) },
         onLaunch = onLaunchApp,
-        onAdd = { /* Task 15b で接続 */ },
+        onAdd = { /* Task 18 で接続 */ },
         onHome = { AppGraph.runner.home() },
-        onSplit = { /* Task 15b で接続 */ },
+        onSplit = { /* Task 18 で接続 */ },
         onCar = { AppGraph.bridge.switchToCarScreen() },
-        onAppList = { /* Task 15b で接続 */ },
-        onAppListLongPress = { /* Task 15b で接続 */ },
+        onAppList = { showAppList = true },
+        onAppListLongPress = { /* Task 18 で接続 */ },
         onOpenPermissions = {
             runCatching {
                 val intent = Intent(

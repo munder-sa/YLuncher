@@ -1,0 +1,18 @@
+create app/src/main/java/com/gt8d/launcher/ui/apps/AppList.kt
+create app/src/main/java/com/gt8d/launcher/ui/apps/AppListScreen.kt
+create app/src/main/java/com/gt8d/launcher/apps/StockLauncher.kt
+create app/src/main/java/com/gt8d/launcher/ui/gesture/TwoFingerSwipe.kt
+create app/src/test/java/com/gt8d/launcher/ui/apps/AppListScreenTest.kt
+create app/src/test/java/com/gt8d/launcher/apps/StockLauncherTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/gesture/TwoFingerSwipeTest.kt
+write app/src/main/java/com/gt8d/launcher/apps/AppCatalog.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/Dock.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/IconGrid.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/MediaCard.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug
