@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 
 object MediaWatcher {
     private const val TAG = "GT8D"
-    private val FAVORITE_ACTION_IDS: Set<String> = emptySet()
+    private val FAVORITE_ACTION_IDS: Set<String> = setOf(
+        "com.apple.android.music.playback.action.FAVORITE",
+    )
 
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
     val nowPlaying: StateFlow<NowPlaying?> = _nowPlaying.asStateFlow()

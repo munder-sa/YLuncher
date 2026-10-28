@@ -1,0 +1,12 @@
+create app/src/main/java/com/gt8d/launcher/AppGraph.kt
+create app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/PanelForwarder.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+create app/src/main/java/com/gt8d/launcher/apps/AppCatalog.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/PanelForwarderTest.kt
+write app/src/main/java/com/gt8d/launcher/media/MediaWatcher.kt
+write app/src/main/java/com/gt8d/launcher/LauncherApp.kt
+write app/src/main/AndroidManifest.xml
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug

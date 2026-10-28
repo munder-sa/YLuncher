@@ -10,6 +10,7 @@ class LauncherApp : Application() {
     override fun onCreate() {
         super.onCreate()
         SafetyGuard.recordStart(this)
+        AppGraph.init(this)
         Handler(Looper.getMainLooper()).postDelayed({ SafetyGuard.markStable(this) }, 10_000L)
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
