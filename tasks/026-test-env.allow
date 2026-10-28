@@ -1,0 +1,3 @@
+create app/src/test/resources/robolectric.properties
+create app/src/test/java/com/gt8d/launcher/TestApp.kt
+command /home/munde/tools/gradle-run.sh test
