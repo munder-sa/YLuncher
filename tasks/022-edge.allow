@@ -1,0 +1,12 @@
+create app/src/main/java/com/gt8d/launcher/edge/EdgeGesture.kt
+create app/src/main/java/com/gt8d/launcher/edge/EdgeStripService.kt
+create app/src/main/java/com/gt8d/launcher/edge/CurtainWindow.kt
+create app/src/main/java/com/gt8d/launcher/edge/WindowManagerFacade.kt
+create app/src/main/java/com/gt8d/launcher/edge/BootReceiver.kt
+create app/src/test/java/com/gt8d/launcher/edge/EdgeGestureTest.kt
+create app/src/test/java/com/gt8d/launcher/edge/CurtainWindowTest.kt
+write app/src/main/java/com/gt8d/launcher/curtain/CurtainController.kt
+write app/src/test/java/com/gt8d/launcher/curtain/CurtainControllerTest.kt
+write app/src/main/AndroidManifest.xml
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug

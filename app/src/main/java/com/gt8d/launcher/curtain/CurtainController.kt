@@ -94,7 +94,10 @@ class CurtainController(
         isShowing = false
         timers.forEach { it.cancel() }
         timers.clear()
-        view.hide(reason)
-        onHidden?.invoke(reason)
+        try {
+            view.hide(reason)
+        } finally {
+            onHidden?.invoke(reason)
+        }
     }
 }

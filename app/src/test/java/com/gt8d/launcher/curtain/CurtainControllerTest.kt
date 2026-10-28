@@ -219,4 +219,25 @@ class CurtainControllerTest {
             assertEquals(listOf(HideReason.Failed), reasons)
         }
     }
+
+    @Test
+    fun onHidden_calledEvenIfViewHideThrows() {
+        val scheduler = FakeScheduler()
+        val view = object : CurtainView {
+            override fun show(target: CurtainTarget) {}
+            override fun update(target: CurtainTarget) {}
+            override fun showProgress() {}
+            override fun hide(reason: HideReason) {
+                throw RuntimeException("hide failed")
+            }
+        }
+        val controller = CurtainController(scheduler, view)
+        val reasons = mutableListOf<HideReason>()
+        controller.onHidden = { reasons.add(it) }
+
+        controller.show(sampleTarget(), expectedMs = 800L, watcherAvailable = false)
+        runCatching { controller.ready() }
+
+        assertEquals(listOf(HideReason.Ready), reasons)
+    }
 }
