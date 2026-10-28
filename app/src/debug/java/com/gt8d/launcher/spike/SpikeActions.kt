@@ -15,6 +15,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityNodeInfo
 import com.gt8d.launcher.media.MediaListenerService
 
 object SpikeActions {
@@ -33,6 +34,9 @@ object SpikeActions {
             "toggle_split" -> runToggleSplit()
             "info" -> runInfo(appCtx)
             "freeform" -> runFreeform(appCtx, extras)
+            "freeform_hidden" -> runFreeformHidden(appCtx, extras)
+            "home_dump" -> runHomeDump()
+            "click_label" -> runClickLabel(extras)
             else -> Log.w(TAG, "unknown step: $step")
         }
     }
@@ -215,6 +219,172 @@ object SpikeActions {
         }, delay)
     }
 
+    private fun runFreeformHidden(ctx: Context, extras: Bundle?) {
+        val left = extras?.getString("left").orEmpty()
+        val right = extras?.getString("right").orEmpty()
+        val ratio = readInt(extras, "ratio", 50)
+        val delay = readDelayMs(extras)
+        val mode = readInt(extras, "mode", 5)
+
+        val contentResolver = ctx.contentResolver
+        Log.i(TAG, "hidden_api_policy=${Settings.Global.getString(contentResolver, "hidden_api_policy")}")
+
+        if (left.isBlank() || right.isBlank()) {
+            Log.w(TAG, "FAIL freeform_hidden missing args left='$left' right='$right'")
+            return
+        }
+
+        val bounds = ctx.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds
+        val w = bounds.width()
+        val h = bounds.height()
+        val splitX = w * ratio / 100
+        val leftRect = Rect(0, 0, splitX, h)
+        val rightRect = Rect(splitX, 0, w, h)
+
+        val leftIntent = ctx.packageManager.getLaunchIntentForPackage(left)
+        if (leftIntent == null) {
+            Log.w(TAG, "FAIL not-installed $left")
+            return
+        }
+        leftIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val leftOptions = makeHiddenFreeformOptions(leftRect, mode)
+        startSafe(ctx, "left:$left", leftIntent, leftOptions.toBundle())
+
+        mainHandler.postDelayed({
+            val rightIntent = ctx.packageManager.getLaunchIntentForPackage(right)
+            if (rightIntent == null) {
+                Log.w(TAG, "FAIL not-installed $right")
+                return@postDelayed
+            }
+            rightIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            val rightOptions = makeHiddenFreeformOptions(rightRect, mode)
+            startSafe(ctx, "right:$right", rightIntent, rightOptions.toBundle())
+
+            mainHandler.postDelayed({
+                Log.i(TAG, "freeform_hidden bounds requested left=$leftRect right=$rightRect mode=$mode")
+            }, 1000L)
+        }, delay)
+    }
+
+    private fun makeHiddenFreeformOptions(rect: Rect, mode: Int): ActivityOptions {
+        val options = ActivityOptions.makeBasic().setLaunchBounds(rect)
+        try {
+            ActivityOptions::class.java
+                .getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                .invoke(options, mode)
+            Log.i(TAG, "reflect setLaunchWindowingMode($mode) -> ok")
+        } catch (e: Throwable) {
+            Log.w(TAG, "reflect setLaunchWindowingMode($mode) -> FAIL ${e.javaClass.simpleName}: ${e.message}")
+        }
+        return options
+    }
+
+    private fun runHomeDump() {
+        val service = SpikeAccessibilityService.instance
+        if (service == null) {
+            Log.w(TAG, "FAIL home_dump service-not-enabled")
+            return
+        }
+        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+        mainHandler.postDelayed({
+            val s = SpikeAccessibilityService.instance
+            if (s == null) {
+                Log.w(TAG, "FAIL home_dump service-not-enabled")
+                return@postDelayed
+            }
+            val root = s.rootInActiveWindow
+            if (root == null) {
+                Log.w(TAG, "FAIL home_dump root-null")
+            } else {
+                var count = 0
+                fun dfs(node: AccessibilityNodeInfo?) {
+                    if (node == null || count >= 300) return
+                    val text = node.text?.toString().orEmpty()
+                    val desc = node.contentDescription?.toString().orEmpty()
+                    if (text.isNotEmpty() || desc.isNotEmpty()) {
+                        val bounds = Rect()
+                        node.getBoundsInScreen(bounds)
+                        Log.i(
+                            TAG,
+                            "node text=$text desc=$desc cls=${node.className} clickable=${node.isClickable} bounds=$bounds",
+                        )
+                        count++
+                    }
+                    val childCount = node.childCount
+                    for (i in 0 until childCount) {
+                        if (count >= 300) break
+                        dfs(node.getChild(i))
+                    }
+                }
+                dfs(root)
+            }
+            val windows = s.windows
+            if (windows != null) {
+                for (w in windows) {
+                    Log.i(TAG, "window type=${w.type} title=${w.title} layer=${w.layer}")
+                }
+            }
+        }, 1200L)
+    }
+
+    private fun runClickLabel(extras: Bundle?) {
+        val service = SpikeAccessibilityService.instance
+        if (service == null) {
+            Log.w(TAG, "FAIL click_label service-not-enabled")
+            return
+        }
+        val label = extras?.getString("label").orEmpty()
+        if (label.isBlank()) {
+            Log.w(TAG, "FAIL click_label missing label")
+            return
+        }
+        val wait = readLong(extras, "wait", 1200L)
+        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+        mainHandler.postDelayed({
+            val s = SpikeAccessibilityService.instance
+            if (s == null) {
+                Log.w(TAG, "FAIL click_label service-not-enabled")
+                return@postDelayed
+            }
+            val root = s.rootInActiveWindow
+            if (root == null) {
+                Log.w(TAG, "FAIL click_label not-found $label")
+                return@postDelayed
+            }
+            val candidates = mutableListOf<AccessibilityNodeInfo>()
+            fun dfs(node: AccessibilityNodeInfo?) {
+                if (node == null) return
+                val text = node.text?.toString().orEmpty()
+                val desc = node.contentDescription?.toString().orEmpty()
+                if (text.contains(label, ignoreCase = true) || desc.contains(label, ignoreCase = true)) {
+                    candidates.add(node)
+                    val bounds = Rect()
+                    node.getBoundsInScreen(bounds)
+                    Log.i(TAG, "candidate text=$text desc=$desc clickable=${node.isClickable} bounds=$bounds")
+                }
+                val childCount = node.childCount
+                for (i in 0 until childCount) {
+                    dfs(node.getChild(i))
+                }
+            }
+            dfs(root)
+            if (candidates.isEmpty()) {
+                Log.w(TAG, "FAIL click_label not-found $label")
+                return@postDelayed
+            }
+            val first = candidates.first()
+            val firstText = first.text?.toString().orEmpty()
+            val firstDesc = first.contentDescription?.toString().orEmpty()
+            var target: AccessibilityNodeInfo? = first
+            while (target != null && !target.isClickable) {
+                target = target.parent
+            }
+            val clickNode = target ?: first
+            val result = clickNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            Log.i(TAG, "click_label result=$result on=$firstText/$firstDesc")
+        }, wait)
+    }
+
     fun startSafe(ctx: Context, target: String, intent: Intent) {
         val appCtx = ctx.applicationContext
         val flagsHex = "0x${Integer.toHexString(intent.flags)}"
@@ -243,6 +413,15 @@ object SpikeActions {
             is Number -> v.toLong()
             is String -> v.toLongOrNull() ?: 300L
             else -> 300L
+        }
+    }
+
+    private fun readLong(extras: Bundle?, key: String, default: Long): Long {
+        if (extras == null || !extras.containsKey(key)) return default
+        return when (val v = extras.get(key)) {
+            is Number -> v.toLong()
+            is String -> v.toLongOrNull() ?: default
+            else -> default
         }
     }
 
