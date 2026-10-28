@@ -1,0 +1,7 @@
+create app/src/main/java/com/gt8d/launcher/diag/DiagLog.kt
+create app/src/main/java/com/gt8d/launcher/safety/SafetyGuard.kt
+create app/src/test/java/com/gt8d/launcher/diag/DiagLogTest.kt
+create app/src/test/java/com/gt8d/launcher/safety/SafetyGuardTest.kt
+write app/src/main/java/com/gt8d/launcher/LauncherApp.kt
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug
