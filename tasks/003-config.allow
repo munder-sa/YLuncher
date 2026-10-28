@@ -1,0 +1,10 @@
+create app/src/main/java/com/gt8d/launcher/config/Model.kt
+create app/src/main/java/com/gt8d/launcher/config/Defaults.kt
+create app/src/main/java/com/gt8d/launcher/config/ConfigCodec.kt
+create app/src/main/java/com/gt8d/launcher/config/ConfigRepository.kt
+create app/src/test/java/com/gt8d/launcher/config/DefaultsTest.kt
+create app/src/test/java/com/gt8d/launcher/config/ConfigCodecTest.kt
+create app/src/test/java/com/gt8d/launcher/config/ConfigRepositoryTest.kt
+write gradle/libs.versions.toml
+write app/build.gradle.kts
+command /home/munde/tools/gradle-run.sh test
