@@ -1,0 +1,7 @@
+create settings.gradle.kts
+create build.gradle.kts
+create gradle/libs.versions.toml
+create-dir app/
+command mkdir -p {ROOT}/app/src/main/res/drawable-nodpi
+command cp {ROOT}/design/assets/wallpaper.png {ROOT}/app/src/main/res/drawable-nodpi/wallpaper.png
+command /home/munde/tools/gradle-run.sh test assembleDebug

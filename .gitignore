@@ -20,3 +20,6 @@ Thumbs.db
 *.jks
 *.keystore
 keystore.properties
+
+# agy-run のバックアップ
+*.bak-agy-*

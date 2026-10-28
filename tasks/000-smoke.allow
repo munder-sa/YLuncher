@@ -1,0 +1,2 @@
+command ls -la {ROOT}
+command ls -la {ROOT}/docs
