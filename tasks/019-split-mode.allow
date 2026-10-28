@@ -1,0 +1,4 @@
+create app/src/main/java/com/gt8d/launcher/split/SplitModeSelector.kt
+create app/src/test/java/com/gt8d/launcher/split/SplitModeSelectorTest.kt
+command /home/munde/tools/gradle-run.sh test
+command /home/munde/tools/gradle-run.sh test assembleDebug
