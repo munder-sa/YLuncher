@@ -62,7 +62,10 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { it.forkEvery = 1 }
+        unitTests.all {
+            it.forkEvery = 1
+            it.maxParallelForks = 4
+        }
     }
 }
 
