@@ -11,7 +11,7 @@
 |---|---|
 | `icon_background.svg` | アダプティブアイコンの背景レイヤー（108×108 フルブリード） |
 | `icon_foreground.svg` | 前景レイヤー（透明地、パネル＋グリフ） |
-| `icon_monochrome.svg` | モノクロレイヤー（白のシルエット、グリフは抜き）。テーマアイコン用 |
+| `icon_monochrome.svg` | モノクロレイヤー（白のシルエット、グリフは抜き）。テーマアイコン用。**パネルとグリフを1本のパスに統合し `fill-rule="evenodd"` で抜いている**（mask は VectorDrawable 変換で消えるため使わない。変換時は `fillType="evenOdd"` を指定） |
 | `icon_full.svg` | 背景＋前景を合成した単体版（アダプティブ非対応の用途向け） |
 
 ### パレット
