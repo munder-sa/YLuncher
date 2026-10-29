@@ -32,6 +32,169 @@ import org.junit.Test
 
 class SetRunnerTest {
     @Test
+    fun abortBootToHome_duringNormalOpening_doesNothing() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.runner.open(3)
+        val opening = e.runner.opening.value
+        e.runner.abortBootToHome()
+        assertEquals(opening, e.runner.opening.value)
+        assertEquals(2, e.runner.currentIndex)
+        assertEquals(2, e.lastIndex.lastSetIndex)
+        assertEquals(0, e.startHomeCount)
+        assertEquals(1, e.curtainView.updatedTargets.size)
+        completeBootSetTwo(e)
+        assertEquals(3, e.runner.currentIndex)
+        assertEquals(2, e.vendor.calls.size)
+        e.scheduler.advanceBy(3000)
+        assertEquals(3, e.vendor.calls.size)
+    }
+
+    @Test
+    fun abortBootToHome_duringLinkOpening_doesNothing() {
+        val e = TestEnv()
+        var fallback = 0
+        assertTrue(e.runner.openForLink("youtube") { fallback++ })
+        e.runner.abortBootToHome()
+        e.events.events.add(ResumeEvent("youtube", 100))
+        e.runner.panelResumedInSplit()
+        e.scheduler.advanceBy(200)
+        assertEquals(1, e.runner.readyCount)
+        assertEquals(0, fallback)
+        assertEquals(0, e.startHomeCount)
+        assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        e.scheduler.advanceBy(20000)
+        assertEquals(1, e.vendor.calls.size)
+    }
+
+    @Test
+    fun abortBootToHome_afterBootReady_startsHomeWithoutCurtain() {
+        val e = TestEnv()
+        e.runner.openForBoot(2)
+        completeBootSetTwo(e)
+        assertNull(e.runner.opening.value)
+        assertEquals(1, e.runner.readyCount)
+        e.runner.abortBootToHome()
+        assertEquals(1, e.startHomeCount)
+        assertEquals(0, e.runner.currentIndex)
+        assertEquals(0, e.lastIndex.lastSetIndex)
+        assertNull(e.runner.lastOpenedPair)
+        assertNull(e.runner.lastOpenedAtMs)
+        assertEquals(1, e.runner.readyCount)
+        assertTrue(e.warm.isWarm("youtube"))
+        assertTrue(e.warm.isWarm("applemusic"))
+        assertTrue(e.curtainView.shownTargets.isEmpty())
+        assertTrue(e.curtainView.hiddenReasons.isEmpty())
+    }
+
+    @Test
+    fun abortBootToHome_cancelsSingleWait() {
+        val e = TestEnv()
+        e.installed.remove("applemusic")
+        e.runner.openForBoot(2)
+        e.runner.abortBootToHome()
+        assertNull(e.runner.opening.value)
+        assertEquals(1, e.startHomeCount)
+        e.scheduler.advanceBy(100)
+        e.events.events.add(ResumeEvent("youtube", 100))
+        e.runner.panelResumedInSplit()
+        e.scheduler.advanceBy(20000)
+        assertEquals(0, e.runner.readyCount)
+        assertEquals(1, e.startHomeCount)
+    }
+
+    @Test
+    fun abortBootToHome_thenNormalOpen_canComplete() {
+        val e = TestEnv()
+        e.runner.openForBoot(2)
+        e.runner.abortBootToHome()
+        e.runner.open(1)
+        e.events.events.add(ResumeEvent("youtube", 100))
+        e.runner.panelResumedInSplit()
+        e.scheduler.advanceBy(200)
+        assertEquals(1, e.runner.readyCount)
+        assertEquals(1, e.runner.currentIndex)
+        assertNull(e.runner.opening.value)
+        assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+    }
+
+    private fun assertLoadingRejected(operation: (TestEnv) -> Unit) {
+        val e = TestEnv(initialLastSetIndex = 4, loading = true)
+        operation(e)
+        fun unchanged() {
+            assertEquals(4, e.runner.currentIndex)
+            assertEquals(4, e.lastIndex.lastSetIndex)
+            assertNull(e.runner.opening.value)
+            assertNull(e.runner.lastOpenedPair)
+            assertNull(e.runner.lastOpenedAtMs)
+            assertEquals(0, e.vendor.calls.size)
+            assertEquals(0, e.appPair.calls.size)
+            assertEquals(0, e.apps.startAppCalls.size)
+            assertEquals(0, e.startHomeCount)
+            assertEquals(0, e.curtainView.shownTargets.size)
+            assertEquals(0, e.curtainView.updatedTargets.size)
+            assertEquals(0, e.curtainView.hiddenReasons.size)
+            assertEquals(0, e.runner.readyCount)
+            assertEquals(SplitModeState(), e.selector.state)
+            assertFalse(e.warm.isWarm("youtube"))
+            assertEquals(0, e.messenger.splitUnavailableCount)
+            assertEquals(0, e.messenger.switchFailedCount)
+        }
+        unchanged()
+        e.scheduler.advanceBy(20000)
+        unchanged()
+        val target = e.runner.targetFor(1)
+        assertEquals(1, target.count)
+        assertEquals(0, target.position)
+        e.loading = false
+        e.scheduler.advanceBy(20000)
+        unchanged()
+        e.runner.open(3)
+        assertEquals(SplitCall("youtube", "maps", SplitRatio.R5_5), e.vendor.calls.single())
+    }
+
+    @Test fun loadingConfig_open_doesNothing() {
+        listOf(1, 0).forEach { index -> assertLoadingRejected { it.runner.open(index) } }
+    }
+    @Test fun loadingConfig_next_doesNothing() = assertLoadingRejected { it.runner.next() }
+    @Test fun loadingConfig_prev_doesNothing() = assertLoadingRejected { it.runner.prev() }
+    @Test fun loadingConfig_home_doesNothing() = assertLoadingRejected { it.runner.home() }
+    @Test fun loadingConfig_openForBoot_doesNothing() {
+        listOf(1, 0).forEach { index -> assertLoadingRejected { it.runner.openForBoot(index) } }
+    }
+    @Test fun loadingConfig_openForLink_returnsFalseWithoutCallback() = assertLoadingRejected {
+        var fallback = 0
+        assertFalse(it.runner.openForLink("youtube") { fallback++ })
+        assertEquals(0, fallback)
+    }
+    @Test fun loadingConfig_construction_preservesSavedIndex() = assertLoadingRejected {}
+    @Test fun loadedConfig_rejectedOperationsAreNotReplayed() = assertLoadingRejected {
+        it.runner.open(1)
+        it.runner.next()
+        it.runner.prev()
+        it.runner.home()
+        it.runner.openForBoot(2)
+        assertFalse(it.runner.openForLink("youtube") { throw AssertionError("fallback") })
+    }
+    @Test fun loadingConfig_doesNotReplacePendingRequest() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.runner.open(3)
+        e.loading = true
+        e.runner.open(1)
+        e.runner.next()
+        e.runner.prev()
+        e.runner.home()
+        e.runner.openForBoot(0)
+        assertFalse(e.runner.openForLink("youtube") { throw AssertionError("fallback") })
+        assertEquals(1, e.curtainView.updatedTargets.size)
+        e.loading = false
+        completeBootSetTwo(e)
+        assertEquals(3, e.runner.currentIndex)
+        assertEquals(SplitCall("youtube", "maps", SplitRatio.R5_5), e.vendor.calls.last())
+    }
+
+    @Test
     fun directLaunchSuccess_withoutUsageAccess_makesNextOpenWarm() {
         val env = TestEnv(watcherAvailable = false)
         env.selector.onFailure(FailReason.EntryMissing, countable = true)
@@ -472,6 +635,7 @@ class SetRunnerTest {
         initialLastSetIndex: Int = 0,
         watcherAvailable: Boolean = true,
         ownTaskExists: () -> Boolean = { true },
+        var loading: Boolean = false,
     ) {
         val ownPkg = "com.gt8d.launcher"
         var config = LauncherConfig(
@@ -504,7 +668,7 @@ class SetRunnerTest {
 
         val runner = SetRunner(
             SetRunnerDeps(
-                config = { config },
+                config = { if (loading) null else config },
                 installed = { installed },
                 lastIndex = lastIndex,
                 selector = selector,

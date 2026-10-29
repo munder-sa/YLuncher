@@ -9,7 +9,6 @@ import android.widget.Toast
 import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.boot.BootSequence
 import com.gt8d.launcher.config.ConfigRepository
-import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.curtain.CurtainController
 import com.gt8d.launcher.curtain.CurtainTarget
@@ -24,7 +23,6 @@ import com.gt8d.launcher.foreground.WarmTracker
 import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.sets.Messenger
 import com.gt8d.launcher.sets.Opening
-import com.gt8d.launcher.sets.SetNavigator
 import com.gt8d.launcher.sets.SetRunner
 import com.gt8d.launcher.sets.SetRunnerDeps
 import com.gt8d.launcher.split.AndroidActivityLauncher
@@ -37,11 +35,14 @@ import com.gt8d.launcher.time.MainThreadScheduler
 import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.panel.PanelForwarder
 import java.io.File
+import java.io.IOException
 import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -118,7 +119,7 @@ object AppGraph {
         }
         SetRunner(
             SetRunnerDeps(
-                config = { latestConfig.value ?: Defaults.build(catalog.installed()) },
+                config = { latestConfig.value },
                 installed = catalog::installed,
                 lastIndex = config,
                 selector = selector,
@@ -155,16 +156,37 @@ object AppGraph {
     }
 
     private val _latestConfig = MutableStateFlow<LauncherConfig?>(null)
+    private val _configError = MutableStateFlow(false)
+    val configError: StateFlow<Boolean> = _configError.asStateFlow()
+    internal val configSnapshotForTest: LauncherConfig?
+        get() = _latestConfig.value
+
+    internal fun resetConfigStateForTest() {
+        _latestConfig.value = null
+        _configError.value = false
+    }
+
+    internal suspend fun collectConfig(source: () -> Flow<LauncherConfig>) {
+        try {
+            source().collect { cfg ->
+                _latestConfig.value = cfg
+                EdgeStripService.gestureConfig = cfg.gesture
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            DiagLog.d("Config", "load failed: $e")
+            _configError.value = true
+        }
+    }
+
     internal var configFlowForHomeTest: StateFlow<LauncherConfig?>? = null
     internal val configForHome: StateFlow<LauncherConfig?>
         get() = configFlowForHomeTest ?: latestConfig
 
     val latestConfig: StateFlow<LauncherConfig?> by lazy {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            config.config.collect { cfg ->
-                _latestConfig.value = cfg
-                EdgeStripService.gestureConfig = cfg.gesture
-            }
+            collectConfig { config.config }
         }
         _latestConfig.asStateFlow()
     }
@@ -186,7 +208,7 @@ object AppGraph {
                     runner.openForBoot(config.lastSetIndex)
                 },
                 splitAppeared = { runner.readyCount > readyAtOpen },
-                goHome = { runner.openForBoot(SetNavigator.HOME) },
+                goHome = { runner.abortBootToHome() },
                 record = { msg -> DiagLog.d("Boot", msg) },
             )
         }.also { bootInstance = it }
