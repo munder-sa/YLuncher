@@ -1,0 +1,6 @@
+create app/src/test/java/com/gt8d/launcher/ui/NoActionBarTest.kt
+write app/src/main/AndroidManifest.xml
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.NoActionBarTest --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest --tests com.gt8d.launcher.ui.home.HomeActivityTest
+command /home/munde/tools/gradle-run.sh assembleDebug
