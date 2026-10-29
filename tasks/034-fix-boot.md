@@ -163,8 +163,8 @@ HomeActivity の設定購読と、この節の待機には `configForHome` を�
 Repository テストは installed を `setOf("a", "b", "c")` にする。
 v1ファイルを読み、全体比較する。
 `update { it }` を完了させ、別の ConfigRepository で同じファイルを再読込する。
-再読込でも全体比較し、ディスクの JSON の version が2であること、
-`config.bak.json` が存在しないことを検証する。
+再読込でも全体比較し、`config.bak.json` が存在しないことを検証する。
+ディスクの JSON の version は検証しない(仕様 §5.3 は v1 の移行と退避しないことだけを求め、v2 での書き直しは求めていない。DataStore は値が同じなら書き込みを省く。司令塔の訂正)。
 
 ### 6. LauncherApp の接続の検証(E6)(司令塔が書き直した版)
 
