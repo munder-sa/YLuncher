@@ -7,7 +7,10 @@ import android.content.Context
 import android.os.Process
 import android.os.SystemClock
 
-class UsageStatsForegroundEvents(private val context: Context) : ForegroundEvents {
+class UsageStatsForegroundEvents(
+    private val context: Context,
+    private val queryResumed: ((Long) -> List<ResumeEvent>)? = null,
+) : ForegroundEvents {
 
     override fun available(): Boolean {
         return try {
@@ -24,13 +27,15 @@ class UsageStatsForegroundEvents(private val context: Context) : ForegroundEvent
 
     override fun resumedSince(sinceMs: Long): List<ResumeEvent> {
         return try {
-            val manager = context.getSystemService(UsageStatsManager::class.java) ?: return emptyList()
+            if (queryResumed != null) return queryResumed.invoke(sinceMs)
+            val manager = context.getSystemService(UsageStatsManager::class.java)
+                ?: throw ForegroundEventsUnavailableException()
             val nowWall = System.currentTimeMillis()
             val nowElapsed = SystemClock.elapsedRealtime()
             val wallMinusElapsed = nowWall - nowElapsed
             val begin = nowWall - (nowElapsed - sinceMs) - 1000L
             val end = nowWall + 1000L
-            val usageEvents = manager.queryEvents(begin, end) ?: return emptyList()
+            val usageEvents = manager.queryEvents(begin, end) ?: throw ForegroundEventsUnavailableException()
             val result = mutableListOf<ResumeEvent>()
             val event = UsageEvents.Event()
             while (usageEvents.hasNextEvent()) {
@@ -44,8 +49,10 @@ class UsageStatsForegroundEvents(private val context: Context) : ForegroundEvent
                 }
             }
             result
-        } catch (_: Throwable) {
-            emptyList()
+        } catch (error: ForegroundEventsUnavailableException) {
+            throw error
+        } catch (cause: Throwable) {
+            throw ForegroundEventsUnavailableException(cause)
         }
     }
 }

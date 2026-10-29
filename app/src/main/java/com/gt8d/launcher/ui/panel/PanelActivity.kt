@@ -56,7 +56,10 @@ class PanelActivity : ComponentActivity() {
                     PanelScreen(
                         inSplit = inSplitState,
                         onLaunchApp = { pkg ->
-                            activityLauncher.startApp(pkg, adjacent = isInMultiWindowMode)
+                            AppGraph.warm.recordAppLaunch(
+                                pkg,
+                                activityLauncher.startApp(pkg, adjacent = isInMultiWindowMode),
+                            )
                         },
                     )
                 }
