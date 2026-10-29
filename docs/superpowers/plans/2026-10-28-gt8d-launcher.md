@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-28-gt8d-launcher-design.md`（r2.1）。実験の記録：`docs/superpowers/spikes/home-spikes.md`、`docs/superpowers/spikes/vendor-split-entry.md`
 
-**実装体制:** Claude Code＝タスクの割り振り・レビュー・実機操作・コミット判断／Antigravity＝各タスクのコード（`agy-run tasks/NNN-xxx.md`。作る・変えるファイルは `.allow` に1つずつ列挙。完了後は `agy-verify` と差分レビュー）。実機（adb）の操作を含むステップは Claude Code が行う。
+**実装体制:** Claude Code＝タスクの割り振り・レビュー・実機操作・コミット判断／Codex CLI＝各タスクのコード（`codex-run tasks/NNN-xxx.md`。作る・変えるファイルは `.allow` に1つずつ列挙。完了後は `codex-verify` と差分レビュー。2026-10-29 に Antigravity から移行）。実機（adb）の操作を含むステップは Claude Code が行う。
 
 ## Global Constraints
 

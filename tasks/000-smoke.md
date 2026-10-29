@@ -1,6 +1,8 @@
-# 試運転(ファイルは変更しない)
+# 000 試運転(ファイルは変更しない)
 
-次のコマンドを1つずつ実行し、成功・失敗を表で出力すること。ファイルは変更しない。
+最初に `tasks/RULES.md` を読み、従う。
 
-1. `ls -la {ROOT}`
-2. `ls -la {ROOT}/docs`
+次のコマンドを1つずつ実行し、成功・失敗を表で報告する。ファイルは作らない・変えない。
+
+1. `/home/munde/tools/gradle-run.sh --offline help`
+2. `git status --short`

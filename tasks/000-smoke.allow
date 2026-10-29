@@ -1,2 +1,1 @@
-command ls -la {ROOT}
-command ls -la {ROOT}/docs
+command /home/munde/tools/gradle-run.sh --offline help

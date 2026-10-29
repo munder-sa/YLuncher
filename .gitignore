@@ -21,6 +21,6 @@ Thumbs.db
 *.keystore
 keystore.properties
 
-# agy-run のバックアップ
-.agy-bak/
-*.bak-agy-*
+# codex-run のログとバックアップ、実行中だけ置く禁止ルール
+.codex-bak/
+.codex/
