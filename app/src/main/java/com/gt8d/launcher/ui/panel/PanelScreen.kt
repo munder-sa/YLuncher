@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun PanelScreen(
     inSplit: Boolean,
+    onLaunchComponent: ((ComponentName) -> Unit)? = null,
     onLaunchApp: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -51,9 +52,12 @@ fun PanelScreen(
                         context.startActivity(stockLauncherIntent())
                     }
                 } else {
-                    AndroidActivityLauncher(context).startComponent(
-                        ComponentName(entry.pkg, entry.cls), adjacent = inSplit,
-                    )
+                    val component = ComponentName(entry.pkg, entry.cls)
+                    if (onLaunchComponent != null) {
+                        onLaunchComponent(component)
+                    } else {
+                        AndroidActivityLauncher(context).startComponent(component, adjacent = inSplit)
+                    }
                 }
                 showAppList = false
             },

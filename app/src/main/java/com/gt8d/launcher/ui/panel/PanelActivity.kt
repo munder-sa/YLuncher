@@ -1,5 +1,6 @@
 package com.gt8d.launcher.ui.panel
 
+import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -28,6 +29,10 @@ import com.gt8d.launcher.ui.theme.LauncherTheme
 class PanelActivity : ComponentActivity() {
     private val forwarder by lazy { AppGraph.forwarderFactory() }
     private val activityLauncher by lazy { AndroidActivityLauncher(this) }
+    internal var launchApp: (String, Boolean) -> Boolean =
+        { pkg, adjacent -> activityLauncher.startApp(pkg, adjacent) }
+    internal var launchComponent: (ComponentName, Boolean) -> Boolean =
+        { component, adjacent -> activityLauncher.startComponent(component, adjacent) }
     private var inSplitState by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,10 +60,14 @@ class PanelActivity : ComponentActivity() {
                     )
                     PanelScreen(
                         inSplit = inSplitState,
+                        onLaunchComponent = { component ->
+                            val succeeded = launchComponent(component, isInMultiWindowMode)
+                            AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
+                        },
                         onLaunchApp = { pkg ->
                             AppGraph.warm.recordAppLaunch(
                                 pkg,
-                                activityLauncher.startApp(pkg, adjacent = isInMultiWindowMode),
+                                launchApp(pkg, isInMultiWindowMode),
                             )
                         },
                     )

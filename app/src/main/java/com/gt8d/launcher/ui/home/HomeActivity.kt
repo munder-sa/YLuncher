@@ -37,6 +37,7 @@ import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.panel.IconGrid
 import com.gt8d.launcher.ui.panel.PanelScreen
+import com.gt8d.launcher.ui.panel.rememberPanelEnvironment
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import com.gt8d.launcher.ui.theme.Palette
@@ -52,6 +53,7 @@ class HomeActivity : ComponentActivity() {
 
     private val activityLauncher by lazy { AndroidActivityLauncher(this) }
     private var bootConfigJob: Job? = null
+    internal var onBootDecisionForTest: () -> Unit = {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,8 +80,8 @@ class HomeActivity : ComponentActivity() {
             LauncherTheme {
                 val latestConfig by AppGraph.configForHome.collectAsState()
                 val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
-                val installedPkgs = remember(config) { AppGraph.catalog.installed() }
-                val homeApps = config.homeApps.map { AppGraph.catalog.info(it, installedPkgs) }
+                val environment = rememberPanelEnvironment(AppGraph.catalog)
+                val homeApps = config.homeApps.map { AppGraph.catalog.info(it, environment.installedPkgs) }
                 val bootPhase by AppGraph.boot.phase.collectAsState()
                 val secondsLeft by AppGraph.boot.secondsLeft.collectAsState()
 
@@ -125,8 +127,13 @@ class HomeActivity : ComponentActivity() {
                         ) {
                             PanelScreen(
                                 inSplit = false,
+                                onLaunchComponent = { component ->
+                                    val succeeded = activityLauncher.startComponent(component, adjacent = false)
+                                    AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
+                                },
                                 onLaunchApp = { pkg ->
-                                    activityLauncher.startApp(pkg, adjacent = false)
+                                    val succeeded = activityLauncher.startApp(pkg, adjacent = false)
+                                    AppGraph.warm.recordAppLaunch(pkg, succeeded)
                                 },
                             )
                         }
@@ -166,6 +173,7 @@ class HomeActivity : ComponentActivity() {
                 lifecycle.withResumed {
                     if (SafetyGuard.isFallbackActive(this@HomeActivity)) return@withResumed
                     if (AppGraph.bootHandled) return@withResumed
+                    onBootDecisionForTest()
                     AppGraph.bootHandled = true
                     if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && AppGraph.config.lastSetIndex != 0) {
                         AppGraph.boot.start()
