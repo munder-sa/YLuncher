@@ -9,6 +9,85 @@ import org.junit.Test
 
 class CurtainControllerTest {
 
+    private class ThrowingShowView : CurtainView {
+        var throwNext = true
+        val hidden = mutableListOf<HideReason>()
+        var progress = 0
+        var updates = 0
+        var shows = 0
+        override fun show(target: CurtainTarget) {
+            shows++
+            if (throwNext) {
+                throwNext = false
+                throw IllegalStateException("show failed")
+            }
+        }
+        override fun update(target: CurtainTarget) { updates++ }
+        override fun showProgress() { progress++ }
+        override fun hide(reason: HideReason) { hidden.add(reason) }
+    }
+
+    @Test fun showThrows_clearsStateCancelsTimersAndNotifiesOnce() {
+        val scheduler = FakeScheduler()
+        val view = ThrowingShowView()
+        val controller = CurtainController(scheduler, view)
+        val reasons = mutableListOf<HideReason>()
+        controller.onHidden = { reasons.add(it) }
+        val result = runCatching { controller.show(sampleTarget(), 800, true) }
+        assertTrue("show must not throw: ${result.exceptionOrNull()}", result.isSuccess)
+        assertTrue(controller.isShowing)
+        assertTrue(reasons.isEmpty())
+        controller.update(sampleTarget("セット2"))
+        scheduler.advanceBy(3999)
+        assertTrue(reasons.isEmpty())
+        scheduler.advanceBy(1)
+        assertFalse(controller.isShowing)
+        assertEquals(listOf(HideReason.Safety), reasons)
+        scheduler.advanceBy(5000)
+        assertEquals(listOf(HideReason.Safety), reasons)
+        assertTrue(view.hidden.isEmpty())
+        assertEquals(0, view.updates)
+        assertEquals(0, view.progress)
+    }
+
+    @Test fun showThrows_readyNotifiesReadyOnce() {
+        val scheduler = FakeScheduler()
+        val view = ThrowingShowView()
+        val controller = CurtainController(scheduler, view)
+        val reasons = mutableListOf<HideReason>()
+        controller.onHidden = { reasons.add(it) }
+        controller.show(sampleTarget(), 800, true)
+        controller.ready()
+        assertFalse(controller.isShowing)
+        assertEquals(listOf(HideReason.Ready), reasons)
+        assertTrue(view.hidden.isEmpty())
+        scheduler.advanceBy(4000)
+        assertEquals(listOf(HideReason.Ready), reasons)
+        assertTrue(view.hidden.isEmpty())
+    }
+
+    @Test fun showThrows_thenShowAgain_works() {
+        val scheduler = FakeScheduler()
+        val view = ThrowingShowView()
+        val controller = CurtainController(scheduler, view)
+        val reasons = mutableListOf<HideReason>()
+        controller.onHidden = { reasons.add(it) }
+        val result = runCatching { controller.show(sampleTarget(), 800, true) }
+        assertTrue("first show must not throw", result.isSuccess)
+        controller.fail()
+        assertEquals(listOf(HideReason.Failed), reasons)
+        assertTrue(view.hidden.isEmpty())
+        controller.show(sampleTarget(), 800, true)
+        assertEquals(2, view.shows)
+        assertTrue(controller.isShowing)
+        scheduler.advanceBy(3999)
+        assertEquals(listOf(HideReason.Failed), reasons)
+        scheduler.advanceBy(1)
+        assertFalse(controller.isShowing)
+        assertEquals(listOf(HideReason.Failed, HideReason.Safety), reasons)
+        assertEquals(listOf(HideReason.Safety), view.hidden)
+    }
+
     private class FakeCurtainView : CurtainView {
         val shownTargets = mutableListOf<CurtainTarget>()
         val updatedTargets = mutableListOf<CurtainTarget>()
