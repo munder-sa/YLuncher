@@ -47,6 +47,7 @@ class HomeActivityTest {
     private var savedFlow: StateFlow<LauncherConfig?>? = null
     private var savedHandled = false
     private var savedHome = false
+    private var savedPausedAt: Long? = null
     private var savedSafety: String? = null
     private val safetyFile get() = File(app.filesDir, "safety.json")
 
@@ -56,6 +57,7 @@ class HomeActivityTest {
         savedFlow = AppGraph.configFlowForHomeTest
         savedHandled = AppGraph.bootHandled
         savedHome = AppGraph.homeResumed
+        savedPausedAt = AppGraph.homePausedAtMs
         savedSafety = safetyFile.takeIf { it.exists() }?.readText()
         AppGraph.resetBootForTest()
         SafetyGuard.clear(app)
@@ -73,6 +75,7 @@ class HomeActivityTest {
         AppGraph.configFlowForHomeTest = savedFlow
         AppGraph.bootHandled = savedHandled
         AppGraph.homeResumed = savedHome
+        AppGraph.homePausedAtMs = savedPausedAt
         savedSafety?.let { safetyFile.writeText(it) } ?: safetyFile.delete()
         savedIndex?.let { indexFile.writeText(it) } ?: indexFile.delete()
     }
@@ -81,6 +84,17 @@ class HomeActivityTest {
         assertTrue(SystemClock.elapsedRealtime() < HomeActivity.BOOT_WINDOW_MS)
         controller = Robolectric.buildActivity(HomeActivity::class.java).create().start().resume()
         shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    @Test fun pause_recordsPausedAt_resumeClears() {
+        resumeLoading()
+        assertEquals(null, AppGraph.homePausedAtMs)
+        controller!!.pause()
+        assertEquals(SystemClock.elapsedRealtime(), AppGraph.homePausedAtMs)
+        assertFalse(AppGraph.homeResumed)
+        controller!!.resume()
+        assertEquals(null, AppGraph.homePausedAtMs)
+        assertTrue(AppGraph.homeResumed)
     }
 
     private fun loadedConfig() = LauncherConfig(

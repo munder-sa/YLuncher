@@ -91,6 +91,7 @@ class PanelActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         AppGraph.panelInSplit = isInMultiWindowMode
+        AppGraph.panelSplitPausedAtMs = null
         inSplitState = isInMultiWindowMode
         EdgeStripService.ensureRunning(this)
         if (isInMultiWindowMode) {
@@ -108,6 +109,7 @@ class PanelActivity : ComponentActivity() {
 
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        if (!isInMultiWindowMode) AppGraph.panelSplitPausedAtMs = null
         inSplitState = isInMultiWindowMode
         AppGraph.panelInSplit = isInMultiWindowMode
         forwarder.onMultiWindowChanged(isInMultiWindowMode)
@@ -118,6 +120,7 @@ class PanelActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        if (AppGraph.panelInSplit) AppGraph.panelSplitPausedAtMs = android.os.SystemClock.elapsedRealtime()
         AppGraph.panelInSplit = false
         forwarder.onHidden()
         super.onPause()
