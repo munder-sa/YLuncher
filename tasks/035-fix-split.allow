@@ -1,0 +1,9 @@
+create app/src/test/java/com/gt8d/launcher/foreground/UsageStatsForegroundEventsTest.kt
+write app/src/main/java/com/gt8d/launcher/foreground/ForegroundWatcher.kt
+write app/src/main/java/com/gt8d/launcher/foreground/UsageStatsForegroundEvents.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/test/java/com/gt8d/launcher/foreground/ForegroundWatcherTest.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.sets.SetRunnerTest --tests com.gt8d.launcher.foreground.ForegroundWatcherTest --tests com.gt8d.launcher.foreground.UsageStatsForegroundEventsTest
+command /home/munde/tools/gradle-run.sh assembleDebug

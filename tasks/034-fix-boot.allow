@@ -1,0 +1,10 @@
+create app/src/test/java/com/gt8d/launcher/LauncherAppTest.kt
+write app/src/main/java/com/gt8d/launcher/boot/BootSequence.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/test/java/com/gt8d/launcher/boot/BootSequenceTest.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigCodecTest.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigRepositoryTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.boot.BootSequenceTest --tests com.gt8d.launcher.config.ConfigCodecTest --tests com.gt8d.launcher.config.ConfigRepositoryTest --tests com.gt8d.launcher.ui.home.HomeActivityTest --tests com.gt8d.launcher.LauncherAppTest
+command /home/munde/tools/gradle-run.sh assembleDebug

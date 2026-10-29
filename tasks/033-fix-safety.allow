@@ -1,0 +1,10 @@
+create app/src/test/java/com/gt8d/launcher/edge/BootReceiverTest.kt
+create app/src/test/java/com/gt8d/launcher/edge/EdgeStripServiceTest.kt
+write app/src/main/java/com/gt8d/launcher/edge/BootReceiver.kt
+write app/src/main/java/com/gt8d/launcher/edge/EdgeStripService.kt
+write app/src/main/java/com/gt8d/launcher/edge/CurtainWindow.kt
+write app/src/test/java/com/gt8d/launcher/edge/CurtainWindowTest.kt
+write app/src/main/java/com/gt8d/launcher/curtain/CurtainController.kt
+write app/src/test/java/com/gt8d/launcher/curtain/CurtainControllerTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.edge.BootReceiverTest --tests com.gt8d.launcher.edge.EdgeStripServiceTest --tests com.gt8d.launcher.edge.CurtainWindowTest --tests com.gt8d.launcher.curtain.CurtainControllerTest --tests com.gt8d.launcher.curtain.CurtainContentTest --tests com.gt8d.launcher.edge.EdgeGestureTest --tests com.gt8d.launcher.safety.SafetyGuardTest
+command /home/munde/tools/gradle-run.sh assembleDebug

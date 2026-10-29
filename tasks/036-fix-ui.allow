@@ -1,0 +1,20 @@
+create app/src/main/java/com/gt8d/launcher/ui/panel/PanelEnvironment.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/PanelEnvironmentTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
+create app/src/test/java/com/gt8d/launcher/apps/AppCatalogTest.kt
+create app/src/test/java/com/gt8d/launcher/split/AndroidActivityLauncherTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/gesture/TwoFingerSwipeInputTest.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelForwarder.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/main/java/com/gt8d/launcher/apps/AppCatalog.kt
+write app/src/main/java/com/gt8d/launcher/split/ActivityLauncher.kt
+write app/src/main/java/com/gt8d/launcher/ui/gesture/TwoFingerSwipe.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/MediaCard.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/Dock.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/IconGrid.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelForwarderTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/MediaCardTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.panel.PanelForwarderTest --tests com.gt8d.launcher.ui.panel.PanelEnvironmentTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest --tests com.gt8d.launcher.apps.AppCatalogTest --tests com.gt8d.launcher.split.AndroidActivityLauncherTest --tests com.gt8d.launcher.ui.apps.AppListScreenTest --tests com.gt8d.launcher.ui.gesture.TwoFingerSwipeTest --tests com.gt8d.launcher.ui.gesture.TwoFingerSwipeInputTest --tests com.gt8d.launcher.ui.panel.MediaCardTest --tests com.gt8d.launcher.ui.panel.PanelContentTest --tests com.gt8d.launcher.ui.panel.DockTest --tests com.gt8d.launcher.ui.panel.IconGridTest
+command /home/munde/tools/gradle-run.sh assembleDebug
