@@ -27,6 +27,19 @@ Task 17b (`tasks/032-link-browser.md`) の変更がコミットされた状態�
 - `T/ui/panel/MediaCardTest.kt`
 - `T/ui/panel/PanelContentTest.kt`
 
+司令塔の追加(4回目の後): 次の2つも変更してよい。
+- `M/ui/apps/AppListScreen.kt`(一覧の描画を1か所にまとめるため。下の「一覧の描画は AppListScreen に1つだけ」を参照)
+- `T/ui/apps/AppListScreenTest.kt`(テストを足す。既存のテストは変えない)
+
+### 一覧の描画は AppListScreen に1つだけ(司令塔の追加)
+`PanelScreen.kt` の中に作った一覧の描画(`PanelAppListScreen`)は消し、`AppListScreen` を使う形に戻す。
+`AppListScreen` に、引数 `gridState: LazyGridState = rememberLazyGridState()` と `iconRevision: Int = 0` を足す
+(既定値があるので、既存の呼び出しとテストはそのまま通る)。アイコンの記憶は `iconRevision` が変わったときだけ作り直し、
+グリッドの状態(スクロール位置)は `gridState` で保つ。`PanelScreen` は `rememberLazyGridState()` を持ち、
+`iconRevision = environment.revision` を渡す。`panelScreen_radioChange_keepsAppListScroll` はそのまま通ること。
+`AppListScreenTest` に `appList_iconRevisionChange_reloadsIconsKeepsScroll` を足す(スクロールしてから iconRevision を変えると、
+iconFor が呼び直され、スクロール位置は変わらない)。
+
 次のファイルは、C7 の実ポインター入力・寸法・到達性テストが実際に失敗した場合だけ、その失敗を直す最小限の変更をしてよい:
 - `M/ui/gesture/TwoFingerSwipe.kt`
 - `M/ui/panel/MediaCard.kt`
