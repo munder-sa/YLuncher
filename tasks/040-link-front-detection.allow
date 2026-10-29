@@ -1,0 +1,11 @@
+create app/src/main/java/com/gt8d/launcher/link/RecentFront.kt
+create app/src/test/java/com/gt8d/launcher/link/RecentFrontTest.kt
+create app/src/test/java/com/gt8d/launcher/link/LinkEntryActivityTest.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/link/LinkEntryActivity.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.link.RecentFrontTest --tests com.gt8d.launcher.link.LinkEntryActivityTest --tests com.gt8d.launcher.link.LinkRouterTest --tests com.gt8d.launcher.ui.home.HomeActivityTest --tests com.gt8d.launcher.ui.panel.PanelActivityTest
+command /home/munde/tools/gradle-run.sh assembleDebug
