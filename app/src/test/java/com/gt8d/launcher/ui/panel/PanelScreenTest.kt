@@ -70,7 +70,7 @@ class PanelScreenTest {
         pm.getInternalMutablePackageInfo(pkg).applicationInfo?.nonLocalizedLabel = "Label A"
         pm.addIntentFilterForActivity(cn, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
     }
-    private fun host(split: Boolean = false) {
+    private fun host(split: Boolean = false, onComponent: ((ComponentName) -> Unit)? = null) {
         val wasInstalled = pkg in AppGraph.catalog.installed()
         if (!wasInstalled) install()
         val latest = AppGraph.latestConfig
@@ -80,7 +80,7 @@ class PanelScreenTest {
         rule.setContent {
             owner = androidx.compose.runtime.remember { PanelTestLifecycle().also { it.resume() } }
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                LauncherTheme { PanelScreen(split) { launches.add(it) } }
+                LauncherTheme { PanelScreen(split, onComponent) { launches.add(it) } }
             }
         }
         rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelApps == listOf(pkg) }
@@ -93,6 +93,25 @@ class PanelScreenTest {
     }
     private fun choose(label: String) {
         rule.onNode(hasText(label) and hasClickAction()).performClick()
+    }
+    @Test fun panelScreen_appListSelection_notifiesComponentCallbackOnce() {
+        val components = mutableListOf<ComponentName>()
+        install(); install("$pkg.B", "Label B")
+        host(onComponent = { components.add(it) }); openList(); choose("Label B")
+        assertEquals(listOf(ComponentName(pkg, "$pkg.B")), components)
+        assertTrue(launches.isEmpty())
+        assertNull(Shadows.shadowOf(app).nextStartedActivity)
+        rule.onNodeWithTag("applist_close").assertDoesNotExist()
+    }
+    @Test fun panelScreen_stockLauncher_doesNotNotifyComponentCallback() {
+        val components = mutableListOf<ComponentName>()
+        host(true, { components.add(it) }); openList(); choose("純正ランチャー")
+        assertTrue(components.isEmpty())
+        assertTrue(launches.isEmpty())
+        assertEquals(ComponentName("com.android.launcher3", "com.android.launcher3.uioverrides.QuickstepLauncher"),
+            Shadows.shadowOf(app).nextStartedActivity?.component)
+        assertNull(Shadows.shadowOf(app).nextStartedActivity)
+        rule.onNodeWithTag("applist_close").assertDoesNotExist()
     }
     @Test fun panelScreen_appListSelection_launchesSelectedComponent() {
         install(); install("$pkg.B", "Label B")
