@@ -155,6 +155,10 @@ object AppGraph {
     }
 
     private val _latestConfig = MutableStateFlow<LauncherConfig?>(null)
+    internal var configFlowForHomeTest: StateFlow<LauncherConfig?>? = null
+    internal val configForHome: StateFlow<LauncherConfig?>
+        get() = configFlowForHomeTest ?: latestConfig
+
     val latestConfig: StateFlow<LauncherConfig?> by lazy {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             config.config.collect { cfg ->
@@ -169,19 +173,26 @@ object AppGraph {
 
     var bootHandled: Boolean = false
 
-    val boot: BootSequence by lazy {
-        var readyAtOpen = 0
-        BootSequence(
-            scheduler = MainThreadScheduler(),
-            safetyActive = { SafetyGuard.isFallbackActive(app) },
-            openLast = {
-                readyAtOpen = runner.readyCount
-                runner.openForBoot(config.lastSetIndex)
-            },
-            splitAppeared = { runner.readyCount > readyAtOpen },
-            goHome = { runner.openForBoot(SetNavigator.HOME) },
-            record = { msg -> DiagLog.d("Boot", msg) },
-        )
+    private var bootInstance: BootSequence? = null
+
+    val boot: BootSequence
+        get() = bootInstance ?: run {
+            var readyAtOpen = 0
+            BootSequence(
+                scheduler = MainThreadScheduler(),
+                safetyActive = { SafetyGuard.isFallbackActive(app) },
+                openLast = {
+                    readyAtOpen = runner.readyCount
+                    runner.openForBoot(config.lastSetIndex)
+                },
+                splitAppeared = { runner.readyCount > readyAtOpen },
+                goHome = { runner.openForBoot(SetNavigator.HOME) },
+                record = { msg -> DiagLog.d("Boot", msg) },
+            )
+        }.also { bootInstance = it }
+
+    internal fun resetBootForTest() {
+        bootInstance = null
     }
 
     val forwarderFactory: () -> PanelForwarder = {

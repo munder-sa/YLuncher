@@ -8,6 +8,26 @@ import org.junit.Test
 class ConfigCodecTest {
 
     @Test
+    fun migrate_v1_nonDefaultSettings_preservesWholeConfig() {
+        val input = """{"version":1,"screenSets":[{"id":"s1","left":{"pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.Panel"}},{"id":"s2","left":{"pkg":"b"},"right":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"c"}}],"homeApps":["c","a"],"panelApps":["b","c"],"dockApps":["c","b"],"idleApp":"b","link":{"mode":"Chrome","chromeDomains":["example.org","example.net"]},"gesture":{"stripWidthPx":12,"glow":false,"longPressMs":800}}"""
+        val expected = LauncherConfig(
+            version = 2,
+            screenSets = listOf(
+                ScreenSet("s1", Slot.App("a"), Slot.Panel, SplitRatio.R5_5, null),
+                ScreenSet("s2", Slot.App("b"), Slot.App("c"), SplitRatio.R5_5, null),
+            ),
+            homeApps = listOf("c", "a"),
+            panelApps = listOf("b", "c"),
+            dockApps = listOf("c", "b"),
+            idleApp = "b",
+            link = LinkConfig(LinkMode.Chrome, listOf("example.org", "example.net")),
+            gesture = GestureConfig(12, false, 800),
+            boot = BootConfig(waitForCar = false),
+        )
+        assertEquals(expected, ConfigCodec.decode(input))
+    }
+
+    @Test
     fun codec_roundTrip() {
         val original = LauncherConfig(
             version = 2,
