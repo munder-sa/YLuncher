@@ -157,6 +157,7 @@ class HomeActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         AppGraph.homeResumed = true
+        AppGraph.homePausedAtMs = null
         if (SafetyGuard.isFallbackActive(this)) {
             runCatching { startActivity(stockLauncherIntent()) }
             return
@@ -188,6 +189,7 @@ class HomeActivity : ComponentActivity() {
     override fun onPause() {
         bootConfigJob?.cancel()
         bootConfigJob = null
+        AppGraph.homePausedAtMs = SystemClock.elapsedRealtime()
         AppGraph.homeResumed = false
         super.onPause()
     }

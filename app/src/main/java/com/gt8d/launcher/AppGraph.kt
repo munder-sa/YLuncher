@@ -51,6 +51,8 @@ import kotlinx.coroutines.launch
 object AppGraph {
     @Volatile var homeResumed: Boolean = false
     @Volatile var panelInSplit: Boolean = false
+    @Volatile var homePausedAtMs: Long? = null
+    @Volatile var panelSplitPausedAtMs: Long? = null
     val pendingUrl: com.gt8d.launcher.link.PendingUrl by lazy {
         com.gt8d.launcher.link.PendingUrl(ElapsedClock)
     }

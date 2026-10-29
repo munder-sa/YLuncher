@@ -47,6 +47,7 @@ class PanelActivityTest {
     private lateinit var savedConfig: LauncherConfig
     private var usageMode = 0
     private var savedSplit = false
+    private var savedSplitPausedAt: Long? = null
     private val appCalls = mutableListOf<Pair<String, Boolean>>()
     private val componentCalls = mutableListOf<Pair<ComponentName, Boolean>>()
 
@@ -54,6 +55,7 @@ class PanelActivityTest {
         RuntimeEnvironment.setQualifiers("w1280dp-h1000dp")
         AppGraph.init(app)
         savedSplit = AppGraph.panelInSplit
+        savedSplitPausedAt = AppGraph.panelSplitPausedAtMs
         savedConfig = runBlocking { AppGraph.config.config.first() }
         val ops = app.getSystemService(AppOpsManager::class.java)
         usageMode = ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName)
@@ -79,6 +81,7 @@ class PanelActivityTest {
             AppGraph.catalog.invalidatePackage(pkg)
         }
         AppGraph.panelInSplit = savedSplit
+        AppGraph.panelSplitPausedAtMs = savedSplitPausedAt
         shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
             AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName, usageMode,
         )
@@ -148,6 +151,32 @@ class PanelActivityTest {
         assertTrue(controller!!.get().isInMultiWindowMode)
         controller!!.create().start().resume().visible()
         rule.waitForIdle()
+    }
+
+    @Test fun pauseInSplit_recordsSplitPausedAt() {
+        splitPanel()
+        assertNull(AppGraph.panelSplitPausedAtMs)
+        controller!!.pause()
+        assertEquals(android.os.SystemClock.elapsedRealtime(), AppGraph.panelSplitPausedAtMs)
+        assertFalse(AppGraph.panelInSplit)
+        controller!!.resume()
+        assertNull(AppGraph.panelSplitPausedAtMs)
+    }
+
+    @Test fun pauseOutsideSplit_doesNotRecord() {
+        controller = Robolectric.buildActivity(PanelActivity::class.java).create().start().resume()
+        controller!!.pause()
+        assertNull(AppGraph.panelSplitPausedAtMs)
+    }
+
+    @Test fun leaveSplit_clearsSplitPausedAt() {
+        splitPanel()
+        controller!!.pause()
+        assertNotNull(AppGraph.panelSplitPausedAtMs)
+        shadowOf(controller!!.get()).setInMultiWindowMode(false)
+        controller!!.get().onMultiWindowModeChanged(false, app.resources.configuration)
+        assertNull(AppGraph.panelSplitPausedAtMs)
+        shadowOf(android.os.Looper.getMainLooper()).runToEndOfTasks()
     }
 
     private fun assertBrowserOnce() {
