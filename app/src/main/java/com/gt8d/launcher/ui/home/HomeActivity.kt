@@ -142,6 +142,7 @@ class HomeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppGraph.homeResumed = true
         if (SafetyGuard.isFallbackActive(this)) {
             runCatching { startActivity(stockLauncherIntent()) }
             return
@@ -153,5 +154,10 @@ class HomeActivity : ComponentActivity() {
                 AppGraph.boot.start()
             }
         }
+    }
+
+    override fun onPause() {
+        AppGraph.homeResumed = false
+        super.onPause()
     }
 }

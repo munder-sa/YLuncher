@@ -1,6 +1,7 @@
 package com.gt8d.launcher.sets
 
 import com.gt8d.launcher.config.LauncherConfig
+import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.curtain.CurtainController
@@ -72,6 +73,11 @@ class SetRunner(private val d: SetRunnerDeps) {
     var lastOpenedPair: Pair<String, String>? = null
         private set
 
+    var lastOpenedAtMs: Long? = null
+        private set
+
+    private var linkFallback: (() -> Unit)? = null
+
     var readyCount: Int = 0
         private set
 
@@ -110,6 +116,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         currentIndex = SetNavigator.HOME
         d.lastIndex.lastSetIndex = SetNavigator.HOME
         lastOpenedPair = null
+        lastOpenedAtMs = null
         d.curtain.show(targetFor(SetNavigator.HOME), WarmTracker.WARM_MS, d.watcher.available())
         d.startHome()
         d.curtain.ready()
@@ -140,6 +147,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             currentIndex = SetNavigator.HOME
             d.lastIndex.lastSetIndex = SetNavigator.HOME
             lastOpenedPair = null
+            lastOpenedAtMs = null
             d.startHome()
             return
         }
@@ -151,7 +159,32 @@ class SetRunner(private val d: SetRunnerDeps) {
         panelResumed = true
     }
 
+    fun openForLink(left: String, onNotSplit: () -> Unit): Boolean {
+        if (_opening.value != null) return false
+        linkFallback = onNotSplit
+        openSet(
+            ScreenSet("link", Slot.App(left), Slot.Panel, SplitRatio.R5_5),
+            CurtainTarget(
+                setName = "リンクを開く",
+                left = SlotPreview.App(left, d.labelFor(left)),
+                right = SlotPreview.Panel,
+                ratio = SplitRatio.R5_5,
+                position = currentIndex,
+                count = d.config().screenSets.size + 1,
+            ),
+            useCurtain = true,
+        )
+        return true
+    }
+
+    private fun notifyLinkNotSplit() {
+        val fallback = linkFallback
+        linkFallback = null
+        fallback?.invoke()
+    }
+
     private fun openInternal(index: Int, useCurtain: Boolean) {
+        linkFallback = null
         val cfg = d.config()
         val set = cfg.screenSets.getOrNull(index - 1)
         if (set == null) {
@@ -161,6 +194,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 currentIndex = SetNavigator.HOME
                 d.lastIndex.lastSetIndex = SetNavigator.HOME
                 lastOpenedPair = null
+                lastOpenedAtMs = null
                 d.startHome()
             }
             return
@@ -169,6 +203,10 @@ class SetRunner(private val d: SetRunnerDeps) {
         currentIndex = index
         d.lastIndex.lastSetIndex = index
 
+        openSet(set, targetFor(index), useCurtain)
+    }
+
+    private fun openSet(set: ScreenSet, target: CurtainTarget, useCurtain: Boolean) {
         val left = set.left.pkg
         val isPanelRight = set.right is Slot.Panel
         val right = when (val r = set.right) {
@@ -180,10 +218,11 @@ class SetRunner(private val d: SetRunnerDeps) {
         panelResumed = false
         _opening.value = Opening(left, right, startMs)
         lastOpenedPair = left to right
+        lastOpenedAtMs = startMs
 
         if (useCurtain) {
             val expectedMs = d.warm.expectedDelayMs(left, right)
-            d.curtain.show(targetFor(index), expectedMs, d.watcher.available())
+            d.curtain.show(target, expectedMs, d.watcher.available())
         }
 
         val installedPkgs = d.installed()
@@ -196,6 +235,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 d.startHome()
                 waitSingle(d.ownPkg, startMs, useCurtain)
             }
+            notifyLinkNotSplit()
             return
         }
 
@@ -203,6 +243,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             DiagLog.d("SetRunner", "right uninstalled: $right")
             d.apps.startApp(left, false)
             waitSingle(left, startMs, useCurtain)
+            notifyLinkNotSplit()
             return
         }
 
@@ -213,6 +254,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             d.apps.startApp(left, false)
             d.messenger.showSplitUnavailable()
             waitSingle(left, startMs, useCurtain)
+            notifyLinkNotSplit()
             return
         }
 
@@ -228,6 +270,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             d.apps.startApp(left, false)
             d.messenger.showSplitUnavailable()
             waitSingle(left, startMs, useCurtain)
+            notifyLinkNotSplit()
             return
         }
 
@@ -239,6 +282,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 d.selector.onFailure(result.reason, countable = true)
                 d.apps.startApp(left, false)
                 d.messenger.showSplitUnavailable()
+                notifyLinkNotSplit()
                 if (useCurtain) {
                     d.curtain.fail()
                 } else {
@@ -282,6 +326,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             val timer = d.scheduler.schedule(POLL_MS) {
                 if (_opening.value == null) return@schedule
                 if (isBothReady()) {
+                    linkFallback = null
                     DiagLog.d("SetRunner", "waitBoth ready left=$left right=$right")
                     waitKind = WaitKind.None
                     cancelTimers()
@@ -366,10 +411,13 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun onCurtainHidden(reason: HideReason) {
         DiagLog.d("SetRunner", "onCurtainHidden reason=$reason waitKind=$waitKind")
         val kind = waitKind
+        val fallback = linkFallback
+        linkFallback = null
         waitKind = WaitKind.None
         cancelTimers()
         _opening.value = null
         if (reason == HideReason.Safety && kind == WaitKind.Both) {
+            fallback?.invoke()
             d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
             d.messenger.showSwitchFailed()
         }

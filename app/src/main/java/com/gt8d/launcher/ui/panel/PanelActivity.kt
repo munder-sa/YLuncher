@@ -17,6 +17,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.R
+import com.gt8d.launcher.link.BrowserActivity
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.split.AndroidActivityLauncher
@@ -65,10 +66,12 @@ class PanelActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppGraph.panelInSplit = isInMultiWindowMode
         inSplitState = isInMultiWindowMode
         EdgeStripService.ensureRunning(this)
         if (isInMultiWindowMode) {
             AppGraph.runner.panelResumedInSplit()
+            consumePendingUrl()
         }
         forwarder.onShown(isInMultiWindowMode) {
             val intent = Intent(this, HomeActivity::class.java).apply {
@@ -82,14 +85,30 @@ class PanelActivity : ComponentActivity() {
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
         inSplitState = isInMultiWindowMode
+        AppGraph.panelInSplit = isInMultiWindowMode
         forwarder.onMultiWindowChanged(isInMultiWindowMode)
         if (isInMultiWindowMode) {
             AppGraph.runner.panelResumedInSplit()
+            consumePendingUrl()
         }
     }
 
     override fun onPause() {
+        AppGraph.panelInSplit = false
         forwarder.onHidden()
         super.onPause()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
+    private fun consumePendingUrl() {
+        if (!isInMultiWindowMode) return
+        val url = AppGraph.pendingUrl.take() ?: return
+        startActivity(Intent(this, BrowserActivity::class.java)
+            .putExtra(BrowserActivity.EXTRA_URL, url)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP))
     }
 }

@@ -48,6 +48,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 object AppGraph {
+    @Volatile var homeResumed: Boolean = false
+    @Volatile var panelInSplit: Boolean = false
+    val pendingUrl: com.gt8d.launcher.link.PendingUrl by lazy {
+        com.gt8d.launcher.link.PendingUrl(ElapsedClock)
+    }
+
     private lateinit var app: Application
 
     val catalog: AppCatalog by lazy {

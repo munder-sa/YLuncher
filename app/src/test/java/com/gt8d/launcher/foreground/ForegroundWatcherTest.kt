@@ -7,6 +7,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForegroundWatcherTest {
+    @Test
+    fun foregroundPkgsSince_collectsAllAfterSince() {
+        val watcher = ForegroundWatcher(FakeForegroundEvents(events = listOf(
+            ResumeEvent("x", 999), ResumeEvent("a", 1000),
+            ResumeEvent("c", 1100), ResumeEvent("a", 1200),
+        )))
+        assertEquals(setOf("a", "c"), watcher.foregroundPkgsSince(1000))
+    }
+
+    @Test
+    fun foregroundPkgsSince_unavailable_empty() {
+        val watcher = ForegroundWatcher(FakeForegroundEvents(
+            available = false, events = listOf(ResumeEvent("a", 1000)),
+        ))
+        assertEquals(emptySet<String>(), watcher.foregroundPkgsSince(1000))
+    }
 
     private class FakeForegroundEvents(
         private val available: Boolean = true,

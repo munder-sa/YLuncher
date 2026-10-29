@@ -30,6 +30,101 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SetRunnerTest {
+    @Test
+    fun openForLink_opensVendorWithPanelRight_keepsLastIndex() {
+        val env = TestEnv(initialLastSetIndex = 2)
+        env.installed.add("org.videolan.vlc")
+        env.scheduler.advanceBy(123)
+        val index = env.runner.currentIndex
+        val last = env.lastIndex.lastSetIndex
+        assertTrue(env.runner.openForLink("org.videolan.vlc") {})
+        assertEquals(listOf(SplitCall("org.videolan.vlc", env.ownPkg, SplitRatio.R5_5)), env.vendor.calls)
+        assertTrue(env.curtain.isShowing)
+        assertEquals(index, env.runner.currentIndex)
+        assertEquals(last, env.lastIndex.lastSetIndex)
+        assertEquals("org.videolan.vlc" to env.ownPkg, env.runner.lastOpenedPair)
+        assertEquals(123L, env.runner.lastOpenedAtMs)
+    }
+
+    @Test
+    fun openForLink_whileOpening_ignored() {
+        val env = TestEnv()
+        env.installed.add("org.videolan.vlc")
+        var calls = 0
+        env.runner.open(1)
+        assertFalse(env.runner.openForLink("org.videolan.vlc") { calls++ })
+        assertEquals(1, env.vendor.calls.size)
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun openForLink_launchFailed_callsNotSplitOnce() {
+        val env = TestEnv()
+        env.installed.add("org.videolan.vlc")
+        env.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+        var calls = 0
+        assertTrue(env.runner.openForLink("org.videolan.vlc") { calls++ })
+        env.scheduler.advanceBy(10000)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun openForLink_timeout_callsNotSplitOnce() {
+        val env = TestEnv()
+        env.installed.add("org.videolan.vlc")
+        var calls = 0
+        env.runner.openForLink("org.videolan.vlc") { calls++ }
+        env.scheduler.advanceBy(4000)
+        assertEquals(listOf(HideReason.Safety), env.curtainView.hiddenReasons)
+        assertEquals(1, calls)
+        env.scheduler.advanceBy(5000)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun openForLink_ready_doesNotCallNotSplit() {
+        val env = TestEnv()
+        env.installed.add("org.videolan.vlc")
+        var calls = 0
+        env.runner.openForLink("org.videolan.vlc") { calls++ }
+        env.events.events.add(ResumeEvent("org.videolan.vlc", 100))
+        env.runner.panelResumedInSplit()
+        env.scheduler.advanceBy(200)
+        assertFalse(env.curtain.isShowing)
+        assertEquals(listOf(HideReason.Ready), env.curtainView.hiddenReasons)
+        env.scheduler.advanceBy(5000)
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun open_afterLinkSuccess_noStaleFallback() {
+        val env = TestEnv()
+        env.installed.add("org.videolan.vlc")
+        var calls = 0
+        env.runner.openForLink("org.videolan.vlc") { calls++ }
+        env.events.events.add(ResumeEvent("org.videolan.vlc", 100))
+        env.runner.panelResumedInSplit()
+        env.scheduler.advanceBy(200)
+        assertFalse(env.curtain.isShowing)
+        env.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+        env.runner.open(1)
+        assertEquals(2, env.vendor.calls.size)
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun lastOpenedAtMs_clearedByHome() {
+        val env = TestEnv()
+        env.scheduler.advanceBy(123)
+        env.runner.open(1)
+        assertEquals(123L, env.runner.lastOpenedAtMs)
+        env.events.events.add(ResumeEvent("youtube", 150))
+        env.runner.panelResumedInSplit()
+        env.scheduler.advanceBy(200)
+        assertNull(env.runner.opening.value)
+        env.runner.home()
+        assertNull(env.runner.lastOpenedAtMs)
+    }
 
     private data class SplitCall(
         val left: String,

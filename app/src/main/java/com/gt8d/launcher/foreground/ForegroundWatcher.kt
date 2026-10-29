@@ -10,6 +10,13 @@ interface ForegroundEvents {
 }
 
 class ForegroundWatcher(private val events: ForegroundEvents) {
+    fun foregroundPkgsSince(sinceMs: Long): Set<String> {
+        if (!events.available()) return emptySet()
+        return events.resumedSince(sinceMs)
+            .filter { it.timeMs >= sinceMs }
+            .mapTo(HashSet()) { it.pkg }
+    }
+
     fun available(): Boolean = events.available()
 
     fun bothResumed(left: String, right: String, sinceMs: Long): Boolean {
