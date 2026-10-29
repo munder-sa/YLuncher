@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withResumed
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -38,6 +40,10 @@ import com.gt8d.launcher.ui.panel.PanelScreen
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import com.gt8d.launcher.ui.theme.Palette
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class HomeActivity : ComponentActivity() {
     companion object {
@@ -45,6 +51,7 @@ class HomeActivity : ComponentActivity() {
     }
 
     private val activityLauncher by lazy { AndroidActivityLauncher(this) }
+    private var bootConfigJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,7 +76,7 @@ class HomeActivity : ComponentActivity() {
         }
         setContent {
             LauncherTheme {
-                val latestConfig by AppGraph.latestConfig.collectAsState()
+                val latestConfig by AppGraph.configForHome.collectAsState()
                 val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
                 val installedPkgs = remember(config) { AppGraph.catalog.installed() }
                 val homeApps = config.homeApps.map { AppGraph.catalog.info(it, installedPkgs) }
@@ -148,15 +155,31 @@ class HomeActivity : ComponentActivity() {
             return
         }
         EdgeStripService.ensureRunning(this)
-        if (!AppGraph.bootHandled) {
-            AppGraph.bootHandled = true
-            if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && AppGraph.config.lastSetIndex != 0) {
-                AppGraph.boot.start()
+        awaitConfigAndHandleBoot()
+    }
+
+    private fun awaitConfigAndHandleBoot() {
+        if (AppGraph.bootHandled || bootConfigJob?.isActive == true) return
+        bootConfigJob = lifecycleScope.launch {
+            try {
+                AppGraph.configForHome.filterNotNull().first()
+                lifecycle.withResumed {
+                    if (SafetyGuard.isFallbackActive(this@HomeActivity)) return@withResumed
+                    if (AppGraph.bootHandled) return@withResumed
+                    AppGraph.bootHandled = true
+                    if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && AppGraph.config.lastSetIndex != 0) {
+                        AppGraph.boot.start()
+                    }
+                }
+            } finally {
+                bootConfigJob = null
             }
         }
     }
 
     override fun onPause() {
+        bootConfigJob?.cancel()
+        bootConfigJob = null
         AppGraph.homeResumed = false
         super.onPause()
     }

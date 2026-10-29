@@ -6,6 +6,60 @@ import org.junit.Test
 
 class BootSequenceTest {
 
+    @Test
+    fun timeout_withoutCancel_requestsHomeOnce() {
+        val env = TestEnv()
+        env.boot.start()
+        env.boot.openNow()
+        env.scheduler.advanceBy(10000L)
+        assertEquals(1, env.homed)
+        assertEquals(listOf("boot_timeout"), env.records)
+        assertEquals(BootPhase.Done, env.boot.phase.value)
+        env.scheduler.advanceBy(20000L)
+        assertEquals(1, env.homed)
+        assertEquals(listOf("boot_timeout"), env.records)
+        assertEquals(1, env.opened)
+    }
+
+    @Test
+    fun countdown_timeoutAt10000FromStart() {
+        val env = TestEnv()
+        env.boot.start()
+        env.scheduler.advanceBy(3000L)
+        assertEquals(1, env.opened)
+        env.scheduler.advanceBy(6999L)
+        assertEquals(BootPhase.Opening, env.boot.phase.value)
+        env.scheduler.advanceBy(1L)
+        assertEquals(BootPhase.Done, env.boot.phase.value)
+        assertEquals(1, env.homed)
+    }
+
+    @Test
+    fun openNow_doesNotResetStartDeadline() {
+        val env = TestEnv()
+        env.boot.start()
+        env.scheduler.advanceBy(500L)
+        env.boot.openNow()
+        env.scheduler.advanceBy(9499L)
+        assertEquals(BootPhase.Opening, env.boot.phase.value)
+        env.scheduler.advanceBy(1L)
+        assertEquals(BootPhase.Done, env.boot.phase.value)
+    }
+
+    @Test
+    fun cancelDuringOpening_usesOriginalDeadline() {
+        val env = TestEnv()
+        env.boot.start()
+        env.scheduler.advanceBy(3000L)
+        env.boot.stayHome()
+        env.scheduler.advanceBy(6999L)
+        assertEquals(0, env.homed)
+        env.scheduler.advanceBy(1L)
+        assertEquals(1, env.homed)
+        assertEquals(BootPhase.StayedHome, env.boot.phase.value)
+        assertEquals(listOf("boot_cancel"), env.records)
+    }
+
     private class TestEnv(
         var safety: Boolean = false,
         var appeared: Boolean = false,
@@ -101,7 +155,7 @@ class BootSequenceTest {
         env.scheduler.advanceBy(3000L)
 
         env.boot.stayHome()
-        env.scheduler.advanceBy(9999L)
+        env.scheduler.advanceBy(6999L)
         assertEquals(0, env.homed)
 
         env.scheduler.advanceBy(1L)
@@ -116,14 +170,14 @@ class BootSequenceTest {
         env.boot.start()
         env.scheduler.advanceBy(3000L)
 
-        env.scheduler.advanceBy(9999L)
+        env.scheduler.advanceBy(6999L)
         assertEquals(emptyList<String>(), env.records)
         assertEquals(BootPhase.Opening, env.boot.phase.value)
 
         env.scheduler.advanceBy(1L)
         assertEquals(listOf("boot_timeout"), env.records)
         assertEquals(BootPhase.Done, env.boot.phase.value)
-        assertEquals(0, env.homed)
+        assertEquals(1, env.homed)
     }
 
     @Test

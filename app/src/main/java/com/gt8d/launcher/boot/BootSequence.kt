@@ -29,6 +29,7 @@ class BootSequence(
     val secondsLeft: StateFlow<Int> = _secondsLeft.asStateFlow()
 
     private val activeTimers = mutableListOf<Cancellable>()
+    private var limitTimer: Cancellable? = null
     private var cancelledDuringOpening = false
     private var goHomeCalled = false
 
@@ -41,6 +42,7 @@ class BootSequence(
         }
         _phase.value = BootPhase.Countdown
         _secondsLeft.value = 3
+        limitTimer = scheduler.schedule(BOOT_LIMIT_MS) { onTimeout() }
 
         activeTimers.add(
             scheduler.schedule(1000L) {
@@ -74,7 +76,7 @@ class BootSequence(
     fun stayHome() {
         when (_phase.value) {
             BootPhase.Countdown -> {
-                cancelTimers()
+                cancelAllTimers()
                 record("boot_stay_home")
                 _phase.value = BootPhase.StayedHome
             }
@@ -107,15 +109,10 @@ class BootSequence(
 
         schedulePoll()
 
-        val limitTimer = scheduler.schedule(BOOT_LIMIT_MS) {
-            if (_phase.value != BootPhase.Opening) return@schedule
-            onTimeout()
-        }
-        activeTimers.add(limitTimer)
     }
 
     private fun onSplitAppeared() {
-        cancelTimers()
+        cancelAllTimers()
         if (cancelledDuringOpening) {
             callGoHomeOnce()
             _phase.value = BootPhase.StayedHome
@@ -125,14 +122,11 @@ class BootSequence(
     }
 
     private fun onTimeout() {
-        cancelTimers()
-        if (cancelledDuringOpening) {
-            callGoHomeOnce()
-            _phase.value = BootPhase.StayedHome
-        } else {
-            record("boot_timeout")
-            _phase.value = BootPhase.Done
-        }
+        if (_phase.value == BootPhase.Done || _phase.value == BootPhase.StayedHome) return
+        cancelAllTimers()
+        if (!cancelledDuringOpening) record("boot_timeout")
+        callGoHomeOnce()
+        _phase.value = if (cancelledDuringOpening) BootPhase.StayedHome else BootPhase.Done
     }
 
     private fun callGoHomeOnce() {
@@ -145,5 +139,11 @@ class BootSequence(
     private fun cancelTimers() {
         activeTimers.forEach { it.cancel() }
         activeTimers.clear()
+    }
+
+    private fun cancelAllTimers() {
+        cancelTimers()
+        limitTimer?.cancel()
+        limitTimer = null
     }
 }
