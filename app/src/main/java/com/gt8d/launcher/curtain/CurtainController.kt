@@ -1,6 +1,7 @@
 package com.gt8d.launcher.curtain
 
 import com.gt8d.launcher.config.SplitRatio
+import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.time.Cancellable
 import com.gt8d.launcher.time.Scheduler
 
@@ -47,6 +48,7 @@ class CurtainController(
     var onHidden: ((HideReason) -> Unit)? = null
 
     private val timers = mutableListOf<Cancellable>()
+    private var viewFailed = false
 
     fun show(target: CurtainTarget, expectedMs: Long, watcherAvailable: Boolean) {
         if (isShowing) {
@@ -54,7 +56,12 @@ class CurtainController(
             return
         }
         isShowing = true
-        view.show(target)
+        try {
+            view.show(target)
+        } catch (e: Exception) {
+            DiagLog.d("Curtain", "show failed: $e")
+            viewFailed = true
+        }
         timers.add(
             scheduler.schedule(SAFETY_MS) {
                 hide(HideReason.Safety)
@@ -69,7 +76,7 @@ class CurtainController(
         }
         timers.add(
             scheduler.schedule(PROGRESS_AFTER_MS) {
-                if (isShowing) {
+                if (isShowing && !viewFailed) {
                     view.showProgress()
                 }
             },
@@ -77,7 +84,7 @@ class CurtainController(
     }
 
     fun update(target: CurtainTarget) {
-        if (!isShowing) return
+        if (!isShowing || viewFailed) return
         view.update(target)
     }
 
@@ -95,8 +102,9 @@ class CurtainController(
         timers.forEach { it.cancel() }
         timers.clear()
         try {
-            view.hide(reason)
+            if (!viewFailed) view.hide(reason)
         } finally {
+            viewFailed = false
             onHidden?.invoke(reason)
         }
     }

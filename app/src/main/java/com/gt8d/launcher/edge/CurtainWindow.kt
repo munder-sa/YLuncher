@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
-import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
@@ -21,8 +20,6 @@ import com.gt8d.launcher.curtain.CurtainTarget
 import com.gt8d.launcher.curtain.CurtainView
 import com.gt8d.launcher.curtain.HideReason
 import com.gt8d.launcher.ui.theme.LauncherTheme
-import java.util.Collections
-import java.util.IdentityHashMap
 
 class CurtainWindow(
     private val context: Context,
@@ -37,58 +34,67 @@ class CurtainWindow(
     }
 
     private val handler = Handler(Looper.getMainLooper())
-    private val removedViews: MutableSet<View> =
-        Collections.newSetFromMap(IdentityHashMap())
+    private class WindowSession {
+        var view: ComposeView? = null
+        var owner: OverlayLifecycleOwner? = null
+        var removalAttempted = false
+        var hideRunnable: Runnable? = null
+    }
 
-    private var currentView: ComposeView? = null
-    private var currentLifecycleOwner: OverlayLifecycleOwner? = null
+    private var currentSession: WindowSession? = null
     private var targetState = mutableStateOf<CurtainTarget?>(null)
     private var showProgressState = mutableStateOf(false)
-    private var hideRunnable: Runnable? = null
 
     override fun show(target: CurtainTarget) {
-        currentView?.let { removeViewSafely(it) }
+        currentSession?.let { removeSession(it) }
 
         targetState.value = target
         showProgressState.value = false
 
-        val owner = OverlayLifecycleOwner()
-        owner.onCreate()
-        currentLifecycleOwner = owner
+        val session = WindowSession()
+        currentSession = session
+        try {
+            val owner = OverlayLifecycleOwner()
+            session.owner = owner
+            owner.onCreate()
 
-        val view = contentFactory(context)
-        view.setViewTreeLifecycleOwner(owner)
-        view.setViewTreeSavedStateRegistryOwner(owner)
-        view.setContent {
-            val currentTarget = targetState.value
-            if (currentTarget != null) {
-                LauncherTheme {
-                    CurtainContent(
-                        target = currentTarget,
-                        showProgress = showProgressState.value,
-                    )
+            val view = contentFactory(context)
+            session.view = view
+            view.setViewTreeLifecycleOwner(owner)
+            view.setViewTreeSavedStateRegistryOwner(owner)
+            view.setContent {
+                val currentTarget = targetState.value
+                if (currentTarget != null) {
+                    LauncherTheme {
+                        CurtainContent(
+                            target = currentTarget,
+                            showProgress = showProgressState.value,
+                        )
+                    }
                 }
             }
+            view.alpha = 0f
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT,
+            )
+
+            wm.addView(view, params)
+
+            view.animate()
+                .alpha(1f)
+                .setDuration(FADE_IN_MS)
+                .start()
+
+            readdStrips()
+        } catch (e: Throwable) {
+            removeSession(session)
+            throw e
         }
-        view.alpha = 0f
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT,
-        )
-
-        currentView = view
-        wm.addView(view, params)
-
-        view.animate()
-            .alpha(1f)
-            .setDuration(FADE_IN_MS)
-            .start()
-
-        readdStrips()
     }
 
     override fun update(target: CurtainTarget) {
@@ -100,9 +106,16 @@ class CurtainWindow(
     }
 
     override fun hide(reason: HideReason) {
-        val view = currentView ?: return
+        val session = currentSession ?: return
+        if (reason == HideReason.Safety) {
+            removeSession(session)
+            return
+        }
+        val view = session.view ?: return
         var scheduled = false
         try {
+            session.hideRunnable?.let { handler.removeCallbacks(it) }
+            session.hideRunnable = null
             view.animate().cancel()
             view.animate()
                 .alpha(0f)
@@ -112,37 +125,37 @@ class CurtainWindow(
                 try {
                     view.alpha = 0f
                 } finally {
-                    removeViewSafely(view)
+                    removeSession(session)
                 }
             }
-            hideRunnable = runnable
-            handler.postDelayed(runnable, FADE_OUT_MS)
-            scheduled = true
+            session.hideRunnable = runnable
+            scheduled = handler.postDelayed(runnable, FADE_OUT_MS)
         } finally {
             if (!scheduled) {
-                removeViewSafely(view)
+                removeSession(session)
             }
         }
     }
 
     internal fun removeImmediately() {
-        currentView?.let { removeViewSafely(it) }
+        currentSession?.let { removeSession(it) }
     }
 
-    private fun removeViewSafely(view: View) {
-        hideRunnable?.let { handler.removeCallbacks(it) }
-        hideRunnable = null
-        runCatching { view.animate().cancel() }
-        if (!removedViews.add(view)) return
-        if (currentView === view) {
-            currentView = null
-            currentLifecycleOwner?.let { runCatching { it.onDestroy() } }
-            currentLifecycleOwner = null
-        }
+    private fun removeSession(session: WindowSession) {
+        if (session.removalAttempted) return
+        session.removalAttempted = true
+        session.hideRunnable?.let { handler.removeCallbacks(it) }
+        session.hideRunnable = null
+        val view = session.view
+        runCatching { view?.animate()?.cancel() }
+        if (currentSession === session) currentSession = null
         try {
-            wm.removeView(view)
-        } catch (_: Throwable) {
-            // 例外を握りつぶして必ず試みる
+            if (view != null) runCatching { wm.removeView(view) }
+        } finally {
+            runCatching { view?.disposeComposition() }
+            runCatching { session.owner?.onDestroy() }
+            session.view = null
+            session.owner = null
         }
     }
 

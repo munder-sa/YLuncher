@@ -12,6 +12,7 @@ import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -20,6 +21,7 @@ import androidx.compose.ui.graphics.toArgb
 import com.gt8d.launcher.R
 import com.gt8d.launcher.config.GestureConfig
 import com.gt8d.launcher.curtain.CurtainView
+import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.ui.theme.Palette
 import kotlin.math.hypot
 
@@ -34,6 +36,7 @@ class EdgeStripService : Service() {
         private const val LONG_PRESS_SLOP_DP = 16f
 
         fun ensureRunning(context: Context) {
+            if (SafetyGuard.isFallbackActive(context)) return
             context.startForegroundService(Intent(context, EdgeStripService::class.java))
         }
 
@@ -52,15 +55,24 @@ class EdgeStripService : Service() {
     private var curtainWindow: CurtainWindow? = null
     private var leftStrip: View? = null
     private var rightStrip: View? = null
+    private var leftAttached = false
+    private var rightAttached = false
+    internal var overlayAllowed: () -> Boolean = { Settings.canDrawOverlays(this) }
+    internal var windowManagerFactory: () -> WindowManagerFacade = {
+        AndroidWindowManagerFacade(getSystemService(WindowManager::class.java))
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        if (SafetyGuard.isFallbackActive(this)) {
+            stopSelf()
+            return
+        }
         startForegroundNotification()
 
-        val wm = getSystemService(WindowManager::class.java)
-        val facade = AndroidWindowManagerFacade(wm)
+        val facade = windowManagerFactory()
         wmFacade = facade
 
         val window = CurtainWindow(
@@ -76,36 +88,64 @@ class EdgeStripService : Service() {
         leftStrip = left
         rightStrip = right
 
-        runCatching { facade.addView(left, buildStripParams(Side.Left)) }
-        runCatching { facade.addView(right, buildStripParams(Side.Right)) }
+        ensureStripsAttached()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (SafetyGuard.isFallbackActive(this)) {
+            releaseOverlays()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        ensureStripsAttached()
         return START_STICKY
     }
 
     override fun onDestroy() {
-        val facade = wmFacade
-        leftStrip?.let { view -> runCatching { facade?.removeView(view) } }
-        rightStrip?.let { view -> runCatching { facade?.removeView(view) } }
-        leftStrip = null
-        rightStrip = null
-
-        runCatching { curtainWindow?.removeImmediately() }
-        curtainWindow = null
-        curtainView = null
+        releaseOverlays()
         super.onDestroy()
     }
 
+    private fun releaseOverlays() {
+        handler.removeCallbacksAndMessages(null)
+        val facade = wmFacade
+        if (leftAttached) leftStrip?.let { view -> runCatching { facade?.removeView(view) } }
+        if (rightAttached) rightStrip?.let { view -> runCatching { facade?.removeView(view) } }
+        leftStrip = null
+        rightStrip = null
+        leftAttached = false
+        rightAttached = false
+
+        val window = curtainWindow
+        runCatching { window?.removeImmediately() }
+        if (curtainView === window) curtainView = null
+        curtainWindow = null
+        wmFacade = null
+    }
+
     internal fun readdStrips() {
+        if (SafetyGuard.isFallbackActive(this)) return
         val facade = wmFacade ?: return
-        leftStrip?.let { view ->
-            runCatching { facade.removeView(view) }
-            runCatching { facade.addView(view, buildStripParams(Side.Left)) }
+        if (leftAttached) leftStrip?.let { view ->
+            runCatching { facade.removeView(view) }.onSuccess { leftAttached = false }
         }
-        rightStrip?.let { view ->
-            runCatching { facade.removeView(view) }
+        if (rightAttached) rightStrip?.let { view ->
+            runCatching { facade.removeView(view) }.onSuccess { rightAttached = false }
+        }
+        ensureStripsAttached()
+    }
+
+    private fun ensureStripsAttached() {
+        if (!overlayAllowed()) return
+        val facade = wmFacade ?: return
+        if (!leftAttached) leftStrip?.let { view ->
+            runCatching { facade.addView(view, buildStripParams(Side.Left)) }
+                .onSuccess { leftAttached = true }
+        }
+        if (!rightAttached) rightStrip?.let { view ->
             runCatching { facade.addView(view, buildStripParams(Side.Right)) }
+                .onSuccess { rightAttached = true }
         }
     }
 
@@ -190,6 +230,7 @@ class EdgeStripService : Service() {
 
                     val lpMs = gestureConfig.longPressMs.toLong()
                     val runnable = Runnable {
+                        if (SafetyGuard.isFallbackActive(this)) return@Runnable
                         if (!longPressFired) {
                             longPressFired = true
                             startGlow(false)
