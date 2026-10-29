@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.os.Process
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
@@ -17,6 +18,13 @@ import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
+import com.gt8d.launcher.link.BrowserActivity
+import com.gt8d.launcher.sets.SetRunnerDeps
+import com.gt8d.launcher.curtain.CurtainController
+import com.gt8d.launcher.curtain.CurtainView
+import com.gt8d.launcher.curtain.CurtainTarget
+import com.gt8d.launcher.curtain.HideReason
+import com.gt8d.launcher.time.FakeScheduler
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.*
@@ -132,5 +140,84 @@ class PanelActivityTest {
         assertTrue(appCalls.isEmpty())
         assertFalse(AppGraph.warm.isWarm(pkg))
         rule.onNodeWithTag("applist_close").assertDoesNotExist()
+    }
+
+    private fun splitPanel() {
+        controller = Robolectric.buildActivity(PanelActivity::class.java)
+        shadowOf(controller!!.get()).setInMultiWindowMode(true)
+        assertTrue(controller!!.get().isInMultiWindowMode)
+        controller!!.create().start().resume().visible()
+        rule.waitForIdle()
+    }
+
+    private fun assertBrowserOnce() {
+        val activity = controller!!.get()
+        val started = shadowOf(activity).nextStartedActivity
+        assertNotNull(started)
+        assertEquals(ComponentName(activity, BrowserActivity::class.java), started.component)
+        assertEquals("https://example.com", started.getStringExtra(BrowserActivity.EXTRA_URL))
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertNull(AppGraph.pendingUrl.take())
+    }
+
+    @Test fun pendingUrl_whileOpening_isNotConsumedUntilOpeningEnds() {
+        val runner = AppGraph.runner
+        val field = runner.javaClass.getDeclaredField("d").apply { isAccessible = true }
+        val original = field.get(runner) as SetRunnerDeps
+        val scheduler = FakeScheduler()
+        val curtain = CurtainController(scheduler, object : CurtainView {
+            override fun show(target: CurtainTarget) {}
+            override fun update(target: CurtainTarget) {}
+            override fun showProgress() {}
+            override fun hide(reason: HideReason) {}
+        })
+        val deps = original.copy(scheduler = scheduler, clock = scheduler, curtain = curtain, startHome = {})
+        field.set(runner, deps)
+        try {
+            // 同じ AppGraph.runner を実際の openForBoot と安全タイマーで操作する。
+            runner.openForBoot(1)
+            assertNotNull(runner.opening.value)
+            AppGraph.pendingUrl.set("https://example.com")
+            splitPanel()
+            assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+            val url = AppGraph.pendingUrl.take()
+            assertEquals("https://example.com", url)
+            AppGraph.pendingUrl.set(url!!)
+            scheduler.advanceBy(10_000L)
+            assertNull(runner.opening.value)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertBrowserOnce()
+        } finally {
+            runner.abortBootToHome()
+            field.set(runner, original)
+            AppGraph.pendingUrl.take()
+        }
+    }
+
+    @Test fun pendingUrl_notOpening_consumedOnResume() {
+        assertNull(AppGraph.runner.opening.value)
+        AppGraph.pendingUrl.set("https://example.com")
+        try {
+            splitPanel()
+            assertBrowserOnce()
+        } finally {
+            AppGraph.pendingUrl.take()
+        }
+    }
+
+    @Test fun back_doesNotFinishPanel() {
+        host("back", true)
+        rule.runOnIdle { controller!!.get().onBackPressedDispatcher.onBackPressed() }
+        assertFalse(controller!!.get().isFinishing)
+    }
+
+    @Test fun back_withAppListOpen_closesListOnly() {
+        host("backlist", true)
+        rule.onNodeWithTag("dock_applist").performScrollTo().performClick()
+        rule.onNodeWithTag("applist_close").assertExists()
+        rule.runOnIdle { controller!!.get().onBackPressedDispatcher.onBackPressed() }
+        rule.onNodeWithTag("applist_close").assertDoesNotExist()
+        rule.onNodeWithTag("dock_applist").assertExists()
+        assertFalse(controller!!.get().isFinishing)
     }
 }

@@ -29,7 +29,8 @@
         android:name=".LauncherApp"
         android:icon="@mipmap/ic_launcher"
         android:label="GT8D Launcher"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
 
         <activity
             android:name=".ui.home.HomeActivity"

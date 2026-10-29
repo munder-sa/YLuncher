@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -16,8 +17,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.R
+import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.link.BrowserActivity
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
@@ -25,6 +30,7 @@ import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import kotlinx.coroutines.launch
 
 class PanelActivity : ComponentActivity() {
     private val forwarder by lazy { AppGraph.forwarderFactory() }
@@ -38,6 +44,12 @@ class PanelActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         inSplitState = isInMultiWindowMode
+        onBackPressedDispatcher.addCallback(this) { DiagLog.d("Panel", "back ignored") }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                AppGraph.runner.opening.collect { if (it == null) consumePendingUrl() }
+            }
+        }
         setContent {
             LauncherTheme {
                 Box(
@@ -117,6 +129,7 @@ class PanelActivity : ComponentActivity() {
     }
 
     private fun consumePendingUrl() {
+        if (AppGraph.runner.opening.value != null) return
         if (!isInMultiWindowMode) return
         val url = AppGraph.pendingUrl.take() ?: return
         startActivity(Intent(this, BrowserActivity::class.java)
