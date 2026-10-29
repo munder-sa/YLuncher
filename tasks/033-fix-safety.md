@@ -55,21 +55,24 @@ Gradle はバックグラウンドに回さず、終了まで待つ。
 既存テストの名前・期待値・検証を変更しない。
 この Task に、RULES の「テストを弱めない」の例外はない。
 
-### B1 の Controller 側: 表示の失敗で幕を終わらせ、例外は外へ出さない(司令塔の決定)
+### B1 の Controller 側: 表示に失敗しても「見た目なしの幕」として動き続ける(司令塔の決定・改訂版)
 
-`CurtainController.show` の `view.show(target)` を次のようにする。
+改訂の理由: 初版は「表示の失敗で `Failed` を同期通知して終わる」だった。しかしそれでは、SetRunner が `openSet` の途中で
+「開いている最中」の印を消したまま分割の手順を続け、そのあと登録したポーリング・再試行のタイマーが残って次の操作に干渉する。
+また 17b のリンクの退避(`onNotSplit`)も捨てられる。そこで、Controller の外から見た動きを、表示の成否で変えないようにする。
 
-1. `isShowing = true` にしてから `view.show(target)` を `try` で呼ぶ。
-2. `Exception` を受けたら、
-   - `DiagLog.d("Curtain", "show failed: $e")` で記録する。
-   - `isShowing = false` にする(タイマーはまだ登録していないので、登録しない)。
-   - `runCatching { view.hide(HideReason.Failed) }`(窓側の後始末が済んでいれば何もしない)。
-   - `onHidden?.invoke(HideReason.Failed)` を1回だけ呼ぶ。
-   - 例外は**再送出しない**で return する(呼び出し元の SetRunner は、幕なしで分割の手順を続ける。`onHidden` で開いている最中の印が消えるので、待ちで止まらない)。
-3. 正常に戻ったときは、既存どおりタイマーを登録する。
+`CurtainController` に `private var viewFailed = false` を足し、次のようにする。
 
-理由: 再送出すると、セット切り替えの呼び出し元(Activity・帯のジェスチャー)が落ちる。通知しないと SetRunner が開いている最中のまま止まる。
-オーバーレイの許可が無いと窓の追加が例外になるので、許可なしのときも、この経路で「幕なしで続ける」になる(B4 の幕の扱いはこれで足りる。SetRunner は変えない)。
+1. `show` は、`isShowing = true` にしてから `view.show(target)` を `try` で呼ぶ。
+   `Exception` を受けたら `DiagLog.d("Curtain", "show failed: $e")` で記録し、`viewFailed = true` にする。**例外は再送出しない**。
+   成否にかかわらず、続けて既存どおりタイマー(Safety 4000ms、監視不能なら Timed、進行表示 800ms)を登録する。
+2. `viewFailed` が true の間は、`view.update`・`view.showProgress` を呼ばない。
+3. `hide(reason)` は既存どおり(`isShowing = false`、タイマーの取り消し、`onHidden?.invoke(reason)` を1回)。
+   ただし `viewFailed` が true なら `view.hide(reason)` は呼ばない(窓は CurtainWindow 側で後始末済み)。最後に `viewFailed = false` に戻す。
+4. 正常に表示できたときの動きは、今と変えない。
+
+この結果、表示に失敗しても、SetRunner には `ready()`・`fail()`・Safety の4秒による `onHidden` が、成功時と同じ時機で1回だけ届く。
+オーバーレイの許可が無いときも、この経路で「見た目なしで続ける」になる(B4 の幕の扱いはこれで足りる。SetRunner は変えない)。
 
 ### B2: BootReceiver の退避判定
 
@@ -134,6 +137,10 @@ true なら `startForegroundService` を呼ばずに return。
 各側の removeView が正常に戻った場合のみ attached を false にする。
 除去失敗時は true を維持し、同じ View を重複追加しない。
 その後 `ensureStripsAttached()` を呼ぶ。
+
+**長押しの予約(セカンドオピニオンの指摘)**: `releaseOverlays()` の最初で、帯の長押しの予約(Handler に投げた Runnable)を
+すべて取り消す。予約の Runnable も、実行時に退避中なら何もしない。テスト `release_cancelsPendingLongPress` を足す
+(帯を押したまま `releaseOverlays()` に至る経路を作り、長押しの時間を過ぎても listener が呼ばれないこと)。
 
 `private fun releaseOverlays()` を追加し、onDestroy と退避中の
 onStartCommand から共用する。
@@ -251,11 +258,14 @@ Robolectric の限界により検証できない場合は、別の偽物で代�
      再開要求で左だけ再試行し、左右とも追加済みになる。
 
 5. B1 の Controller 側: `CurtainControllerTest`
-   - `showThrows_clearsStateCancelsTimersAndNotifiesOnce`
-     偽の CurtainView の show が例外を投げる → `show` は例外を外に出さない、`isShowing` は false、
-     `onHidden` は `HideReason.Failed` でちょうど1回、時計を 5000ms 進めても `onHidden` は増えない(タイマーが残っていない)。
+   - `showThrows_clearsStateCancelsTimersAndNotifiesOnce`(名前は初版のまま。内容は改訂版の仕様に合わせる)
+     偽の CurtainView の show が例外を投げる → `show` は例外を外に出さない、`isShowing` は true、この時点で `onHidden` は0回。
+     時計を 3999ms 進めても0回、4000ms で `HideReason.Safety` がちょうど1回。さらに 5000ms 進めても増えない。
+     偽の view の `update`・`showProgress`・`hide` は1回も呼ばれない。
+   - `showThrows_readyNotifiesReadyOnce`
+     show が例外 → `ready()` → `onHidden` は `HideReason.Ready` で1回、view の `hide` は呼ばれない。続く 4000ms でも増えない。
    - `showThrows_thenShowAgain_works`
-     1回目の show が例外、2回目は成功 → 2回目は通常どおり表示され、4000ms で Safety が1回。
+     1回目の show が例外 → `fail()` で終わらせる → 2回目は成功 → 2回目は通常どおり表示され(`view.show` が呼ばれる)、4000ms で Safety が1回、view の `hide` も1回。
      既存の偽物に「次の show で例外を投げる」切り替えが無ければ、テストの中に偽物を足してよい(既存の偽物は変えない)。
 
 5b. B1 の Window 側・B6/E2: `CurtainWindowTest`
