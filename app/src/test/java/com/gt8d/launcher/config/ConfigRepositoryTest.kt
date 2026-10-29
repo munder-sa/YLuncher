@@ -11,6 +11,48 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class ConfigRepositoryTest {
+    @Test
+    fun backupFailure_preservesOriginalAndDoesNotEmitDefaults() = runTest {
+        val dir = tempFolder.newFolder("backupFailure")
+        val file = File(dir, "config.json").apply { writeText("{ broken json") }
+        val original = file.readBytes()
+        val backup = File(dir, "config.bak.json").apply { mkdir() }
+        val child = File(backup, "keep").apply { writeText("keep backup") }
+        val childBytes = child.readBytes()
+        val repo = ConfigRepository(file) { installed }
+        var failure: java.io.IOException? = null
+        try {
+            repo.config.first()
+            org.junit.Assert.fail("Defaults must not be emitted")
+        } catch (e: java.io.IOException) {
+            failure = e
+        }
+        org.junit.Assert.assertNotNull(failure)
+        org.junit.Assert.assertArrayEquals(original, file.readBytes())
+        assertTrue(backup.isDirectory)
+        assertEquals(listOf("keep"), backup.listFiles()!!.map { it.name })
+        org.junit.Assert.assertArrayEquals(childBytes, child.readBytes())
+    }
+
+    @Test
+    fun nextRepositoryAfterBackupFailure_readsAgain() = runTest {
+        val dir = tempFolder.newFolder("readAgain")
+        val file = File(dir, "config.json").apply { writeText("{ broken json") }
+        val original = file.readBytes()
+        val backup = File(dir, "config.bak.json").apply { mkdir() }
+        File(backup, "keep").writeText("keep")
+        val first = ConfigRepository(file) { installed }
+        try {
+            first.config.first()
+            org.junit.Assert.fail("Defaults must not be emitted")
+        } catch (_: java.io.IOException) {
+            org.junit.Assert.assertArrayEquals(original, file.readBytes())
+        }
+        assertTrue(backup.deleteRecursively())
+        val next = ConfigRepository(file) { installed }
+        assertEquals(Defaults.build(installed), next.config.first())
+        org.junit.Assert.assertArrayEquals(original, backup.readBytes())
+    }
 
     @Test
     fun load_v1_nonDefaultSettings_persistsV2WithoutBackup() = runTest {

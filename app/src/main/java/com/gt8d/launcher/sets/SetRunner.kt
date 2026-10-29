@@ -36,7 +36,7 @@ interface Messenger {
 }
 
 data class SetRunnerDeps(
-    val config: () -> LauncherConfig,
+    val config: () -> LauncherConfig?,
     val installed: () -> Set<String>,
     val lastIndex: LastIndexStore,
     val selector: SplitModeSelector,
@@ -64,10 +64,9 @@ class SetRunner(private val d: SetRunnerDeps) {
     private val _opening = MutableStateFlow<Opening?>(null)
     val opening: StateFlow<Opening?> = _opening.asStateFlow()
 
-    var currentIndex: Int = SetNavigator.clamp(
-        d.lastIndex.lastSetIndex,
-        d.config().screenSets.size,
-    )
+    var currentIndex: Int = d.config()?.let {
+        SetNavigator.clamp(d.lastIndex.lastSetIndex, it.screenSets.size)
+    } ?: d.lastIndex.lastSetIndex
         private set
 
     var lastOpenedPair: Pair<String, String>? = null
@@ -85,6 +84,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var pending: PendingOpen? = null
     private var waitKind: WaitKind = WaitKind.None
     private var panelResumed: Boolean = false
+    private var openingForBoot = false
     private var monitoringAvailable: Boolean = true
     private var expectedDelayMs: Long = WarmTracker.COLD_MS
     private val activeTimers = mutableListOf<Cancellable>()
@@ -93,54 +93,69 @@ class SetRunner(private val d: SetRunnerDeps) {
         d.curtain.onHidden = ::onCurtainHidden
     }
 
+    private fun configForOperation(): LauncherConfig? = d.config()
+
     fun next() {
+        val cfg = configForOperation() ?: return
         val base = pending?.index ?: currentIndex
-        val setCount = d.config().screenSets.size
+        val setCount = cfg.screenSets.size
         val target = SetNavigator.next(base, setCount)
         DiagLog.d("SetRunner", "next base=$base -> $target")
-        open(target)
+        open(target, cfg)
     }
 
     fun prev() {
+        val cfg = configForOperation() ?: return
         val base = pending?.index ?: currentIndex
-        val setCount = d.config().screenSets.size
+        val setCount = cfg.screenSets.size
         val target = SetNavigator.prev(base, setCount)
         DiagLog.d("SetRunner", "prev base=$base -> $target")
-        open(target)
+        open(target, cfg)
     }
 
     fun home() {
+        val cfg = configForOperation() ?: return
+        home(cfg)
+    }
+
+    private fun home(cfg: LauncherConfig) {
         DiagLog.d("SetRunner", "home")
         if (_opening.value != null) {
             pending = PendingOpen(SetNavigator.HOME, false)
-            d.curtain.update(targetFor(SetNavigator.HOME))
+            d.curtain.update(targetFor(SetNavigator.HOME, cfg))
             return
         }
         currentIndex = SetNavigator.HOME
         d.lastIndex.lastSetIndex = SetNavigator.HOME
         lastOpenedPair = null
         lastOpenedAtMs = null
-        d.curtain.show(targetFor(SetNavigator.HOME), WarmTracker.WARM_MS, d.watcher.available())
+        d.curtain.show(targetFor(SetNavigator.HOME, cfg), WarmTracker.WARM_MS, d.watcher.available())
         d.startHome()
         d.curtain.ready()
     }
 
     fun open(index: Int) {
+        val cfg = configForOperation() ?: return
+        open(index, cfg)
+    }
+
+    private fun open(index: Int, cfg: LauncherConfig) {
         DiagLog.d("SetRunner", "open index=$index")
         if (_opening.value != null) {
             pending = PendingOpen(index, false)
-            d.curtain.update(targetFor(index))
+            d.curtain.update(targetFor(index, cfg))
             DiagLog.d("SetRunner", "open deferred pending=$index")
             return
         }
         if (index == SetNavigator.HOME) {
-            home()
+            home(cfg)
             return
         }
-        openInternal(index, useCurtain = true)
+        openInternal(index, cfg, useCurtain = true)
     }
 
     fun openForBoot(index: Int) {
+        val cfg = configForOperation() ?: return
         DiagLog.d("SetRunner", "openForBoot index=$index")
         if (_opening.value != null) {
             pending = PendingOpen(index, true)
@@ -154,7 +169,23 @@ class SetRunner(private val d: SetRunnerDeps) {
             d.startHome()
             return
         }
-        openInternal(index, useCurtain = false)
+        openInternal(index, cfg, useCurtain = false)
+    }
+
+    fun abortBootToHome() {
+        if (_opening.value != null && !openingForBoot) return
+        cancelTimers()
+        pending = null
+        linkFallback = null
+        waitKind = WaitKind.None
+        panelResumed = false
+        openingForBoot = false
+        currentIndex = SetNavigator.HOME
+        d.lastIndex.lastSetIndex = SetNavigator.HOME
+        lastOpenedPair = null
+        lastOpenedAtMs = null
+        _opening.value = null
+        d.startHome()
     }
 
     fun panelResumedInSplit() {
@@ -163,6 +194,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun openForLink(left: String, onNotSplit: () -> Unit): Boolean {
+        val cfg = configForOperation() ?: return false
         if (_opening.value != null) return false
         linkFallback = onNotSplit
         openSet(
@@ -173,7 +205,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 right = SlotPreview.Panel,
                 ratio = SplitRatio.R5_5,
                 position = currentIndex,
-                count = d.config().screenSets.size + 1,
+                count = cfg.screenSets.size + 1,
             ),
             useCurtain = true,
         )
@@ -186,13 +218,12 @@ class SetRunner(private val d: SetRunnerDeps) {
         fallback?.invoke()
     }
 
-    private fun openInternal(index: Int, useCurtain: Boolean) {
+    private fun openInternal(index: Int, cfg: LauncherConfig, useCurtain: Boolean) {
         linkFallback = null
-        val cfg = d.config()
         val set = cfg.screenSets.getOrNull(index - 1)
         if (set == null) {
             if (useCurtain) {
-                home()
+                home(cfg)
             } else {
                 currentIndex = SetNavigator.HOME
                 d.lastIndex.lastSetIndex = SetNavigator.HOME
@@ -206,7 +237,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         currentIndex = index
         d.lastIndex.lastSetIndex = index
 
-        openSet(set, targetFor(index), useCurtain)
+        openSet(set, targetFor(index, cfg), useCurtain)
     }
 
     private fun openSet(set: ScreenSet, target: CurtainTarget, useCurtain: Boolean) {
@@ -222,6 +253,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         monitoringAvailable = d.watcher.available()
         expectedDelayMs = d.warm.expectedDelayMs(left, right)
         panelResumed = false
+        openingForBoot = !useCurtain
         _opening.value = Opening(left, right, startMs)
         lastOpenedPair = left to right
         lastOpenedAtMs = startMs
@@ -459,6 +491,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         linkFallback = null
         waitKind = WaitKind.None
         cancelTimers()
+        openingForBoot = false
         _opening.value = null
         if (!monitoringAvailable) {
             fallback?.invoke()
@@ -473,6 +506,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun finishWithoutCurtain() {
         waitKind = WaitKind.None
         cancelTimers()
+        openingForBoot = false
         _opening.value = null
         runPendingIfNeeded()
     }
@@ -491,7 +525,11 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun targetFor(index: Int): CurtainTarget {
-        val sets = d.config().screenSets
+        return targetFor(index, configForOperation())
+    }
+
+    private fun targetFor(index: Int, cfg: LauncherConfig?): CurtainTarget {
+        val sets = cfg?.screenSets.orEmpty()
         val count = sets.size + 1
         if (index == SetNavigator.HOME) {
             return CurtainTarget(
