@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -44,6 +46,8 @@ fun AppListScreen(
     iconFor: (String) -> ImageBitmap?,
     onLaunch: (AppListEntry) -> Unit,
     onClose: () -> Unit,
+    gridState: LazyGridState = rememberLazyGridState(),
+    iconRevision: Int = 0,
 ) {
     BackHandler {
         onClose()
@@ -87,6 +91,7 @@ fun AppListScreen(
 
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 112.dp),
+            state = gridState,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -97,7 +102,7 @@ fun AppListScreen(
                 items = entries,
                 key = { "${it.pkg}/${it.cls}" },
             ) { entry ->
-                val icon = remember(entry.pkg) { iconFor(entry.pkg) }
+                val icon = remember(entry.pkg, iconRevision) { iconFor(entry.pkg) }
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,

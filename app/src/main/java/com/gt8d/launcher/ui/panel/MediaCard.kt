@@ -3,6 +3,8 @@ package com.gt8d.launcher.ui.panel
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,8 +41,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -220,24 +225,50 @@ private fun ActiveMediaContent(
         if (duration != null && duration > 0L) {
             val clampedPos = positionMs.coerceIn(0L, duration)
             var dragPos by remember { mutableStateOf<Float?>(null) }
+            var endpoint by remember { mutableStateOf<Long?>(null) }
             val sliderValue = dragPos ?: clampedPos.toFloat()
 
-            Slider(
-                value = sliderValue,
-                onValueChange = { dragPos = it },
-                onValueChangeFinished = {
-                    dragPos?.let { onSeek(it.toLong()) }
-                    dragPos = null
-                },
-                valueRange = 0f..duration.toFloat(),
-                colors = SliderDefaults.colors(
-                    thumbColor = Palette.Accent,
-                    activeTrackColor = Palette.Accent,
-                ),
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                    .semantics(mergeDescendants = true) {}
                     .testTag("progress"),
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { dragPos = it },
+                    onValueChangeFinished = {
+                        dragPos?.let { onSeek(endpoint ?: it.toLong()) }
+                        endpoint = null
+                        dragPos = null
+                    },
+                    valueRange = 0f..duration.toFloat(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Palette.Accent,
+                        activeTrackColor = Palette.Accent,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                        .pointerInput(duration) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                endpoint = null
+                                do {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val pointer = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    endpoint = when {
+                                        pointer.position.x <= 1f -> 0L
+                                        pointer.position.x >= size.width - 1f -> duration
+                                        else -> null
+                                    }
+                                } while (pointer.pressed)
+                            }
+                        },
+                )
+            }
             val displayPos = dragPos?.toLong() ?: clampedPos
             val remaining = (duration - displayPos).coerceAtLeast(0L)
             Row(

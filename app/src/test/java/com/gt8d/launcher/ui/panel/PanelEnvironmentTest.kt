@@ -1,0 +1,218 @@
+package com.gt8d.launcher.ui.panel
+
+import android.Manifest
+import android.app.Application
+import android.app.AppOpsManager
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.ComponentName
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ActivityInfo
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.net.Uri
+import android.net.wifi.WifiManager
+import android.os.Process
+import android.os.Handler
+import android.provider.Settings
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.State
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.test.core.app.ApplicationProvider
+import com.gt8d.launcher.apps.AppCatalog
+import org.junit.Assert.*
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.ExternalResource
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
+import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowSettings
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
+class PanelEnvironmentTest {
+    private val app get() = ApplicationProvider.getApplicationContext<Application>()
+    private val pkg = "example.environment"
+    private val catalog by lazy { AppCatalog(app) }
+    private lateinit var owner: PanelTestLifecycle
+    private lateinit var result: PanelEnvironment
+    private val visible = mutableStateOf(true)
+    private var reads = 0
+    private val registered = mutableListOf<BroadcastReceiver>()
+    private val unregistered = mutableListOf<BroadcastReceiver>()
+    @get:Rule(order = 0) val register = object : ExternalResource() {
+        override fun before() {
+            val cn = ComponentName(app.packageName, ComponentActivity::class.java.name)
+            Shadows.shadowOf(app.packageManager).addOrUpdateActivity(ActivityInfo().apply {
+                name = cn.className; packageName = cn.packageName
+            })
+            Shadows.shadowOf(app.packageManager).addIntentFilterForActivity(cn,
+                IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        }
+    }
+    @get:Rule(order = 1) val rule = createComposeRule()
+    private fun host() {
+        val context = object : ContextWrapper(app) {
+            override fun registerReceiver(receiver: BroadcastReceiver?, filter: IntentFilter, permission: String?, scheduler: Handler?, flags: Int): Intent? {
+                if (receiver != null) registered.add(receiver)
+                return super.registerReceiver(receiver, filter, permission, scheduler, flags)
+            }
+            override fun unregisterReceiver(receiver: BroadcastReceiver) {
+                unregistered.add(receiver)
+                super.unregisterReceiver(receiver)
+            }
+            override fun getSystemService(name: String): Any? {
+                reads++
+                return super.getSystemService(name)
+            }
+        }
+        rule.setContent {
+            if (visible.value) {
+                owner = androidx.compose.runtime.remember { PanelTestLifecycle().also { it.resume() } }
+                CompositionLocalProvider(LocalContext provides context, LocalLifecycleOwner provides owner) {
+                    result = rememberPanelEnvironment(catalog)
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
+    private fun radios(wifi: Boolean, bluetooth: Boolean) {
+        app.getSystemService(WifiManager::class.java).setWifiEnabled(wifi)
+        Shadows.shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(bluetooth)
+    }
+    private fun permissions(enabled: Boolean) {
+        ShadowSettings.setCanDrawOverlays(enabled)
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners",
+            if (enabled) "${app.packageName}/.media.MediaWatcher" else "")
+        Shadows.shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
+            AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName,
+            if (enabled) AppOpsManager.MODE_ALLOWED else AppOpsManager.MODE_IGNORED)
+    }
+    private fun install(label: String) {
+        val cn = ComponentName(pkg, "$pkg.Main")
+        val pm = Shadows.shadowOf(app.packageManager)
+        pm.addOrUpdateActivity(ActivityInfo().apply {
+            name = cn.className; packageName = pkg; nonLocalizedLabel = label
+        })
+        pm.addIntentFilterForActivity(cn, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+    }
+    private fun broadcast(action: String, packages: Boolean = false) {
+        rule.runOnIdle {
+            app.sendBroadcast(if (packages) Intent(action, Uri.parse("package:$pkg")) else Intent(action))
+        }
+        rule.waitForIdle()
+    }
+    @Test fun environment_resume_refreshesPermissionsAndRadios() {
+        Shadows.shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        permissions(false); radios(false, false); host()
+        rule.runOnIdle { assertEquals(DockStatus(false, false), result.dockStatus); assertTrue(result.needsPermission) }
+        rule.runOnIdle { owner.stop(); permissions(true); radios(true, true); owner.resume() }
+        rule.runOnIdle { assertEquals(DockStatus(true, true), result.dockStatus); assertFalse(result.needsPermission) }
+    }
+    @Test fun environment_radioBroadcast_refreshesWithoutMediaChange() {
+        Shadows.shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        radios(false, false); host()
+        val before = result.revision
+        rule.runOnIdle { radios(true, false) }
+        broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        rule.runOnIdle { assertEquals(DockStatus(true, false), result.dockStatus); assertEquals(before + 1, result.revision) }
+        rule.runOnIdle { radios(true, true) }
+        broadcast(BluetoothAdapter.ACTION_STATE_CHANGED)
+        rule.runOnIdle { assertEquals(true, result.dockStatus.bluetoothOn) }
+        rule.runOnIdle { Shadows.shadowOf(app).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT) }
+        broadcast(BluetoothAdapter.ACTION_STATE_CHANGED)
+        rule.runOnIdle { assertNull(result.dockStatus.bluetoothOn) }
+    }
+    @Test fun environment_dispose_unregistersObserversAndReceivers() {
+        val states = mutableSetOf<State<*>>()
+        val observer = Snapshot.registerApplyObserver { changed, _ ->
+            changed.forEach { value ->
+                if (value is State<*> && value.value is PanelEnvironment) states.add(value)
+            }
+        }
+        try {
+            host()
+            assertEquals(2, registered.size)
+            assertTrue(unregistered.isEmpty())
+            broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            val oldState = states.single()
+            val oldEnvironment = oldState.value
+            val oldOwner = owner
+            assertEquals(1, oldOwner.registry.observerCount)
+            rule.runOnIdle { visible.value = false }
+            rule.waitForIdle()
+            assertEquals(registered, unregistered)
+            assertEquals(0, oldOwner.registry.observerCount)
+            val before = reads
+            broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            broadcast(BluetoothAdapter.ACTION_STATE_CHANGED)
+            broadcast(Intent.ACTION_PACKAGE_ADDED, true)
+            rule.runOnIdle { oldOwner.stop(); oldOwner.resume(); assertEquals(before, reads) }
+            assertEquals(oldEnvironment, oldState.value)
+            rule.runOnIdle { visible.value = true }
+            rule.waitForIdle()
+            assertEquals(4, registered.size)
+            assertEquals(2, unregistered.size)
+            assertEquals(1, owner.registry.observerCount)
+            val revision = result.revision
+            broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            rule.runOnIdle { assertEquals(revision + 1, result.revision) }
+            assertEquals(oldEnvironment, oldState.value)
+            rule.runOnIdle { visible.value = false }
+            rule.waitForIdle()
+            assertEquals(registered, unregistered)
+            assertEquals(0, owner.registry.observerCount)
+        } finally {
+            observer.dispose()
+        }
+    }
+    @Test fun environment_packageBroadcast_refreshesInstalledAndEntries() {
+        host()
+        rule.runOnIdle { install("First") }
+        broadcast(Intent.ACTION_PACKAGE_ADDED, true)
+        rule.runOnIdle { assertTrue(pkg in result.installedPkgs); assertEquals("First", result.appListEntries.single { it.pkg == pkg }.label) }
+        rule.runOnIdle { Shadows.shadowOf(app.packageManager).removePackage(pkg) }
+        broadcast(Intent.ACTION_PACKAGE_REMOVED, true)
+        rule.runOnIdle { assertFalse(pkg in result.installedPkgs); assertFalse(result.appListEntries.any { it.pkg == pkg }) }
+        rule.runOnIdle { install("Changed") }
+        broadcast(Intent.ACTION_PACKAGE_CHANGED, true)
+        rule.runOnIdle { assertTrue(pkg in result.installedPkgs); assertEquals("Changed", result.appListEntries.single { it.pkg == pkg }.label) }
+    }
+    @Test fun environment_resume_refreshesPackagesMissedWhileHidden() {
+        install("Before")
+        Shadows.shadowOf(app.packageManager).setApplicationIcon(pkg, ColorDrawable(Color.RED))
+        host()
+        assertEquals(Color.RED, catalog.icon(pkg)!!.asAndroidBitmap().getPixel(48, 48))
+        rule.runOnIdle {
+            owner.stop()
+            Shadows.shadowOf(app.packageManager).removePackage(pkg)
+            install("After")
+            installOther()
+            Shadows.shadowOf(app.packageManager).setApplicationIcon(pkg, ColorDrawable(Color.GREEN))
+            owner.resume()
+        }
+        rule.runOnIdle {
+            assertTrue("example.other" in result.installedPkgs)
+            assertEquals("After", result.appListEntries.single { it.pkg == pkg }.label)
+            assertEquals(Color.GREEN, catalog.icon(pkg)!!.asAndroidBitmap().getPixel(48, 48))
+        }
+    }
+    private fun installOther() {
+        val cn = ComponentName("example.other", "example.other.Main")
+        val pm = Shadows.shadowOf(app.packageManager)
+        pm.addOrUpdateActivity(ActivityInfo().apply { name = cn.className; packageName = cn.packageName })
+        pm.addIntentFilterForActivity(cn, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+    }
+}

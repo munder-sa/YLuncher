@@ -12,6 +12,10 @@ import java.util.concurrent.ConcurrentHashMap
 class AppCatalog(private val context: Context) {
     private val iconCache = ConcurrentHashMap<String, ImageBitmap>()
 
+    fun invalidatePackage(pkg: String) { iconCache.remove(pkg) }
+
+    fun invalidateAllIcons() { iconCache.clear() }
+
     fun installed(): Set<String> {
         return runCatching {
             val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)

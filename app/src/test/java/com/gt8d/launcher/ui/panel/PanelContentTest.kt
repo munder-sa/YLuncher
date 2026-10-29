@@ -18,6 +18,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
@@ -25,6 +28,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -37,6 +41,65 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelContentTest {
+
+    @Test
+    fun panel_narrowShortWithFavorite_allControlsReachable() {
+        val events = mutableListOf<String>()
+        val seeks = mutableListOf<Long>()
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.size(516.dp, 400.dp)) {
+                    PanelContent(
+                        PanelState(
+                            NowPlaying("music", "Song", "Artist", null, 200000L, true, true),
+                            null, 50000L,
+                            (1..5).map { AppInfo("panel$it", "Panel $it", null, true) },
+                            (1..4).map { AppInfo("dock$it", "Dock $it", null, true) },
+                            DockStatus(true, true), true, true,
+                        ),
+                        PanelActions(
+                            onMediaAction = { events.add(it.name) },
+                            onSeek = { seeks.add(it) }, onLaunch = { events.add(it) },
+                            onAdd = { events.add("add") }, onHome = { events.add("home") },
+                            onSplit = { events.add("split") }, onCar = { events.add("car") },
+                            onAppList = { events.add("applist") }, onAppListLongPress = {},
+                            onOpenPermissions = { events.add("permission") },
+                        ),
+                    )
+                }
+            }
+        }
+        val targets = listOf(
+            "permission_banner" to "permission", "progress" to "seek",
+            "btn_prev" to "Prev", "btn_playpause" to "Pause", "btn_next" to "Next",
+            "btn_favorite" to "Favorite",
+        ) + (1..5).map { "icon_panel$it" to "panel$it" } +
+            listOf("icon_add" to "add") + (1..4).map { "dock_app_dock$it" to "dock$it" } +
+            listOf("dock_home" to "home", "dock_split" to "split", "dock_car" to "car", "dock_applist" to "applist")
+        for ((tag, expected) in targets) {
+            val node = rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+            val bounds = node.getBoundsInRoot()
+            assertTrue("$tag width", bounds.width >= 72.dp)
+            assertTrue("$tag height: ${bounds.height}; bounds: $bounds", bounds.height >= 72.dp)
+            assertTrue("$tag left", bounds.left >= 0.dp)
+            assertTrue("$tag right", bounds.right <= 516.dp)
+            if (tag == "progress") {
+                node.performTouchInput {
+                    down(center); moveTo(Offset(width - 1f, centerY))
+                }
+                rule.runOnIdle { assertEquals(emptyList<Long>(), seeks) }
+                node.performTouchInput { up() }
+                rule.runOnIdle { assertEquals(listOf(200000L), seeks) }
+            } else {
+                val count = events.size
+                node.performTouchInput { down(center); up() }
+                rule.runOnIdle {
+                    assertEquals(count + 1, events.size)
+                    assertEquals(expected, events.last())
+                }
+            }
+        }
+    }
 
     @get:Rule(order = 0)
     val registerActivityRule = object : ExternalResource() {

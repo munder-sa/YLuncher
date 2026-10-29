@@ -8,6 +8,57 @@ import org.junit.Test
 class PanelForwarderTest {
 
     @Test
+    fun forwarder_openingStartsDuringWait_suppressesTimerThenForwardsOnClear() {
+        val scheduler = FakeScheduler()
+        var opening: Opening? = null
+        var forwarded = 0
+        val forwarder = PanelForwarder({ opening }, scheduler)
+        forwarder.onShown(false) { forwarded++ }
+        scheduler.advanceBy(1000L)
+        opening = Opening("a", "b", 1000L)
+        scheduler.advanceBy(500L)
+        assertEquals(0, forwarded)
+        scheduler.advanceBy(5000L)
+        assertEquals(0, forwarded)
+        opening = null
+        forwarder.onOpeningCleared()
+        assertEquals(1, forwarded)
+        forwarder.onOpeningCleared()
+        scheduler.advanceBy(5000L)
+        assertEquals(1, forwarded)
+    }
+
+    @Test
+    fun forwarder_staleClearWhileOpening_doesNotForward() {
+        val scheduler = FakeScheduler()
+        var opening: Opening? = Opening("a", "b", 1000L)
+        var forwarded = 0
+        val forwarder = PanelForwarder({ opening }, scheduler)
+        forwarder.onShown(false) { forwarded++ }
+        forwarder.onOpeningCleared()
+        assertEquals(0, forwarded)
+        opening = null
+        forwarder.onOpeningCleared()
+        assertEquals(1, forwarded)
+    }
+
+    @Test
+    fun forwarder_openingStartsDuringWait_thenHidden_neverForwards() {
+        val scheduler = FakeScheduler()
+        var opening: Opening? = null
+        var forwarded = 0
+        val forwarder = PanelForwarder({ opening }, scheduler)
+        forwarder.onShown(false) { forwarded++ }
+        scheduler.advanceBy(1000L)
+        opening = Opening("a", "b", 1000L)
+        forwarder.onHidden()
+        scheduler.advanceBy(5500L)
+        opening = null
+        forwarder.onOpeningCleared()
+        assertEquals(0, forwarded)
+    }
+
+    @Test
     fun forwarder_noForwardWhileOpening() {
         val scheduler = FakeScheduler()
         var currentOpening: Opening? = Opening("a", "b", 100L)

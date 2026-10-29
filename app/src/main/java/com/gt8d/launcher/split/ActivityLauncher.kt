@@ -14,6 +14,20 @@ interface ActivityLauncher {
 }
 
 class AndroidActivityLauncher(private val context: Context) : ActivityLauncher {
+    fun startComponent(component: ComponentName, adjacent: Boolean): Boolean {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            .setComponent(component)
+            .addFlags(if (adjacent) {
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+            } else Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     override fun canResolve(pkg: String, cls: String): Boolean {
         val intent = Intent().setComponent(ComponentName(pkg, cls))
         return context.packageManager.resolveActivity(intent, 0) != null
