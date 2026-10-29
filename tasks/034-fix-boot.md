@@ -166,25 +166,32 @@ v1ファイルを読み、全体比較する。
 再読込でも全体比較し、ディスクの JSON の version が2であること、
 `config.bak.json` が存在しないことを検証する。
 
-### 6. LauncherApp の接続の検証(E6)
+### 6. LauncherApp の接続の検証(E6)(司令塔が書き直した版)
 
 `T/LauncherAppTest.kt` は Robolectric、sdk 35、LooperMode.PAUSED。
 全体の `robolectric.properties` と TestApp は変更しない。
-専用テストから `Robolectric.buildApplication(LauncherApp::class.java).create()` で実際の onCreate を呼ぶ。
+このプロジェクトの Robolectric 4.14.1 には `Robolectric.buildApplication` が無い。代わりに、テストクラスに
+`@Config(sdk = [35], application = LauncherApp::class)` を付ける。Robolectric は各テストの前(`@Before` より前)に
+`LauncherApp` を作って `onCreate` を1回呼ぶ。テストからは `ApplicationProvider.getApplicationContext<LauncherApp>()` で取る。
+`onCreate` をテストから再度呼ばない。
 
-テスト開始前に既定の UncaughtExceptionHandler を保存する。
-テスト用の前任ハンドラーを登録し、テスト終了時は finally または @After で必ず元へ戻す。
-捕捉したハンドラーを直接呼び、実際のスレッドをクラッシュさせない。
-main looper の残ったコールバックを終了時に除去する。
+順序の扱い:
+- 前任のハンドラー: `companion object` の `@BeforeClass @JvmStatic` で、元の既定ハンドラーを保存し、テスト用の前任ハンドラー
+  (受け取った Thread と Throwable を記録するだけのもの)を既定に設定する。`@After` で既定を、このテスト用の前任ハンドラーに戻す
+  (次のテストの `LauncherApp` が、前のテストの LauncherApp のハンドラーを包まないように)。記録はテストごとに `@Before` で消す。
+  `@AfterClass @JvmStatic` で元の既定ハンドラーに戻す。
+- 安全装置の状態: `onCreate` が `@Before` より前に開始時刻を記録するので、`@Before` では消さない。各テストの `@After` で、
+  安全装置のファイルと退避の状態を消す(次のテストに引き継がない)。
+- main looper の残ったコールバックは `@After` で除去する。
 
-安全装置の状態は各テストの開始時に初期化し、テスト間で引き継がない。
 安全装置への接続を確かめるため、安全装置のファイルを JSON として読み、
 startElapsed・crashes・fallback を検証してよい。
 SafetyGuard の private API を呼ぶためのリフレクションは使わない。
+捕捉したハンドラー(`Thread.getDefaultUncaughtExceptionHandler()`)を直接呼び、実際のスレッドをクラッシュさせない。
 
 検証対象:
 - onCreate が開始時刻を記録する。
-- 開始9999msではクラッシュ履歴を消さず、10000msで消す。
+- 開始9999msではクラッシュ履歴を消さず、10000msで消す(main looper の時間を進める)。
 - 登録された例外ハンドラーがクラッシュを記録する。
 - 同一の Thread と Throwable を前任ハンドラーへ1回渡す。
 

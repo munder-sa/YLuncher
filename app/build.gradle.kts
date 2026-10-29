@@ -65,6 +65,16 @@ android {
         unitTests.all {
             it.forkEvery = 1
             it.maxParallelForks = 4
+            // Android 本体の jar が手元にあれば、Robolectric をオフラインで使う。
+            // codex のサンドボックスではホームに書けず、通常のダウンロード用ロックファイルを作れないため
+            val androidAllDir = File(
+                System.getProperty("user.home"),
+                ".m2/repository/org/robolectric/android-all-instrumented/15-robolectric-12650502-i7",
+            )
+            if (androidAllDir.isDirectory) {
+                it.systemProperty("robolectric.offline", "true")
+                it.systemProperty("robolectric.dependency.dir", androidAllDir.path)
+            }
         }
     }
 }
