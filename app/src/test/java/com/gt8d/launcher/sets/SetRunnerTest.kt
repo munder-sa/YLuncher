@@ -9,6 +9,7 @@ import com.gt8d.launcher.curtain.CurtainTarget
 import com.gt8d.launcher.curtain.CurtainView
 import com.gt8d.launcher.curtain.HideReason
 import com.gt8d.launcher.foreground.ForegroundEvents
+import com.gt8d.launcher.foreground.ForegroundEventsUnavailableException
 import com.gt8d.launcher.foreground.ForegroundWatcher
 import com.gt8d.launcher.foreground.ResumeEvent
 import com.gt8d.launcher.foreground.WarmTracker
@@ -30,6 +31,255 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SetRunnerTest {
+    @Test
+    fun directLaunchSuccess_withoutUsageAccess_makesNextOpenWarm() {
+        val env = TestEnv(watcherAvailable = false)
+        env.selector.onFailure(FailReason.EntryMissing, countable = true)
+        env.runner.open(1)
+        env.scheduler.advanceBy(3499)
+        assertTrue(env.curtain.isShowing)
+        env.scheduler.advanceBy(1)
+        assertFalse(env.curtain.isShowing)
+        assertEquals(listOf(HideReason.Timed), env.curtainView.hiddenReasons)
+        env.runner.open(1)
+        env.scheduler.advanceBy(799)
+        assertTrue(env.curtain.isShowing)
+        env.scheduler.advanceBy(1)
+        assertFalse(env.curtain.isShowing)
+        assertEquals(listOf(HideReason.Timed, HideReason.Timed), env.curtainView.hiddenReasons)
+        assertEquals(2, env.apps.startAppCalls.size)
+        assertTrue(env.warm.isWarm("youtube"))
+        assertEquals(0, env.runner.readyCount)
+        assertEquals(0, env.selector.state.consecutiveFailures)
+    }
+
+    @Test
+    fun directLaunchFailure_withoutUsageAccess_keepsNextOpenCold() {
+        val env = TestEnv(watcherAvailable = false)
+        env.apps.startAppResult = false
+        env.selector.onFailure(FailReason.EntryMissing, countable = true)
+        repeat(2) { operation ->
+            env.runner.open(1)
+            env.scheduler.advanceBy(3499)
+            assertTrue(env.curtain.isShowing)
+            env.scheduler.advanceBy(1)
+            assertFalse(env.curtain.isShowing)
+            assertEquals(List(operation + 1) { HideReason.Timed }, env.curtainView.hiddenReasons)
+            assertFalse(env.warm.isWarm("youtube"))
+        }
+        assertEquals(2, env.apps.startAppCalls.size)
+        assertEquals(0, env.runner.readyCount)
+        assertEquals(0, env.selector.state.consecutiveFailures)
+    }
+
+    private fun completeBootSetTwo(env: TestEnv) {
+        env.events.events.add(ResumeEvent("youtube", 100))
+        env.events.events.add(ResumeEvent("applemusic", 120))
+        env.scheduler.advanceBy(200)
+    }
+
+    @Test
+    fun pendingBootSet_preservesNoCurtainAndUncountedTimeout() {
+        val env = TestEnv()
+        env.runner.openForBoot(2)
+        env.runner.openForBoot(3)
+        completeBootSetTwo(env)
+        assertEquals(3, env.runner.currentIndex)
+        assertEquals(SplitCall("youtube", "maps", SplitRatio.R5_5), env.vendor.calls.last())
+        assertEquals(0, env.curtainView.shownTargets.size)
+        env.scheduler.advanceBy(9999)
+        assertNotNull(env.runner.opening.value)
+        env.scheduler.advanceBy(1)
+        assertNull(env.runner.opening.value)
+        assertEquals(0, env.selector.state.consecutiveFailures)
+    }
+
+    @Test
+    fun pendingBootHome_startsHomeWithoutCurtain() {
+        val env = TestEnv()
+        env.runner.openForBoot(2)
+        env.runner.openForBoot(0)
+        completeBootSetTwo(env)
+        assertEquals(1, env.startHomeCount)
+        assertEquals(0, env.runner.currentIndex)
+        assertEquals(0, env.lastIndex.lastSetIndex)
+        assertNull(env.runner.lastOpenedPair)
+        assertNull(env.runner.lastOpenedAtMs)
+        assertEquals(0, env.curtainView.shownTargets.size)
+    }
+
+    @Test
+    fun pendingLatestRequest_preservesItsOwnRoute() {
+        val normal = TestEnv()
+        normal.runner.openForBoot(2)
+        normal.runner.openForBoot(1)
+        normal.runner.open(3)
+        completeBootSetTwo(normal)
+        assertEquals(3, normal.runner.currentIndex)
+        assertEquals(1, normal.curtainView.shownTargets.size)
+        assertTrue(normal.curtain.isShowing)
+
+        val boot = TestEnv()
+        boot.runner.openForBoot(2)
+        boot.runner.open(1)
+        boot.runner.openForBoot(3)
+        completeBootSetTwo(boot)
+        assertEquals(3, boot.runner.currentIndex)
+        assertEquals(0, boot.curtainView.shownTargets.size)
+        assertFalse(boot.curtain.isShowing)
+    }
+
+    @Test
+    fun nextAfterPendingBoot_usesPendingIndexAndNormalRoute() {
+        val env = TestEnv()
+        env.runner.openForBoot(1)
+        env.runner.openForBoot(2)
+        env.runner.next()
+        env.events.events.add(ResumeEvent("youtube", 100))
+        env.runner.panelResumedInSplit()
+        env.scheduler.advanceBy(200)
+        assertEquals(3, env.runner.currentIndex)
+        assertEquals(SplitCall("youtube", "maps", SplitRatio.R5_5), env.vendor.calls.last())
+        assertEquals(1, env.curtainView.shownTargets.size)
+        assertTrue(env.curtain.isShowing)
+    }
+
+    @Test
+    fun retryEntryMissing_disablesVendorImmediately() {
+        val env = TestEnv()
+        env.runner.open(2)
+        env.scheduler.advanceBy(2999)
+        env.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+        env.scheduler.advanceBy(1)
+        assertEquals(2, env.vendor.calls.size)
+        assertFalse(env.selector.state.vendorUsable)
+        assertEquals(FailReason.EntryMissing, env.selector.state.lastFailure)
+        assertEquals(listOf(StartAppCall("youtube", false)), env.apps.startAppCalls)
+        assertEquals(1, env.messenger.splitUnavailableCount)
+        assertNull(env.runner.opening.value)
+    }
+
+    @Test
+    fun retryException_countsOnce_andCancelsTimeout() {
+        val env = TestEnv()
+        env.runner.open(2)
+        env.scheduler.advanceBy(2999)
+        env.vendor.result = LaunchResult.Failed(FailReason.Exception)
+        env.scheduler.advanceBy(1)
+        assertEquals(1, env.selector.state.consecutiveFailures)
+        assertEquals(FailReason.Exception, env.selector.state.lastFailure)
+        assertEquals(listOf(HideReason.Failed), env.curtainView.hiddenReasons)
+        assertNull(env.runner.opening.value)
+        env.scheduler.advanceBy(7000)
+        assertEquals(1, env.selector.state.consecutiveFailures)
+        assertEquals(2, env.vendor.calls.size)
+        assertEquals(0, env.messenger.switchFailedCount)
+    }
+
+    @Test
+    fun bootRetryException_countsKnownFailureWithoutCurtain() {
+        val env = TestEnv()
+        env.runner.openForBoot(2)
+        env.scheduler.advanceBy(2999)
+        env.vendor.result = LaunchResult.Failed(FailReason.Exception)
+        env.scheduler.advanceBy(1)
+        assertEquals(1, env.selector.state.consecutiveFailures)
+        assertEquals(FailReason.Exception, env.selector.state.lastFailure)
+        assertEquals(listOf(StartAppCall("youtube", false)), env.apps.startAppCalls)
+        assertNull(env.runner.opening.value)
+        assertEquals(0, env.curtainView.shownTargets.size)
+        env.scheduler.advanceBy(7000)
+        assertEquals(1, env.selector.state.consecutiveFailures)
+        assertEquals(FailReason.Exception, env.selector.state.lastFailure)
+        assertEquals(2, env.vendor.calls.size)
+    }
+
+    @Test
+    fun linkRetryFailure_callsFallbackOnce() {
+        val env = TestEnv()
+        var calls = 0
+        env.runner.openForLink("youtube") { calls++ }
+        env.scheduler.advanceBy(2999)
+        env.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+        env.scheduler.advanceBy(1)
+        assertEquals(1, calls)
+        assertNull(env.runner.opening.value)
+        assertEquals(listOf(HideReason.Failed), env.curtainView.hiddenReasons)
+        env.scheduler.advanceBy(7000)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun queryFailure_threeOperations_doNotDisableVendor() {
+        val env = TestEnv()
+        env.events.queryFails = true
+        repeat(3) { operation ->
+            env.runner.open(2)
+            env.scheduler.advanceBy(3499)
+            assertNotNull(env.runner.opening.value)
+            env.scheduler.advanceBy(1)
+            assertNull(env.runner.opening.value)
+            assertEquals(operation + 1, env.vendor.calls.size)
+            assertEquals(List(operation + 1) { HideReason.Timed }, env.curtainView.hiddenReasons)
+            assertEquals(0, env.selector.state.consecutiveFailures)
+            assertTrue(env.selector.state.vendorUsable)
+            assertEquals(0, env.messenger.switchFailedCount)
+            assertEquals(0, env.runner.readyCount)
+        }
+    }
+
+    @Test
+    fun queryFailureDuringWait_stopsRetryAndTimeoutCounting() {
+        val env = TestEnv()
+        env.runner.open(2)
+        env.scheduler.advanceBy(1000)
+        env.events.queryFails = true
+        env.scheduler.advanceBy(2000)
+        assertEquals(1, env.vendor.calls.size)
+        env.scheduler.advanceBy(499)
+        assertNotNull(env.runner.opening.value)
+        env.scheduler.advanceBy(1)
+        assertNull(env.runner.opening.value)
+        assertFalse(env.curtain.isShowing)
+        assertEquals(listOf(HideReason.Ready), env.curtainView.hiddenReasons)
+        env.scheduler.advanceBy(6500)
+        assertEquals(0, env.selector.state.consecutiveFailures)
+        assertEquals(0, env.runner.readyCount)
+        assertEquals(0, env.messenger.switchFailedCount)
+    }
+
+    @Test
+    fun linkQueryFailureDuringWait_callsFallbackOnce() {
+        val env = TestEnv()
+        var calls = 0
+        env.runner.openForLink("youtube") { calls++ }
+        env.scheduler.advanceBy(1000)
+        env.events.queryFails = true
+        env.scheduler.advanceBy(2499)
+        assertEquals(0, calls)
+        env.scheduler.advanceBy(1)
+        assertEquals(1, calls)
+        assertNull(env.runner.opening.value)
+        env.scheduler.advanceBy(6500)
+        assertEquals(1, calls)
+        assertEquals(0, env.selector.state.consecutiveFailures)
+        assertEquals(0, env.runner.readyCount)
+    }
+
+    @Test
+    fun futureResumeEvents_doNotCompleteBeforeTheirTime() {
+        val env = TestEnv()
+        env.runner.open(2)
+        env.events.events.add(ResumeEvent("youtube", 250L))
+        env.events.events.add(ResumeEvent("applemusic", 280L))
+        env.scheduler.advanceBy(200L)
+        assertEquals(0, env.runner.readyCount)
+        assertNotNull(env.runner.opening.value)
+        env.scheduler.advanceBy(200L)
+        assertEquals(1, env.runner.readyCount)
+        assertNull(env.runner.opening.value)
+    }
+
     @Test
     fun openForLink_opensVendorWithPanelRight_keepsLastIndex() {
         val env = TestEnv(initialLastSetIndex = 2)
@@ -148,6 +398,7 @@ class SetRunnerTest {
     }
 
     private class FakeActivityLauncher : ActivityLauncher {
+        var startAppResult = true
         val startAppCalls = mutableListOf<StartAppCall>()
         val unresizeablePkgs = mutableSetOf<String>()
 
@@ -155,7 +406,7 @@ class SetRunnerTest {
         override fun start(spec: LaunchSpec) {}
         override fun startApp(pkg: String, adjacent: Boolean): Boolean {
             startAppCalls.add(StartAppCall(pkg, adjacent))
-            return true
+            return startAppResult
         }
         override fun isResizeable(pkg: String): Boolean = pkg !in unresizeablePkgs
     }
@@ -181,11 +432,16 @@ class SetRunnerTest {
     }
 
     private class FakeForegroundEvents(
+        private val nowMs: () -> Long,
         var isAvailable: Boolean = true,
     ) : ForegroundEvents {
         val events = mutableListOf<ResumeEvent>()
+        var queryFails = false
         override fun available(): Boolean = isAvailable
-        override fun resumedSince(sinceMs: Long): List<ResumeEvent> = events.toList()
+        override fun resumedSince(sinceMs: Long): List<ResumeEvent> {
+            if (queryFails) throw ForegroundEventsUnavailableException()
+            return events.filter { it.timeMs >= sinceMs && it.timeMs <= nowMs() }
+        }
     }
 
     private class MemorySplitModeStore(
@@ -237,10 +493,10 @@ class SetRunnerTest {
         val vendor = FakeSplitLauncher()
         val appPair = FakeSplitLauncher()
         val apps = FakeActivityLauncher()
-        val events = FakeForegroundEvents(watcherAvailable)
+        val scheduler = FakeScheduler()
+        val events = FakeForegroundEvents(nowMs = { scheduler.nowMs() }, isAvailable = watcherAvailable)
         val watcher = ForegroundWatcher(events)
         val warm = WarmTracker(ownPkg, ownTaskExists)
-        val scheduler = FakeScheduler()
         val curtainView = FakeCurtainView()
         val curtain = CurtainController(scheduler, curtainView)
         var startHomeCount = 0
@@ -531,6 +787,12 @@ class SetRunnerTest {
         env.events.events.add(ResumeEvent("applemusic", 280L))
         env.scheduler.advanceBy(200L)
 
+        assertEquals(0, env.runner.readyCount)
+        assertNotNull(env.runner.opening.value)
+        env.scheduler.advanceBy(199L)
+        assertEquals(0, env.runner.readyCount)
+        env.scheduler.advanceBy(1L)
         assertEquals(1, env.runner.readyCount)
+        assertNull(env.runner.opening.value)
     }
 }

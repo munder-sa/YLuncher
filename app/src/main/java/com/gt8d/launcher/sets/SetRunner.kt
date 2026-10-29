@@ -81,9 +81,12 @@ class SetRunner(private val d: SetRunnerDeps) {
     var readyCount: Int = 0
         private set
 
-    private var pending: Int? = null
+    private data class PendingOpen(val index: Int, val forBoot: Boolean)
+    private var pending: PendingOpen? = null
     private var waitKind: WaitKind = WaitKind.None
     private var panelResumed: Boolean = false
+    private var monitoringAvailable: Boolean = true
+    private var expectedDelayMs: Long = WarmTracker.COLD_MS
     private val activeTimers = mutableListOf<Cancellable>()
 
     init {
@@ -91,7 +94,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun next() {
-        val base = pending ?: currentIndex
+        val base = pending?.index ?: currentIndex
         val setCount = d.config().screenSets.size
         val target = SetNavigator.next(base, setCount)
         DiagLog.d("SetRunner", "next base=$base -> $target")
@@ -99,7 +102,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun prev() {
-        val base = pending ?: currentIndex
+        val base = pending?.index ?: currentIndex
         val setCount = d.config().screenSets.size
         val target = SetNavigator.prev(base, setCount)
         DiagLog.d("SetRunner", "prev base=$base -> $target")
@@ -109,7 +112,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     fun home() {
         DiagLog.d("SetRunner", "home")
         if (_opening.value != null) {
-            pending = SetNavigator.HOME
+            pending = PendingOpen(SetNavigator.HOME, false)
             d.curtain.update(targetFor(SetNavigator.HOME))
             return
         }
@@ -125,7 +128,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     fun open(index: Int) {
         DiagLog.d("SetRunner", "open index=$index")
         if (_opening.value != null) {
-            pending = index
+            pending = PendingOpen(index, false)
             d.curtain.update(targetFor(index))
             DiagLog.d("SetRunner", "open deferred pending=$index")
             return
@@ -140,7 +143,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     fun openForBoot(index: Int) {
         DiagLog.d("SetRunner", "openForBoot index=$index")
         if (_opening.value != null) {
-            pending = index
+            pending = PendingOpen(index, true)
             return
         }
         if (index == SetNavigator.HOME) {
@@ -215,21 +218,23 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
 
         val startMs = d.clock.nowMs()
+        d.watcher.foregroundPkgsSince(startMs)
+        monitoringAvailable = d.watcher.available()
+        expectedDelayMs = d.warm.expectedDelayMs(left, right)
         panelResumed = false
         _opening.value = Opening(left, right, startMs)
         lastOpenedPair = left to right
         lastOpenedAtMs = startMs
 
         if (useCurtain) {
-            val expectedMs = d.warm.expectedDelayMs(left, right)
-            d.curtain.show(target, expectedMs, d.watcher.available())
+            d.curtain.show(target, expectedDelayMs, monitoringAvailable)
         }
 
         val installedPkgs = d.installed()
         if (left !in installedPkgs) {
             DiagLog.d("SetRunner", "left uninstalled: $left")
             if (!isPanelRight && right in installedPkgs) {
-                d.apps.startApp(right, false)
+                d.warm.recordAppLaunch(right, d.apps.startApp(right, false))
                 waitSingle(right, startMs, useCurtain)
             } else {
                 d.startHome()
@@ -241,7 +246,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         if (!isPanelRight && right !in installedPkgs) {
             DiagLog.d("SetRunner", "right uninstalled: $right")
-            d.apps.startApp(left, false)
+            d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
             waitSingle(left, startMs, useCurtain)
             notifyLinkNotSplit()
             return
@@ -251,7 +256,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         val rightResizeable = if (isPanelRight) true else d.apps.isResizeable(right)
         if (!leftResizeable || !rightResizeable) {
             DiagLog.d("SetRunner", "unresizeable left=$leftResizeable right=$rightResizeable")
-            d.apps.startApp(left, false)
+            d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
             d.messenger.showSplitUnavailable()
             waitSingle(left, startMs, useCurtain)
             notifyLinkNotSplit()
@@ -267,7 +272,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         if (launcher == null) {
             DiagLog.d("SetRunner", "leftOnly mode=$mode")
-            d.apps.startApp(left, false)
+            d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
             d.messenger.showSplitUnavailable()
             waitSingle(left, startMs, useCurtain)
             notifyLinkNotSplit()
@@ -279,15 +284,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         when (result) {
             is LaunchResult.Failed -> {
-                d.selector.onFailure(result.reason, countable = true)
-                d.apps.startApp(left, false)
-                d.messenger.showSplitUnavailable()
-                notifyLinkNotSplit()
-                if (useCurtain) {
-                    d.curtain.fail()
-                } else {
-                    finishWithoutCurtain()
-                }
+                handleLaunchFailure(result.reason, left, useCurtain)
             }
             is LaunchResult.Started -> {
                 waitBoth(
@@ -303,6 +300,20 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
     }
 
+    private fun handleLaunchFailure(reason: FailReason, left: String, useCurtain: Boolean) {
+        waitKind = WaitKind.None
+        cancelTimers()
+        d.selector.onFailure(reason, countable = true)
+        d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
+        d.messenger.showSplitUnavailable()
+        notifyLinkNotSplit()
+        if (useCurtain) {
+            d.curtain.fail()
+        } else {
+            finishWithoutCurtain()
+        }
+    }
+
     private fun waitBoth(
         left: String,
         right: String,
@@ -315,17 +326,21 @@ class SetRunner(private val d: SetRunnerDeps) {
         waitKind = WaitKind.Both
 
         fun isBothReady(): Boolean {
+            if (!monitoringAvailable) return false
+            val resumed = d.watcher.bothResumed(left, right.takeUnless { isPanelRight } ?: left, startMs)
             return if (isPanelRight) {
-                panelResumed && d.watcher.bothResumed(left, left, startMs)
+                panelResumed && resumed
             } else {
-                d.watcher.bothResumed(left, right, startMs)
+                resumed
             }
         }
 
         fun schedulePoll() {
             val timer = d.scheduler.schedule(POLL_MS) {
                 if (_opening.value == null) return@schedule
-                if (isBothReady()) {
+                val ready = isBothReady()
+                if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
+                if (ready) {
                     linkFallback = null
                     DiagLog.d("SetRunner", "waitBoth ready left=$left right=$right")
                     waitKind = WaitKind.None
@@ -346,12 +361,18 @@ class SetRunner(private val d: SetRunnerDeps) {
             activeTimers.add(timer)
         }
 
-        schedulePoll()
+        if (monitoringAvailable) schedulePoll()
 
         val retryTimer = d.scheduler.schedule(RETRY_AT_MS) {
-            if (_opening.value != null && !isBothReady() && d.watcher.available()) {
+            if (_opening.value == null || !monitoringAvailable) return@schedule
+            val ready = isBothReady()
+            if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
+            if (!ready) {
                 DiagLog.d("SetRunner", "retry at $RETRY_AT_MS left=$left right=$right")
-                launcher.open(left, right, ratio)
+                val result = launcher.open(left, right, ratio)
+                if (result is LaunchResult.Failed) {
+                    handleLaunchFailure(result.reason, left, useCurtain)
+                }
             }
         }
         activeTimers.add(retryTimer)
@@ -375,7 +396,9 @@ class SetRunner(private val d: SetRunnerDeps) {
         fun schedulePoll() {
             val timer = d.scheduler.schedule(POLL_MS) {
                 if (_opening.value == null) return@schedule
-                if (d.watcher.lastForegroundSince(startMs) == pkg) {
+                val foreground = d.watcher.lastForegroundSince(startMs)
+                if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
+                if (foreground == pkg) {
                     DiagLog.d("SetRunner", "waitSingle ready pkg=$pkg")
                     waitKind = WaitKind.None
                     cancelTimers()
@@ -393,7 +416,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             activeTimers.add(timer)
         }
 
-        schedulePoll()
+        if (monitoringAvailable) schedulePoll()
 
         if (!useCurtain) {
             val bootTimer = d.scheduler.schedule(BOOT_CLEAR_MS) {
@@ -408,6 +431,27 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
     }
 
+    private fun stopMonitoringIfUnavailable(startMs: Long, useCurtain: Boolean): Boolean {
+        if (!monitoringAvailable) return true
+        if (d.watcher.available()) return false
+        monitoringAvailable = false
+        waitKind = WaitKind.None
+        if (useCurtain) {
+            val remainingMs = startMs + expectedDelayMs - d.clock.nowMs()
+            if (remainingMs <= 0) {
+                notifyLinkNotSplit()
+                d.curtain.ready()
+            } else {
+                activeTimers.add(d.scheduler.schedule(remainingMs) {
+                    waitKind = WaitKind.None
+                    notifyLinkNotSplit()
+                    d.curtain.ready()
+                })
+            }
+        }
+        return true
+    }
+
     private fun onCurtainHidden(reason: HideReason) {
         DiagLog.d("SetRunner", "onCurtainHidden reason=$reason waitKind=$waitKind")
         val kind = waitKind
@@ -416,7 +460,9 @@ class SetRunner(private val d: SetRunnerDeps) {
         waitKind = WaitKind.None
         cancelTimers()
         _opening.value = null
-        if (reason == HideReason.Safety && kind == WaitKind.Both) {
+        if (!monitoringAvailable) {
+            fallback?.invoke()
+        } else if (reason == HideReason.Safety && kind == WaitKind.Both) {
             fallback?.invoke()
             d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
             d.messenger.showSwitchFailed()
@@ -434,8 +480,8 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun runPendingIfNeeded() {
         val p = pending
         pending = null
-        if (p != null && p != currentIndex) {
-            open(p)
+        if (p != null && p.index != currentIndex) {
+            if (p.forBoot) openForBoot(p.index) else open(p.index)
         }
     }
 

@@ -8,6 +8,60 @@ import org.junit.Test
 
 class ForegroundWatcherTest {
     @Test
+    fun recordAppLaunch_successMarksPackageWithoutUsageAccess() {
+        val tracker = WarmTracker("own") { false }
+        tracker.recordAppLaunch("a", true)
+        assertTrue(tracker.isWarm("a"))
+    }
+
+    @Test
+    fun recordAppLaunch_failureDoesNotMarkPackage() {
+        val tracker = WarmTracker("own") { false }
+        tracker.recordAppLaunch("a", false)
+        assertFalse(tracker.isWarm("a"))
+    }
+
+    @Test
+    fun recordAppLaunch_ownPackageStillDependsOnOwnTask() {
+        var ownTaskExists = false
+        val tracker = WarmTracker("own") { ownTaskExists }
+        tracker.recordAppLaunch("own", true)
+        assertFalse(tracker.isWarm("own"))
+        ownTaskExists = true
+        assertTrue(tracker.isWarm("own"))
+    }
+
+    @Test
+    fun queryFailure_marksWatcherUnavailable_andReturnsNoEvidence() {
+        val events = FakeForegroundEvents(queryFails = true)
+        val watcher = ForegroundWatcher(events)
+        assertEquals(emptySet<String>(), watcher.foregroundPkgsSince(0))
+        assertFalse(watcher.available())
+        assertFalse(watcher.bothResumed("a", "b", 0))
+        assertFalse(watcher.available())
+        assertNull(watcher.lastForegroundSince(0))
+        assertFalse(watcher.available())
+    }
+
+    @Test
+    fun queryRecovery_restoresAvailability() {
+        val events = FakeForegroundEvents(events = listOf(ResumeEvent("a", 100)), queryFails = true)
+        val watcher = ForegroundWatcher(events)
+        assertEquals(emptySet<String>(), watcher.foregroundPkgsSince(0))
+        assertFalse(watcher.available())
+        events.queryFails = false
+        assertEquals(setOf("a"), watcher.foregroundPkgsSince(0))
+        assertTrue(watcher.available())
+    }
+
+    @Test
+    fun successfulEmptyQuery_keepsWatcherAvailable() {
+        val watcher = ForegroundWatcher(FakeForegroundEvents())
+        assertEquals(emptySet<String>(), watcher.foregroundPkgsSince(0))
+        assertTrue(watcher.available())
+    }
+
+    @Test
     fun foregroundPkgsSince_collectsAllAfterSince() {
         val watcher = ForegroundWatcher(FakeForegroundEvents(events = listOf(
             ResumeEvent("x", 999), ResumeEvent("a", 1000),
@@ -27,9 +81,13 @@ class ForegroundWatcherTest {
     private class FakeForegroundEvents(
         private val available: Boolean = true,
         private val events: List<ResumeEvent> = emptyList(),
+        var queryFails: Boolean = false,
     ) : ForegroundEvents {
         override fun available(): Boolean = available
-        override fun resumedSince(sinceMs: Long): List<ResumeEvent> = events
+        override fun resumedSince(sinceMs: Long): List<ResumeEvent> {
+            if (queryFails) throw ForegroundEventsUnavailableException()
+            return events
+        }
     }
 
     @Test
