@@ -14,6 +14,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.LauncherTheme
@@ -29,6 +31,52 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MediaCardTest {
+
+    @Test
+    fun mediaCard_pointerSeek_commitsEndOnceOnRelease() = pointerSeek(0L, true, 120000L)
+
+    @Test
+    fun mediaCard_pointerSeek_commitsStartOnceOnRelease() = pointerSeek(60000L, false, 0L)
+
+    private fun pointerSeek(position: Long, end: Boolean, expected: Long) {
+        val seeks = mutableListOf<Long>()
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(
+                    now = NowPlaying("music", "Song", "Artist", null, 120000L, true, false),
+                    idleApp = null, positionMs = position,
+                    onAction = {}, onSeek = { seeks.add(it) }, onLaunch = {},
+                )
+            }
+        }
+        val progress = rule.onNodeWithTag("progress")
+        progress.performTouchInput {
+            down(center)
+            moveTo(Offset(if (end) width - 1f else 1f, centerY))
+        }
+        rule.runOnIdle { assertEquals(emptyList<Long>(), seeks) }
+        progress.performTouchInput { up() }
+        rule.runOnIdle { assertEquals(listOf(expected), seeks) }
+    }
+
+    @Test
+    fun mediaCard_unknownDuration_hasNoPointerSeekTarget() {
+        var duration by mutableStateOf<Long?>(null)
+        val seeks = mutableListOf<Long>()
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(
+                    now = NowPlaying("music", "Song", "Artist", null, duration, true, false),
+                    idleApp = null, positionMs = 0L,
+                    onAction = {}, onSeek = { seeks.add(it) }, onLaunch = {},
+                )
+            }
+        }
+        rule.onNodeWithTag("progress").assertDoesNotExist()
+        rule.runOnIdle { duration = 0L }
+        rule.onNodeWithTag("progress").assertDoesNotExist()
+        rule.runOnIdle { assertEquals(emptyList<Long>(), seeks) }
+    }
 
     @get:Rule(order = 0)
     val registerActivityRule = object : ExternalResource() {

@@ -1,13 +1,11 @@
 package com.gt8d.launcher.ui.panel
 
-import android.Manifest
-import android.bluetooth.BluetoothManager
+import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.net.wifi.WifiManager
 import android.os.SystemClock
 import android.provider.Settings
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -17,16 +15,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.stockLauncherIntent
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.media.positionAt
+import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.apps.AppListScreen
 import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
-import com.gt8d.launcher.ui.apps.buildAppList
 import kotlinx.coroutines.delay
 
 @Composable
@@ -39,13 +35,15 @@ fun PanelScreen(
     val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
     val now by MediaWatcher.nowPlaying.collectAsState()
     var showAppList by remember { mutableStateOf(false) }
+    val environment = rememberPanelEnvironment(AppGraph.catalog)
+
+    val appListGridState = rememberLazyGridState()
 
     if (showAppList) {
-        val entries = remember(showAppList) {
-            buildAppList(AppGraph.catalog.launchables(), context.packageName)
-        }
         AppListScreen(
-            entries = entries,
+            gridState = appListGridState,
+            iconRevision = environment.revision.toInt(),
+            entries = environment.appListEntries,
             iconFor = { pkg -> AppGraph.catalog.icon(pkg) },
             onLaunch = { entry ->
                 if (entry == STOCK_LAUNCHER_ENTRY) {
@@ -53,7 +51,9 @@ fun PanelScreen(
                         context.startActivity(stockLauncherIntent())
                     }
                 } else {
-                    onLaunchApp(entry.pkg)
+                    AndroidActivityLauncher(context).startComponent(
+                        ComponentName(entry.pkg, entry.cls), adjacent = inSplit,
+                    )
                 }
                 showAppList = false
             },
@@ -79,36 +79,10 @@ fun PanelScreen(
     }
 
     val catalog = AppGraph.catalog
-    val installedPkgs = remember(config) { AppGraph.catalog.installed() }
+    val installedPkgs = environment.installedPkgs
     val idleApp = catalog.info(config.idleApp, installedPkgs)
     val panelApps = config.panelApps.map { catalog.info(it, installedPkgs) }
     val dockApps = config.dockApps.map { catalog.info(it, installedPkgs) }
-
-    val wifiOn = runCatching {
-        context.getSystemService(WifiManager::class.java)?.isWifiEnabled == true
-    }.getOrDefault(false)
-
-    val btGranted = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.BLUETOOTH_CONNECT,
-    ) == PackageManager.PERMISSION_GRANTED
-    val bluetoothOn = if (btGranted) {
-        runCatching {
-            context.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled
-        }.getOrNull()
-    } else {
-        null
-    }
-    val dockStatus = DockStatus(wifiOn = wifiOn, bluetoothOn = bluetoothOn)
-
-    val notifEnabled = runCatching {
-        context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
-    }.getOrDefault(false)
-    val overlayEnabled = runCatching {
-        Settings.canDrawOverlays(context)
-    }.getOrDefault(false)
-    val usageEnabled = AppGraph.watcher.available()
-    val needsPermission = !notifEnabled || !overlayEnabled || !usageEnabled
 
     val state = PanelState(
         now = now,
@@ -116,9 +90,9 @@ fun PanelScreen(
         positionMs = positionMs,
         panelApps = panelApps,
         dockApps = dockApps,
-        dockStatus = dockStatus,
+        dockStatus = environment.dockStatus,
         showCar = AppGraph.bridge.carHomeAvailable,
-        needsPermission = needsPermission,
+        needsPermission = environment.needsPermission,
     )
 
     val actions = PanelActions(

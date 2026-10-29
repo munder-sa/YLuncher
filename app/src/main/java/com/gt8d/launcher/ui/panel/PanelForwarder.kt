@@ -37,7 +37,7 @@ class PanelForwarder(
     }
 
     fun onOpeningCleared() {
-        if (showing && !inMultiWindow && !forwarded) {
+        if (showing && !inMultiWindow && !forwarded && opening() == null) {
             cancelTimer()
             triggerForward()
         }
@@ -54,7 +54,7 @@ class PanelForwarder(
         if (!showing || inMultiWindow || forwarded) return
         if (opening() != null) return
         timer = scheduler.schedule(NO_FLAG_WAIT_MS) {
-            if (showing && !inMultiWindow && !forwarded) {
+            if (showing && !inMultiWindow && !forwarded && opening() == null) {
                 triggerForward()
             }
         }
