@@ -1,0 +1,15 @@
+create app/src/main/java/com/gt8d/launcher/link/PendingUrl.kt
+create app/src/main/java/com/gt8d/launcher/link/BrowserActivity.kt
+create app/src/main/java/com/gt8d/launcher/link/FullscreenBrowserActivity.kt
+create app/src/main/java/com/gt8d/launcher/link/LinkEntryActivity.kt
+create app/src/test/java/com/gt8d/launcher/link/PendingUrlTest.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/AndroidManifest.xml
+write app/src/main/java/com/gt8d/launcher/foreground/ForegroundWatcher.kt
+write app/src/test/java/com/gt8d/launcher/foreground/ForegroundWatcherTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.link.PendingUrlTest --tests com.gt8d.launcher.sets.SetRunnerTest --tests com.gt8d.launcher.foreground.ForegroundWatcherTest
+command /home/munde/tools/gradle-run.sh assembleDebug
