@@ -13,32 +13,21 @@
 
     <application>
 
+        <!-- E は MAIN/LAUNCHER の画面を開くので、実験用の画面にはランチャーの入口を付けない(本体の PanelActivity が選ばれるように) -->
         <activity
             android:name=".spike.SpikeActivity"
             android:exported="true"
             android:label="GT8D Spike"
             android:launchMode="singleTask"
             android:resizeableActivity="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
         </activity>
 
+        <!-- E は MAIN/LAUNCHER の画面を開くので、実験用の画面にはランチャーの入口を付けない(本体の PanelActivity が選ばれるように) -->
         <activity
             android:name=".spike.SpikePanelActivity"
             android:exported="true"
             android:label="GT8D Panel"
             android:resizeableActivity="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
 
         <receiver
