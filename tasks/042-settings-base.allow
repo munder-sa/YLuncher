@@ -1,0 +1,16 @@
+create app/src/main/java/com/gt8d/launcher/settings/SettingsNav.kt
+create app/src/main/java/com/gt8d/launcher/settings/SettingsScreen.kt
+create app/src/main/java/com/gt8d/launcher/settings/SettingsActivity.kt
+create app/src/main/java/com/gt8d/launcher/settings/SafetyRecoveryScreen.kt
+create app/src/test/java/com/gt8d/launcher/settings/SettingsNavTest.kt
+create app/src/test/java/com/gt8d/launcher/settings/SettingsScreenTest.kt
+create app/src/test/java/com/gt8d/launcher/settings/SettingsActivityTest.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/AndroidManifest.xml
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest --tests com.gt8d.launcher.ui.home.HomeActivityTest --tests com.gt8d.launcher.ui.home.HomeActivityUiTest
+command /home/munde/tools/gradle-run.sh assembleDebug
