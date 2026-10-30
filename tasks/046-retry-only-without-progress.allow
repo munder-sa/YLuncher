@@ -1,0 +1,6 @@
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.sets.SetRunnerTest --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.home.HomeActivityTest
+command /home/munde/tools/gradle-run.sh assembleDebug
