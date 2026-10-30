@@ -15,6 +15,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "YLuncher"
 include(":app")
+include(":panelhost")
 
 
 

@@ -166,7 +166,7 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 
 ### 4.7 内蔵ブラウザ（URL 受け口）
 - 既定のブラウザ（RoleManager の ROLE_BROWSER）として http/https の VIEW を受ける
-- E にはパッケージ名しか渡せないため、**分割の右側の自作アプリは「パネルのタスク」1つにまとめ、分割の右に出すブラウザは PanelActivity の画面の中に表示する**（別の Activity にしない。「閉じる」や戻りきった「戻る」でパネルの表示に戻る）。2026-10-30 変更：別の Activity を重ねる方式では、冷えた起動で E の遷移中に開いたブラウザが分割から外れ、全画面になったため
+- E にはパッケージ名しか渡せず、純正ランチャーは**そのパッケージの既存のタスクのどれか**を右に入れる（所属ではなくパッケージで選ぶ。2026-10-31 実機で確認）。そのため**右には中継アプリ `com.gt8d.launcher.panel` を渡し、パネルは中継のタスクの中に置く**（§5.6）。**分割の右側の自作アプリは「パネルのタスク」1つにまとめ、分割の右に出すブラウザは PanelActivity の画面の中に表示する**（別の Activity にしない。「閉じる」や戻りきった「戻る」でパネルの表示に戻る）。2026-10-30 変更：別の Activity を重ねる方式では、冷えた起動で E の遷移中に開いたブラウザが分割から外れ、全画面になったため
 - **全画面で開くブラウザは、パネルのタスクに重ねず別のタスクで開く**（全画面用の別名の Activity、別の `taskAffinity`）。「戻る」で閉じると、下にあるホームや元のアプリにそのまま戻る（パネルが分割の外で出てくる経路をなくす）
 - **前面の判定方法**：手がかりは ①自作の HomeActivity・PanelActivity の再開状態と `isInMultiWindowMode`、②`SetRunner` が最後に開いたセットの記録（左右のパッケージ）、③`ForegroundWatcher` の直近の前面化イベント、④リンクを送ってきたアプリ（`BrowserActivity` の `referrer`）。判定の順：
   1. ホームが再開中 → 「ホーム」
@@ -202,7 +202,7 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 
 ### 5.1 技術スタック
 - Kotlin ＋ Jetpack Compose、minSdk 35 / targetSdk 35
-- 単一アプリ `com.gt8d.launcher`
+- アプリは2つ：本体 `com.gt8d.launcher`（ホーム・パネル・ブラウザ・設定・帯など全部）と、分割の右に渡すための中継 `com.gt8d.launcher.panel`（表示名「GT8D パネル」。画面を持たない中継の Activity 1つだけ）。同じ鍵で署名する（§5.6）
 - 設定保存：DataStore ＋ kotlinx.serialization（JSON 1ファイル）
 
 ### 5.2 部品
@@ -216,7 +216,8 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 | ForegroundWatcher | 指定パッケージの前面化を待つ（幕を外す合図、片側欠けの検知） | `UsageStatsManager`（`ACTIVITY_RESUMED`） |
 | TransitionCurtain | 切り替えの幕（配置図、進行線、フェード、4 秒の安全タイマー） | `EdgeStripService` のオーバーレイ |
 | HomeActivity | 既定のホーム（左アイコン一覧＋右パネル）。起動画面（§4.8）。**専用の `taskAffinity`（`com.gt8d.launcher.home`）を持ち、パネルのタスクと混ざらない**（2026-10-31 追加：同じ所属だと、E が右に「自作パッケージ」を開くとき既存のホームのタスクが前に出て、パネルの代わりにホームが分割に入っていたため） | `category.HOME` |
-| PanelActivity | **自作アプリのランチャー用の入口**（MAIN/LAUNCHER、表示名「GT8D パネル」）。分割の右側。**分割の外（`isInMultiWindowMode == false`）にいるときの転送**：起動直後には判定しない。`SetRunner` の「分割を開いている最中」の印（同じプロセス内の共有状態、開始時刻つき）があるあいだは転送しない。印が消えた（完了または 4 秒の安全タイマー）あとも分割の外なら HomeActivity へ転送して閉じる。印が無いときに分割の外で開かれたら、1.5 秒待って分割に入らなければ転送する（冷えた起動では E がパネルをいったん全画面で起動するため。§5.3） | resizeable、`onMultiWindowModeChanged` |
+| PanelHostActivity（中継アプリ） | 中継アプリの唯一の Activity（MAIN/LAUNCHER、透明、表示名「GT8D パネル」）。E は右にこのパッケージを渡す。自分のタスクの根に残り、同じタスクの中に本体の PanelActivity を開く。PanelActivity が閉じて自分が再び前に来たら閉じる（§5.6） | — |
+| PanelActivity | 本体のパネルの画面。**中継のタスクの中で開かれる**（ランチャーの入口は持たない。同じ署名の中継だけが開ける署名権限で保護）。分割の右側。**分割の外（`isInMultiWindowMode == false`）にいるときの転送**：起動直後には判定しない。`SetRunner` の「分割を開いている最中」の印（同じプロセス内の共有状態、開始時刻つき）があるあいだは転送しない。印が消えた（完了または 4 秒の安全タイマー）あとも分割の外なら HomeActivity へ転送して閉じる。印が無いときに分割の外で開かれたら、1.5 秒待って分割に入らなければ転送する（冷えた起動では E がパネルをいったん全画面で起動するため。§5.3） | resizeable、`onMultiWindowModeChanged` |
 | PanelContent | パネルの Composable。**右がパネルのときの最小幅 516dp でも崩れない**。車接続時の解像度でも崩れない | Compose |
 | MediaWatcher | 再生セッションの監視と操作 | NotificationListenerService、MediaSessionManager |
 | EdgeStripService | 左右の帯を常駐。幕を出す役も兼ねる（帯の窓は幕より上） | フォアグラウンドサービス（specialUse）、`TYPE_APPLICATION_OVERLAY` |
@@ -227,6 +228,13 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 | SafetyGuard | 連続クラッシュ検知と純正ランチャーへの退避 | Application.onCreate 先頭 |
 | BootReceiver | 起動時に EdgeStripService 開始、E の健全性の再判定（§7.1） | `BOOT_COMPLETED` |
 | DiagLog | 車での不具合追跡用ログ（logcat タグ＋アプリ内リングバッファ） | — |
+
+### 5.6 中継アプリ（2026-10-31 追加）
+- **理由**：純正ランチャーの分割は右のパッケージの既存のタスクをパッケージ名で選ぶ。本体には ホーム・パネル・全画面ブラウザ のタスクがあり、ホームが選ばれると右にホームが入り、YLuncher が既定のホームのときは SystemUI が異常終了した（実機で確認）
+- **仕組み**：右には中継 `com.gt8d.launcher.panel` を渡す。中継は自分のタスクの根に残り、同じタスクの中に本体の PanelActivity を開く。純正ランチャーが選ぶのは中継のタスクだけになる（実機で、ホームのタスクが残っているとき・既定のホームが YLuncher のときの両方で成立を確認）
+- **本体側の扱い**：セットの右がパネルのとき、E に渡すのは中継のパッケージ。「自分のアプリか」の判定には本体と中継の両方を使う。パネルの合図は今どおり PanelActivity から受ける（使用状況のイベントは本体のパッケージで届く）。中継が入っていなければ、パネルのセットは「左だけ全画面」に退避し、本体のパッケージを E に渡さない
+- **アプリ一覧**：中継は YLuncher のアプリ一覧・セットのアプリ選びに出さない（純正ランチャーの一覧には入口として出る）
+- **保護**：本体の PanelActivity は exported のまま、本体が定める signature の権限を要求する。中継はその権限を要求し、同じ鍵で署名する
 
 ### 5.3 分割の開き方（E が主、D が退避策）
 
@@ -437,7 +445,7 @@ Muse への共通ルール：ダーク背景で映える色づかい。
 
 - **リリース用署名鍵を1つ作成し、Claude Code と Antigravity で共有**（別鍵だと上書きインストールできず設定が消えるため）。鍵はリポジトリ外で保管
 - ビルドは WSL（JDK 17・Android SDK・Gradle wrapper。`~/tools/gradle-run.sh`）
-- インストール：`adb.exe -s 192.168.137.248:5555 install -r app-release.apk`
+- インストール：本体と中継の2つ（`install -r app-release.apk`、`install -r panelhost-release.apk`）。同じ鍵で署名する
 - 初回セットアップ（adb で一括、`scripts/setup-device.ps1`）：既定のホーム設定、通知アクセス許可（`cmd notification allow_listener`）、オーバーレイ許可（`appops set com.gt8d.launcher SYSTEM_ALERT_WINDOW allow`）、**使用状況へのアクセス（`appops set com.gt8d.launcher GET_USAGE_STATS allow`）**。既定のブラウザは端末の設定画面で選択
 - `<queries>` に MAIN/LAUNCHER、http VIEW、**`<package android:name="com.sd.factoryconfig" />`** を宣言（パッケージ可視性）
 
