@@ -27,6 +27,7 @@ import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.settings.SettingsActivity
 import com.gt8d.launcher.settings.SettingsActions
 import com.gt8d.launcher.settings.SettingsHost
+import com.gt8d.launcher.settings.SettingsRoute
 import com.gt8d.launcher.settings.SafetyRecoveryScreen
 import com.gt8d.launcher.settings.safetyRecover
 import com.gt8d.launcher.diag.DiagLog
@@ -49,6 +50,7 @@ class PanelActivity : ComponentActivity() {
     private var inSplitState by mutableStateOf(false)
     private var browserUrl: String? by mutableStateOf(null)
     private var settingsOpen by mutableStateOf(false)
+    private var settingsInitialRoute: SettingsRoute? = null
     internal val settingsShown: Boolean get() = settingsOpen
     private var safetyMode = false
     internal val shownBrowserUrl: String? get() = browserUrl
@@ -57,6 +59,7 @@ class PanelActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         safetyMode = SafetyGuard.isFallbackActive(this)
         settingsOpen = savedInstanceState?.getBoolean("settings_open") ?: false
+        settingsInitialRoute = if (savedInstanceState?.getBoolean("settings_new_set") == true) SettingsRoute.SetEdit(null, true) else null
         browserUrl = savedInstanceState?.getString("browser_url")
         inSplitState = isInMultiWindowMode
         onBackPressedDispatcher.addCallback(this) { DiagLog.d("Panel", "back ignored") }
@@ -97,13 +100,22 @@ class PanelActivity : ComponentActivity() {
                         BrowserPane(url, onClose = { browserUrl = null }, modifier = Modifier.fillMaxSize())
                     } else if (settingsOpen) {
                         SettingsHost(SettingsActions.forApp(this@PanelActivity),
-                            onExit = { settingsOpen = false }, onSafetyCleared = ::goHome)
+                            onExit = { settingsOpen = false }, onSafetyCleared = ::goHome,
+                            initialRoute = settingsInitialRoute,
+                            onOpenSet = { settingsOpen = false; AppGraph.runner.open(it) })
                     } else PanelScreen(
                         inSplit = inSplitState,
+                        onNewSet = {
+                            if (isInMultiWindowMode) {
+                                settingsInitialRoute = SettingsRoute.SetEdit(null, true)
+                                settingsOpen = true
+                            } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
+                        },
                         onOpenSettings = {
                             if (AppGraph.runner.opening.value != null) {
                                 DiagLog.d("Panel", "settings ignored while opening")
                             } else if (isInMultiWindowMode) {
+                                settingsInitialRoute = null
                                 settingsOpen = true
                             } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java))
                         },
@@ -172,6 +184,7 @@ class PanelActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("settings_open", settingsOpen)
+        outState.putBoolean("settings_new_set", (settingsInitialRoute as? SettingsRoute.SetEdit)?.fromSplitButton == true)
         outState.putString("browser_url", browserUrl)
         super.onSaveInstanceState(outState)
     }

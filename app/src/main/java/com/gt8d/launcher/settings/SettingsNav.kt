@@ -3,6 +3,7 @@ package com.gt8d.launcher.settings
 sealed interface SettingsRoute {
     data object Root : SettingsRoute
     data object Sets : SettingsRoute
+    data class SetEdit(val setId: String?, val fromSplitButton: Boolean = false) : SettingsRoute
     data object Lists : SettingsRoute
     data object Link : SettingsRoute
     data object Gesture : SettingsRoute

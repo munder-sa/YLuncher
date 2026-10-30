@@ -119,6 +119,13 @@ class HomeActivityUiTest {
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }
 
+    @Test fun splitButton_startsSettingsWithNewSet() {
+        host()
+        rule.onNodeWithTag("dock_split").performScrollTo().performClick()
+        val intent = shadowOf(controller!!.get()).nextStartedActivity
+        assertEquals(com.gt8d.launcher.settings.SettingsActivity::class.java.name, intent?.component?.className)
+        assertTrue(intent!!.getBooleanExtra("open_new_set", false))
+    }
     @Test fun longPressAppList_startsSettingsActivity() {
         host()
         rule.onNodeWithTag("dock_applist").performScrollTo().performTouchInput { longClick() }

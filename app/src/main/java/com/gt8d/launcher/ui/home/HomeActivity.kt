@@ -132,6 +132,9 @@ class HomeActivity : ComponentActivity() {
                         ) {
                             PanelScreen(
                                 inSplit = false,
+                                onNewSet = {
+                                    startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
+                                },
                                 onOpenSettings = {
                                     if (AppGraph.runner.opening.value != null) {
                                         DiagLog.d("Home", "settings ignored while opening")

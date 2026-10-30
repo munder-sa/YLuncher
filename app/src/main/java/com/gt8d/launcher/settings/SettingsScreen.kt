@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.diag.DiagLog
@@ -76,16 +77,30 @@ fun SettingsHost(
     onExit: () -> Unit,
     onSafetyCleared: () -> Unit,
     modifier: Modifier = Modifier,
+    initialRoute: SettingsRoute? = null,
+    onOpenSet: (Int) -> Unit = {},
+    setsStore: SetsStore? = null,
+    labelFor: (String) -> String = { AppGraph.catalog.label(it) },
+    launchablePackages: () -> List<String> = { AppGraph.catalog.launchables().map { it.pkg } },
 ) {
-    var nav by remember { mutableStateOf(SettingsNav()) }
+    var nav by remember { mutableStateOf(if (initialRoute == null) SettingsNav() else SettingsNav(listOf(SettingsRoute.Root, initialRoute))) }
     var confirmReset by remember { mutableStateOf(false) }
-    val back = { nav.pop()?.let { nav = it } ?: onExit() }
+    val back = {
+        val popped = nav.pop()
+        if (popped == null || ((nav.current as? SettingsRoute.SetEdit)?.fromSplitButton == true && popped.current == SettingsRoute.Root)) {
+            onExit()
+        } else nav = popped
+    }
     BackHandler(onBack = back)
     Column(modifier.fillMaxSize().background(Palette.Background0).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             SettingsButton("戻る", "settings_back", onClick = back)
             Text(
-                if (nav.current == SettingsRoute.Root) "設定" else detailItems.first { it.route == nav.current }.title,
+                when (nav.current) {
+                    SettingsRoute.Root -> "設定"
+                    is SettingsRoute.SetEdit -> "画面セットの編集"
+                    else -> detailItems.first { it.route == nav.current }.title
+                },
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 fontSize = Dims.BodyText,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -105,6 +120,14 @@ fun SettingsHost(
                     actions.clearSafety()
                     onSafetyCleared()
                 }
+            } else if (nav.current == SettingsRoute.Sets || nav.current is SettingsRoute.SetEdit) {
+                val context = LocalContext.current
+                val store = setsStore ?: remember { SetsStore.forApp(context) }
+                SetsScreen(nav.current, store,
+                    onEdit = { nav = nav.push(SettingsRoute.SetEdit(it)) },
+                    onBack = back, onOpenSet = onOpenSet, labelFor = labelFor,
+                    onMissing = { nav = SettingsNav(listOf(SettingsRoute.Root, SettingsRoute.Sets)) },
+                    launchablePackages = launchablePackages)
             } else {
                 Text("この画面は準備中です", Modifier.padding(16.dp).testTag("settings_placeholder"),
                     fontSize = Dims.BodyText, color = MaterialTheme.colorScheme.onBackground)

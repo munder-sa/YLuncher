@@ -104,6 +104,9 @@ class SetRunner(private val d: SetRunnerDeps) {
         open(target, cfg)
     }
 
+    // 設定でセットの並びが変わったとき、番号だけを付け替える(画面は切り替えない)。
+    fun followIndex(index: Int) { currentIndex = index; d.lastIndex.lastSetIndex = index }
+
     fun prev() {
         val cfg = configForOperation() ?: return
         val base = pending?.index ?: currentIndex

@@ -31,6 +31,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SetRunnerTest {
+    @Test fun followIndex_updatesCurrentAndSaved_withoutOpening() {
+        val e = TestEnv()
+        e.runner.followIndex(2)
+        assertEquals(2, e.runner.currentIndex)
+        assertEquals(2, e.lastIndex.lastSetIndex)
+        assertTrue(e.vendor.calls.isEmpty())
+        assertTrue(e.appPair.calls.isEmpty())
+        assertTrue(e.apps.startAppCalls.isEmpty())
+        assertTrue(e.curtainView.shownTargets.isEmpty())
+        assertEquals(0, e.startHomeCount)
+        assertNull(e.runner.opening.value)
+    }
     @Test
     fun abortBootToHome_duringNormalOpening_doesNothing() {
         val e = TestEnv()

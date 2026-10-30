@@ -170,6 +170,33 @@ class PanelActivityTest {
         rule.onNodeWithTag("applist_close").assertDoesNotExist()
     }
 
+    @Test fun splitButton_inSplit_opensNewSetInPanel() {
+        splitPanel(); rule.onNodeWithTag("dock_split").performScrollTo().performClick()
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.waitUntil(5000L) { rule.onNodeWithTag("set_left").isDisplayed() }
+        rule.onNodeWithTag("set_left").assertIsDisplayed()
+        assertTrue(controller!!.get().settingsShown)
+        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+        rule.onNodeWithTag("settings_back").performClick()
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.onNodeWithTag("dock_split").assertExists()
+        assertFalse(controller!!.get().settingsShown)
+    }
+    @Test fun splitButton_outsideSplit_startsSettingsWithNewSet() {
+        controller = Robolectric.buildActivity(PanelActivity::class.java).create().start().resume().visible()
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.onNodeWithTag("dock_split").performScrollTo().performClick()
+        val intent = shadowOf(controller!!.get()).nextStartedActivity
+        assertEquals(com.gt8d.launcher.settings.SettingsActivity::class.java.name, intent?.component?.className)
+        assertTrue(intent!!.getBooleanExtra("open_new_set", false))
+    }
+    @Test fun splitButton_whileOpening_doesNothing() = whileOpening {
+        splitPanel(); rule.onNodeWithTag("dock_split").performScrollTo().performClick()
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.onNodeWithTag("set_left").assertDoesNotExist()
+        assertFalse(controller!!.get().settingsShown)
+        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+    }
     private fun splitPanel() {
         controller = Robolectric.buildActivity(PanelActivity::class.java)
         shadowOf(controller!!.get()).setInMultiWindowMode(true)
