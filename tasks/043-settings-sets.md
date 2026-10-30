@@ -31,6 +31,10 @@ UI の決まり(計画の Global Constraints): 文言は日本語、ダーク固
 - `M/sets/SetRunner.kt`(`followIndex` を足すだけ)
 - `T/sets/SetRunnerTest.kt`(テスト `followIndex_updatesCurrentAndSaved_withoutOpening` を1つ足すだけ。E が呼ばれず、`currentIndex` と保存値が変わる)
 - `T/ui/panel/PanelActivityTest.kt`、`T/ui/home/HomeActivityUiTest.kt`(テストを足す。既存のテストは変えない)
+- `T/settings/SettingsScreenTest.kt`(**次の1件だけ**を、仕様の変更に合わせて書き換える。ほかは変えない):
+  `detail_showsPlaceholder_andBackReturnsToRoot` を `detail_backReturnsToRoot` に改名し、「画面セット」を押した後の
+  `settings_placeholder` の文言の確認を、「`settings_item_sets` が無い(詳細画面に移った)」の確認に置き換える。戻ると `settings_item_sets` が出る確認はそのまま。
+  (画面セットは準備中でなくなるため。司令塔が許可した変更)
 
 使ってよいコマンド:
 - `/home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest --tests com.gt8d.launcher.ui.home.HomeActivityUiTest --tests com.gt8d.launcher.sets.SetRunnerTest`

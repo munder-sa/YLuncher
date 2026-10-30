@@ -10,6 +10,7 @@ write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
 write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
 write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
 write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/test/java/com/gt8d/launcher/settings/SettingsScreenTest.kt
 write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
 write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
 command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest --tests com.gt8d.launcher.ui.home.HomeActivityUiTest --tests com.gt8d.launcher.sets.SetRunnerTest
