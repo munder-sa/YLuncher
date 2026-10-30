@@ -1,0 +1,8 @@
+write settings.gradle.kts
+create panelhost/build.gradle.kts
+create panelhost/src/main/AndroidManifest.xml
+create panelhost/src/main/java/com/gt8d/launcher/panelhost/PanelHostActivity.kt
+create panelhost/src/main/res/values/strings.xml
+create panelhost/src/main/res/values/themes.xml
+command /home/munde/tools/gradle-run.sh :panelhost:assembleDebug
+command /home/munde/tools/gradle-run.sh assembleDebug
