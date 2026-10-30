@@ -16,6 +16,16 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AppCatalogTest {
+    @Test fun buildAppList_excludesPanelHost() {
+        val entries = listOf(
+            com.gt8d.launcher.ui.apps.AppListEntry("com.gt8d.launcher", "Home", "本体"),
+            com.gt8d.launcher.ui.apps.AppListEntry("com.gt8d.launcher.panel", "Host", "中継"),
+            com.gt8d.launcher.ui.apps.AppListEntry("other", "Main", "他"),
+        )
+        assertEquals(listOf(com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY, entries.last()),
+            com.gt8d.launcher.ui.apps.buildAppList(entries, "com.gt8d.launcher"))
+    }
+
     private val app = ApplicationProvider.getApplicationContext<Application>()
     private val pm = Shadows.shadowOf(app.packageManager)
     private val catalog = AppCatalog(app)

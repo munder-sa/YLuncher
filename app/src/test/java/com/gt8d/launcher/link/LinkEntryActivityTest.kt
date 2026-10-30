@@ -29,6 +29,16 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [35])
 @LooperMode(LooperMode.Mode.PAUSED)
 class LinkEntryActivityTest {
+    @Test fun appPanelFront_setsPendingUrl_withoutStartingActivity() {
+        flow.value = Defaults.build(emptySet())
+        AppGraph.panelInSplit = true
+        val activity = open("https://example.com")
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertEquals("https://example.com", AppGraph.pendingUrl.take())
+        assertEquals(0, openForLinkCalls)
+        assertTrue(activity.isFinishing)
+    }
+
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val flow = MutableStateFlow<LauncherConfig?>(null)
     private var controller: ActivityController<LinkEntryActivity>? = null

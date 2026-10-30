@@ -7,6 +7,18 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LinkRouterTest {
+    @Test fun lastPair_withHost_isNotAppApp() {
+        assertEquals(FrontState.Fullscreen("a"), LinkRouter.detectFront(
+            clues(lastPair = "a" to "com.gt8d.launcher.panel", referrer = "a"), own))
+        assertEquals(FrontState.Fullscreen("a"), LinkRouter.detectFront(
+            clues(lastPair = "com.gt8d.launcher.panel" to "a", referrer = "a"), own))
+    }
+
+    @Test fun referrer_host_isIgnored() {
+        assertEquals(FrontState.Unknown,
+            LinkRouter.detectFront(clues(referrer = "com.gt8d.launcher.panel"), own))
+    }
+
     private val own = "com.gt8d.launcher"
     private val cfg = LinkConfig()
     private val url = "https://example.com/"

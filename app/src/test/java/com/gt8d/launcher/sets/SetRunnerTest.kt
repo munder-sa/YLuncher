@@ -31,6 +31,35 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SetRunnerTest {
+    @Test fun panelSet_passesPanelHostToVendor() {
+        val env = TestEnv()
+        env.runner.open(1)
+        assertEquals(listOf(SplitCall("youtube", "com.gt8d.launcher.panel", SplitRatio.R6_4)), env.vendor.calls)
+        assertEquals(Opening("youtube", "com.gt8d.launcher.panel", 0L), env.runner.opening.value)
+        env.scheduler.advanceBy(3000L)
+        assertEquals(2, env.vendor.calls.size)
+        assertEquals("com.gt8d.launcher.panel", env.vendor.calls.last().right)
+    }
+
+    @Test fun panelSet_hostMissing_opensLeftOnly_withoutVendor() {
+        val env = TestEnv()
+        env.installed.remove("com.gt8d.launcher.panel")
+        env.runner.open(1)
+        assertTrue(env.vendor.calls.isEmpty())
+        assertTrue(env.appPair.calls.isEmpty())
+        assertEquals(listOf(StartAppCall("youtube", false)), env.apps.startAppCalls)
+        env.scheduler.advanceBy(4000L)
+        assertEquals(0, env.selector.state.consecutiveFailures)
+        assertEquals(0, env.messenger.splitUnavailableCount)
+        assertEquals(0, env.messenger.switchFailedCount)
+    }
+
+    @Test fun panelSet_lastOpenedPair_rightIsHost() {
+        val env = TestEnv()
+        env.runner.open(1)
+        assertEquals("youtube" to "com.gt8d.launcher.panel", env.runner.lastOpenedPair)
+    }
+
     @Test
     fun retrySkipped_whenOwnScreenResumedDuringOpening() {
         val e = TestEnv()
@@ -279,6 +308,10 @@ class SetRunnerTest {
 
     @Test
     fun directLaunchSuccess_withoutUsageAccess_makesNextOpenWarm() {
+        // 右のパネル(中継)は「本体のパネルの画面が生きている」ときだけ暖かい(Task 056)。このテストは左の暖かさを確かめるため、パネルは生きている前提にする。
+        val savedPanelAlive = com.gt8d.launcher.AppGraph.panelAlive
+        com.gt8d.launcher.AppGraph.panelAlive = true
+        try {
         val env = TestEnv(watcherAvailable = false)
         env.selector.onFailure(FailReason.EntryMissing, countable = true)
         env.runner.open(1)
@@ -297,6 +330,9 @@ class SetRunnerTest {
         assertTrue(env.warm.isWarm("youtube"))
         assertEquals(0, env.runner.readyCount)
         assertEquals(0, env.selector.state.consecutiveFailures)
+        } finally {
+            com.gt8d.launcher.AppGraph.panelAlive = savedPanelAlive
+        }
     }
 
     @Test
@@ -534,11 +570,11 @@ class SetRunnerTest {
         val index = env.runner.currentIndex
         val last = env.lastIndex.lastSetIndex
         assertTrue(env.runner.openForLink("org.videolan.vlc") {})
-        assertEquals(listOf(SplitCall("org.videolan.vlc", env.ownPkg, SplitRatio.R5_5)), env.vendor.calls)
+        assertEquals(listOf(SplitCall("org.videolan.vlc", "com.gt8d.launcher.panel", SplitRatio.R5_5)), env.vendor.calls)
         assertTrue(env.curtain.isShowing)
         assertEquals(index, env.runner.currentIndex)
         assertEquals(last, env.lastIndex.lastSetIndex)
-        assertEquals("org.videolan.vlc" to env.ownPkg, env.runner.lastOpenedPair)
+        assertEquals("org.videolan.vlc" to "com.gt8d.launcher.panel", env.runner.lastOpenedPair)
         assertEquals(123L, env.runner.lastOpenedAtMs)
     }
 
@@ -732,7 +768,7 @@ class SetRunnerTest {
             dockApps = emptyList(),
             idleApp = "applemusic",
         )
-        var installed = mutableSetOf("youtube", "applemusic", "maps", ownPkg)
+        var installed = mutableSetOf("youtube", "applemusic", "maps", ownPkg, "com.gt8d.launcher.panel")
         val lastIndex = MemoryLastIndexStore(initialLastSetIndex)
         val store = MemorySplitModeStore()
         var dReady = false
@@ -764,6 +800,7 @@ class SetRunnerTest {
                 scheduler = scheduler,
                 clock = scheduler,
                 ownPkg = ownPkg,
+                panelHostPkg = "com.gt8d.launcher.panel",
                 labelFor = { it },
                 startHome = { startHomeCount++ },
                 messenger = messenger,
@@ -795,7 +832,7 @@ class SetRunnerTest {
         env.runner.open(1)
 
         assertEquals(
-            listOf(SplitCall("youtube", "com.gt8d.launcher", SplitRatio.R6_4)),
+            listOf(SplitCall("youtube", "com.gt8d.launcher.panel", SplitRatio.R6_4)),
             env.vendor.calls,
         )
     }
@@ -823,7 +860,7 @@ class SetRunnerTest {
 
         assertEquals(
             listOf(
-                SplitCall("youtube", "com.gt8d.launcher", SplitRatio.R6_4),
+                SplitCall("youtube", "com.gt8d.launcher.panel", SplitRatio.R6_4),
                 SplitCall("youtube", "applemusic", SplitRatio.R6_4),
             ),
             env.vendor.calls,

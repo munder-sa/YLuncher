@@ -1,5 +1,6 @@
 package com.gt8d.launcher.foreground
 
+import com.gt8d.launcher.AppGraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -7,6 +8,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForegroundWatcherTest {
+    @Test fun panelHost_warm_followsPanelAlive() {
+        val saved = AppGraph.panelAlive
+        try {
+            val tracker = WarmTracker("own") { true }
+            AppGraph.panelAlive = false
+            tracker.markForeground("com.gt8d.launcher.panel")
+            assertFalse(tracker.isWarm("com.gt8d.launcher.panel"))
+            AppGraph.panelAlive = true
+            assertTrue(tracker.isWarm("com.gt8d.launcher.panel"))
+            AppGraph.panelAlive = false
+            assertFalse(tracker.isWarm("com.gt8d.launcher.panel"))
+        } finally {
+            AppGraph.panelAlive = saved
+        }
+    }
+
     @Test
     fun recordAppLaunch_successMarksPackageWithoutUsageAccess() {
         val tracker = WarmTracker("own") { false }

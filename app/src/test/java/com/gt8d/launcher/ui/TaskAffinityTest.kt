@@ -38,10 +38,13 @@ class TaskAffinityTest {
         assertEquals("com.gt8d.launcher.browser", affinity(FullscreenBrowserActivity::class.java))
     }
 
-    @Test fun launcherIntent_resolvesToPanel() {
-        assertEquals(
-            ComponentName(app, PanelActivity::class.java),
-            app.packageManager.getLaunchIntentForPackage(app.packageName)?.component,
-        )
+    @Test fun main_hasNoLauncherEntry() {
+        org.junit.Assert.assertNull(app.packageManager.getLaunchIntentForPackage(app.packageName))
+    }
+
+    @Test fun panelActivity_requiresOpenPanelPermission() {
+        assertEquals("com.gt8d.launcher.permission.OPEN_PANEL", app.packageManager.getActivityInfo(
+            ComponentName(app, PanelActivity::class.java), 0,
+        ).permission)
     }
 }

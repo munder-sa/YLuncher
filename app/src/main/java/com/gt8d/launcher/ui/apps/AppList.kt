@@ -1,5 +1,6 @@
 package com.gt8d.launcher.ui.apps
 
+import com.gt8d.launcher.apps.OwnPackages
 import java.text.Collator
 import java.util.Locale
 
@@ -14,7 +15,7 @@ val STOCK_LAUNCHER_ENTRY = AppListEntry(
 fun buildAppList(all: List<AppListEntry>, ownPkg: String): List<AppListEntry> {
     val collator = Collator.getInstance(Locale.JAPANESE)
     val rest = all
-        .filter { it.pkg != ownPkg && it.pkg != STOCK_LAUNCHER_ENTRY.pkg }
+        .filter { it.pkg != ownPkg && it.pkg != OwnPackages.PANEL_HOST && it.pkg != STOCK_LAUNCHER_ENTRY.pkg }
         .distinctBy { it.pkg to it.cls }
         .sortedWith { a, b -> collator.compare(a.label, b.label) }
     return listOf(STOCK_LAUNCHER_ENTRY) + rest

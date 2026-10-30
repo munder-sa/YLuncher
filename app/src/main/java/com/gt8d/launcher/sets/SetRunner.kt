@@ -1,5 +1,6 @@
 package com.gt8d.launcher.sets
 
+import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
@@ -52,6 +53,7 @@ data class SetRunnerDeps(
     val labelFor: (String) -> String,
     val startHome: () -> Unit,
     val messenger: Messenger,
+    val panelHostPkg: String = OwnPackages.PANEL_HOST,
 )
 
 class SetRunner(private val d: SetRunnerDeps) {
@@ -253,7 +255,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         val isPanelRight = set.right is Slot.Panel
         val right = when (val r = set.right) {
             is Slot.App -> r.pkg
-            is Slot.Panel -> d.ownPkg
+            is Slot.Panel -> d.panelHostPkg
         }
 
         val startMs = d.clock.nowMs()
@@ -285,8 +287,8 @@ class SetRunner(private val d: SetRunnerDeps) {
             return
         }
 
-        if (!isPanelRight && right !in installedPkgs) {
-            DiagLog.d("SetRunner", "right uninstalled: $right")
+        if (right !in installedPkgs) {
+            DiagLog.d("SetRunner", if (isPanelRight) "panel host missing" else "right uninstalled: $right")
             d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
             waitSingle(left, startMs, useCurtain)
             notifyLinkNotSplit()

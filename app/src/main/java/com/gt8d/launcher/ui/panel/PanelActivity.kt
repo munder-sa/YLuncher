@@ -54,6 +54,7 @@ class PanelActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppGraph.panelAlive = true
         safetyMode = SafetyGuard.isFallbackActive(this)
         settingsOpen = savedInstanceState?.getBoolean("settings_open") ?: false
         settingsInitialRoute = if (savedInstanceState?.getBoolean("settings_new_set") == true) SettingsRoute.SetEdit(null, true) else null
@@ -169,6 +170,11 @@ class PanelActivity : ComponentActivity() {
         AppGraph.panelInSplit = false
         forwarder.onHidden()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (!isChangingConfigurations) AppGraph.panelAlive = false
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

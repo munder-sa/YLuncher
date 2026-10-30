@@ -1,5 +1,6 @@
 package com.gt8d.launcher.link
 
+import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LinkConfig
 import com.gt8d.launcher.config.LinkMode
 import java.net.URI
@@ -45,15 +46,15 @@ object LinkRouter {
         val ref = clues.referrer?.takeIf { it.isNotEmpty() }
         if (
             pair != null &&
-            pair.first != ownPkg &&
-            pair.second != ownPkg &&
+            !OwnPackages.isOwn(pair.first) &&
+            !OwnPackages.isOwn(pair.second) &&
             !clues.otherForegroundAfterLastPair &&
             ref != null &&
             (ref == pair.first || ref == pair.second)
         ) {
             return FrontState.AppApp(pair.first, pair.second)
         }
-        if (ref != null && ref != ownPkg) {
+        if (ref != null && !OwnPackages.isOwn(ref)) {
             return FrontState.Fullscreen(ref)
         }
         return FrontState.Unknown

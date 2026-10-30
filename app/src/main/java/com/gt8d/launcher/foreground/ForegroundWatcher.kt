@@ -1,5 +1,7 @@
 package com.gt8d.launcher.foreground
 
+import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.apps.OwnPackages
 import java.util.concurrent.ConcurrentHashMap
 
 data class ResumeEvent(val pkg: String, val timeMs: Long)
@@ -66,6 +68,7 @@ class WarmTracker(
 
     fun isWarm(pkg: String): Boolean {
         if (pkg == ownPkg) return ownTaskExists()
+        if (pkg == OwnPackages.PANEL_HOST) return AppGraph.panelAlive
         return pkg in warmPkgs
     }
 

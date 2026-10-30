@@ -7,10 +7,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LinkConfig
 import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.split.SplitMode
-import com.gt8d.launcher.ui.panel.PanelActivity
 import com.gt8d.launcher.time.ElapsedClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filterNotNull
@@ -40,7 +40,7 @@ class LinkEntryActivity : ComponentActivity() {
             val startedAt = AppGraph.runner.lastOpenedAtMs
             val other = pair != null && startedAt != null &&
                 AppGraph.watcher.foregroundPkgsSince(startedAt).any {
-                    it != pair.first && it != pair.second && it != packageName
+                    it != pair.first && it != pair.second && !OwnPackages.isOwn(it)
                 }
             val clues = FrontClues(
                 homeResumed = homeFront,
@@ -88,8 +88,6 @@ class LinkEntryActivity : ComponentActivity() {
                 LinkRoute.FullscreenBrowser -> openFullscreen(applicationContext, incoming)
                 LinkRoute.PanelTaskBrowser -> {
                     AppGraph.pendingUrl.set(incoming)
-                    startActivity(Intent(this, PanelActivity::class.java).addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                 }
                 is LinkRoute.VendorSplitThenBrowser -> {
                     val context = applicationContext

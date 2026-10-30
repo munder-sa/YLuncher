@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import com.gt8d.launcher.apps.AppCatalog
+import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.boot.BootSequence
 import com.gt8d.launcher.config.ConfigRepository
 import com.gt8d.launcher.config.LauncherConfig
@@ -51,6 +52,7 @@ import kotlinx.coroutines.launch
 object AppGraph {
     @Volatile var homeResumed: Boolean = false
     @Volatile var panelInSplit: Boolean = false
+    @Volatile var panelAlive: Boolean = false
     @Volatile var homePausedAtMs: Long? = null
     @Volatile var panelSplitPausedAtMs: Long? = null
     val pendingUrl: com.gt8d.launcher.link.PendingUrl by lazy {
@@ -134,6 +136,7 @@ object AppGraph {
                 scheduler = scheduler,
                 clock = ElapsedClock,
                 ownPkg = app.packageName,
+                panelHostPkg = OwnPackages.PANEL_HOST,
                 labelFor = catalog::label,
                 startHome = {
                     val intent = Intent(app, HomeActivity::class.java).apply {

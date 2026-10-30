@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.MAX_DOCK_APPS
 import com.gt8d.launcher.config.MAX_PANEL_APPS
@@ -52,7 +53,7 @@ fun ListsScreen(
         val ownPkg = LocalContext.current.packageName
         val current = if (section == "idle") emptyList() else apps(config, section)
         val max = limit(section)
-        launchablePackages().distinct().filterNot { it == ownPkg }.sortedBy(labelFor).forEach { pkg ->
+        launchablePackages().distinct().filterNot { it == ownPkg || it == OwnPackages.PANEL_HOST }.sortedBy(labelFor).forEach { pkg ->
             SettingsRow(labelFor(pkg), "lists_${section}_pick_$pkg", modifier = Modifier.fillMaxWidth(),
                 enabled = pkg !in current && (max == null || current.size < max), onClick = {
                 if (section == "idle") onUpdate { it.copy(idleApp = pkg) }

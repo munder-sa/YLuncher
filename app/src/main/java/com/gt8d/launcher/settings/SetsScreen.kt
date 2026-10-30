@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.SplitRatio
@@ -159,7 +160,7 @@ fun SetsScreen(
                     BackHandler { pickingLeft = null }
                     val ownPkg = LocalContext.current.packageName
                     SetButton("アプリの選択を戻る", "set_pick_back") { pickingLeft = null }
-                    launchablePackages().distinct().filterNot { it == ownPkg }.sortedBy(labelFor).forEach { pkg ->
+                    launchablePackages().distinct().filterNot { it == ownPkg || it == OwnPackages.PANEL_HOST }.sortedBy(labelFor).forEach { pkg ->
                         SettingsRow(labelFor(pkg), "set_pick_$pkg", onClick = {
                             draft = if (pickingLeft == true) draft.copy(left = pkg) else draft.withRight(Slot.App(pkg))
                             pickingLeft = null
