@@ -84,6 +84,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var pending: PendingOpen? = null
     private var waitKind: WaitKind = WaitKind.None
     private var panelResumed: Boolean = false
+    private var ownScreenSeen: Boolean = false
     private var openingForBoot = false
     private var monitoringAvailable: Boolean = true
     private var expectedDelayMs: Long = WarmTracker.COLD_MS
@@ -191,6 +192,10 @@ class SetRunner(private val d: SetRunnerDeps) {
         d.startHome()
     }
 
+    fun ownScreenResumed() {
+        if (_opening.value != null) ownScreenSeen = true
+    }
+
     fun panelResumedInSplit() {
         DiagLog.d("SetRunner", "panelResumedInSplit")
         panelResumed = true
@@ -256,6 +261,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         monitoringAvailable = d.watcher.available()
         expectedDelayMs = d.warm.expectedDelayMs(left, right)
         panelResumed = false
+        ownScreenSeen = false
         openingForBoot = !useCurtain
         _opening.value = Opening(left, right, startMs)
         lastOpenedPair = left to right
@@ -403,6 +409,14 @@ class SetRunner(private val d: SetRunnerDeps) {
             val ready = isBothReady()
             if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
             if (!ready) {
+                val seen = d.watcher.foregroundPkgsSince(startMs)
+                if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
+                val progressed = ownScreenSeen || panelResumed ||
+                    left in seen || (!isPanelRight && right in seen) || STOCK_LAUNCHER_PKG in seen
+                if (progressed) {
+                    DiagLog.d("SetRunner", "retry skipped: progress left=$left right=$right")
+                    return@schedule
+                }
                 DiagLog.d("SetRunner", "retry at $RETRY_AT_MS left=$left right=$right")
                 val result = launcher.open(left, right, ratio)
                 if (result is LaunchResult.Failed) {
@@ -569,6 +583,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     companion object {
+        const val STOCK_LAUNCHER_PKG = "com.android.launcher3"
         const val POLL_MS = 200L
         const val RETRY_AT_MS = 3000L
         const val BOOT_CLEAR_MS = 10000L

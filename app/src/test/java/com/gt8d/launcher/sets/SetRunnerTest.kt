@@ -31,6 +31,77 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SetRunnerTest {
+    @Test
+    fun retrySkipped_whenOwnScreenResumedDuringOpening() {
+        val e = TestEnv()
+        e.runner.open(1)
+        e.scheduler.advanceBy(1000)
+        e.runner.ownScreenResumed()
+        e.scheduler.advanceBy(2000)
+        assertEquals(1, e.vendor.calls.size)
+        assertTrue(e.curtain.isShowing)
+        e.scheduler.advanceBy(999)
+        assertTrue(e.curtain.isShowing)
+        e.scheduler.advanceBy(1)
+        assertFalse(e.curtain.isShowing)
+        assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+    }
+
+    @Test
+    fun retrySkipped_whenStockLauncherResumed() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.scheduler.advanceBy(1500)
+        e.events.events.add(ResumeEvent("com.android.launcher3", 1500))
+        e.scheduler.advanceBy(1500)
+        assertEquals(1, e.vendor.calls.size)
+    }
+
+    @Test
+    fun retrySkipped_whenLeftResumed() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.scheduler.advanceBy(500)
+        e.events.events.add(ResumeEvent("youtube", 500))
+        e.scheduler.advanceBy(2500)
+        assertEquals(1, e.vendor.calls.size)
+    }
+
+    @Test
+    fun retryHappens_whenNothingSeen() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.scheduler.advanceBy(2999)
+        assertEquals(1, e.vendor.calls.size)
+        e.scheduler.advanceBy(1)
+        assertEquals(2, e.vendor.calls.size)
+    }
+
+    @Test
+    fun ownScreenResumed_outsideOpening_isIgnored() {
+        val e = TestEnv()
+        e.runner.ownScreenResumed()
+        e.runner.open(2)
+        e.scheduler.advanceBy(3000)
+        assertEquals(2, e.vendor.calls.size)
+    }
+
+    @Test
+    fun ownScreenSeen_resetsOnNextOpen() {
+        val e = TestEnv()
+        e.runner.open(1)
+        e.scheduler.advanceBy(1000)
+        e.runner.ownScreenResumed()
+        e.scheduler.advanceBy(2000)
+        assertEquals(1, e.vendor.calls.size)
+        e.scheduler.advanceBy(1000)
+        assertNull(e.runner.opening.value)
+        e.runner.open(2)
+        assertEquals(2, e.vendor.calls.size)
+        e.scheduler.advanceBy(3000)
+        assertEquals(3, e.vendor.calls.size)
+    }
+
     @Test fun followIndex_updatesCurrentAndSaved_withoutOpening() {
         val e = TestEnv()
         e.runner.followIndex(2)

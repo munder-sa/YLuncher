@@ -146,6 +146,7 @@ class PanelActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppGraph.runner.ownScreenResumed()
         AppGraph.panelInSplit = isInMultiWindowMode
         AppGraph.panelSplitPausedAtMs = null
         inSplitState = isInMultiWindowMode

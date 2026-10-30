@@ -178,6 +178,7 @@ class HomeActivity : ComponentActivity() {
             recreate()
             return
         }
+        AppGraph.runner.ownScreenResumed()
         AppGraph.homeResumed = true
         AppGraph.homePausedAtMs = null
         if (SafetyGuard.isFallbackActive(this)) {
