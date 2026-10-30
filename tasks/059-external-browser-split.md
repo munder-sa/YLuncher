@@ -73,11 +73,28 @@
   - `ConfigCodecTest`・`DefaultsTest` は `browserPkg` の既定値の確認を足すだけ。
 
 ## テスト(先に書き、修正前に失敗することを確かめる)
-- `BrowserChooserTest`: `choose_preferredInstalled`、`choose_fallbackChromeThenBrave`、`choose_none_null`、`installedBrowsers_excludesOwn`(Robolectric で http の VIEW を扱うアプリを登録して確かめる)。
-- `LinkRouterTest`: `home_fullscreen`、`fullscreenApp_splitWithSender`、`appPanel_splitWithLastLeft`、`appPanel_unknownLeft_fullscreen`、`appApp_splitWithLeft`、`modeFull_alwaysFullscreen`、`vendorUnusable_fullscreen`、`googleLogin_noLongerSpecial`(accounts.google.com も分割)。
-- `SetRunnerTest`: `link_ready_callsOnReadyOnce`、`link_timed_callsOnReadyOnce`(使用状況なし)、`link_safety_callsNotSplitOnce`、`link_overridden_callsNeither`、`link_rightIsBrowserInVendorCall`。
+- `BrowserChooserTest`: `choose_preferredInstalled`、`choose_fallbackChromeThenBrave`、`choose_none_null`、`installedBrowsers_excludesOwn_sortedByLabel`(Robolectric で https の VIEW を扱うアプリを登録して確かめる)。
+- `LinkRouterTest`: `home_fullscreen`、`fullscreenApp_splitWithSender`、`appPanel_splitWithLastLeft`、`appPanel_unknownLeft_fullscreen`、`appApp_splitWithLeft`、`modeFull_alwaysFullscreen`、`vendorUnusable_fullscreen`、`googleLogin_noLongerSpecial`(accounts.google.com も分割)、`leftIsBrowser_fullscreen`。
+- `SetRunnerTest`: `link_ready_callsOnReadyOnce`、`link_timed_callsOnReadyOnce`(使用状況なし)、`link_safety_callsNotSplitOnce`、`link_overridden_callsNeither`(リンクを開いている最中に `next()` → 幕が外れても onReady・onNotSplit とも呼ばれない)、`link_secondLink_cancelsFirstCallbacks`、`link_singleLaunchFallback_callsNotSplitOnly`(左が未インストール)、`link_monitoringUnavailableFromStart_timed_callsOnReady`、`link_rightIsBrowserInVendorCall`。
 - `LinkEntryActivityTest`: `fullscreen_sendsViewToChosenBrowser`、`split_callsOpenForLinkWithBrowser`、`noBrowser_doesNothing`。
 - `DailyScreensTest`: `link_chooseBrowser_saves`、`link_missingBrowser_showsActual`、`link_noDomainSection`。
+
+
+## 点検を受けて決めたこと(上の仕様より優先する)
+1. **onReady は「分割を待つ流れ(waitBoth)」が Ready または Timed で終わったときだけ**、1回呼ぶ。左右の未インストール・分割方式なし・リサイズ不可などで**片側だけの起動に退避した場合は、退避した時点で onNotSplit を1回だけ呼び**、その後の幕の解除では何も呼ばない(今の `linkFallback` と同じ時点)。
+2. 使用状況のアクセスが**最初から無い**(開始時に監視できない)なら、時間で幕を外したとき(Timed)に onReady を呼ぶ(できるだけ分割に開く)。**途中で監視できなくなった**(権限を失った・問い合わせの失敗)場合は、今どおり onNotSplit(既存のテスト `linkQueryFailureDuringWait_callsFallbackOnce` の期待のまま)。
+3. **上書き**: リンクの開き方の途中に、別の操作(`open`・`next`・`prev`・`home`・`openForBoot`・新しい `openForLink`)を**受け付けた時点で**、それまでのリンクのコールバックを無効にする(onReady も onNotSplit も呼ばない)。今と同じ番号を再び求められた場合も無効にする。
+4. **リンクが続けて来た**: 開いている最中に新しいリンクが来たら、`openForLink` は今どおり false を返し、新しいリンクは全画面で開く。このとき、**先のリンクのコールバックも無効にする**(古い URL が後から開かれないように)。
+5. 「全画面で開く」は、ブラウザに通常の `VIEW + NEW_TASK` を送ることを指す(分割を解くことまでは求めない)。
+6. 左のアプリが選んだブラウザそのもの(left == ブラウザ)なら、分割にせず `FullscreenBrowser`(VIEW を送るだけ)にする。
+7. `openForLink` は、右(ブラウザ)の「インストールの確認」を `installed()` で行わない(ブラウザは `BrowserChooser` で PackageManager から選んでいるため)。左の確認は今のまま。
+8. 遅れて呼ばれる onReady・onNotSplit の中の VIEW の送信は、共通の安全な関数(`runCatching` で包み、失敗は DiagLog)で行う。Activity が閉じた後に呼ばれるので、`applicationContext` を使う。
+9. `installedBrowsers` は `https://example.com` で探し、マニフェストの `<queries>` に https の VIEW(既にある http に加えて)を足す。テストの登録も https(と http)にする。並び順はアプリ名の順。候補が0なら設定に「ブラウザが入っていません」と出す。
+10. 設定の保存値(`browserPkg`)は、入っていなくても書き換えない。選択の印は保存値に付け、実際に使われるブラウザが違うときは別の行で「実際に使うブラウザ: …」と出す。
+11. `LinkConfig` の `browserPkg` は**最後の引数**として足す(位置引数の既存の呼び出しを壊さない)。`ConfigCodecTest` に、Brave など既定以外の値を保存して読み戻すテストを足してよい。
+12. 既存テストの変更として、上の「既存テストの扱い」に加え、**型の変更(`AppPanel` のデータクラス化、`LinkRoute` の作り直し、`openForLink` の形)に合わせた書き換え、不要になった import、共通の準備・後始末(例: `PanelActivityTest` の cleanup の `pendingUrl`)の修正**を許可する。通常のセットの Ready の期待や、冷えた起動で設定を待つ・破棄する確認は変えない。
+13. テストの作り方: `LinkEntryActivityTest` は、`SetRunnerDeps` に偽の vendor・scheduler・curtain を差し込み、`openForLink` に渡った左右と、幕が外れた後(Activity が閉じた後)に VIEW が1回だけ送られること、外れる前は送られないこと、Failed・Safety では全画面の VIEW が1回だけ送られることを確かめる。実機での分割の成立・新しいタブ・全画面かどうかは、司令塔が実機の場面テストで確かめる(テストでは確かめなくてよい)。
+14. このタスクは Task 058 を取り込んだ後の状態から始める。058 で入った `currentIndexFlow` とそのテスト、`DailyScreensTest` のパネルの区分へ移した確認を消さない。リンク用の一時のセットでは `currentIndex` を変えない今の期待も保つ。新しい型・関数を参照するテストのコンパイルの失敗は、「修正前に失敗した」ことに数えてよい。
 
 ## 手順(TDD)
 1. テストを書く。2. 対象テストを実行し、修正前に失敗することを確かめる(どのテストがどう失敗したかを報告に書く)。
