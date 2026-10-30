@@ -6,7 +6,8 @@ UI の決まり(計画の Global Constraints): 文言は日本語、ダーク固
 
 パス接頭辞: `M = app/src/main/java/com/gt8d/launcher`、`T = app/src/test/java/com/gt8d/launcher`
 
-前提: Task 042〜044 で `settings/` ができている。まず `SettingsNav.kt`・`SettingsScreen.kt` と、044 の画面の書き方(偽物の渡し方)を読み、合わせる。
+前提: Task 042 で `settings/` の土台(`SettingsNav.kt`・`SettingsScreen.kt`・`SettingsActivity.kt`)ができている。まずそれらとそのテストを読み、書き方(上のバー、ルートの分岐、テストの偽物の渡し方)を合わせる。
+Task 043・044(画面セット・日常の設定)は別に並行して作っているので、この Task では参照しない(無くてよい)。
 
 ## 作成・変更するファイル(これで全部)
 新規作成:
