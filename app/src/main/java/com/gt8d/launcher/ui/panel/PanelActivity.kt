@@ -7,21 +7,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.gt8d.launcher.AppGraph
-import com.gt8d.launcher.R
 import com.gt8d.launcher.apps.stockLauncherIntent
 import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.settings.SettingsActivity
@@ -38,6 +33,8 @@ import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.layout.launcherBackground
+import com.gt8d.launcher.ui.layout.stripSafePadding
 import kotlinx.coroutines.launch
 
 class PanelActivity : ComponentActivity() {
@@ -81,6 +78,8 @@ class PanelActivity : ComponentActivity() {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .launcherBackground()
+                        .stripSafePadding()
                         .twoFingerSwipe { action ->
                             when (action) {
                                 EdgeAction.Next -> AppGraph.runner.next()
@@ -89,13 +88,6 @@ class PanelActivity : ComponentActivity() {
                             }
                         },
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.wallpaper),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize(),
-                    )
                     val url = browserUrl
                     if (url != null) {
                         BrowserPane(url, onClose = { browserUrl = null }, modifier = Modifier.fillMaxSize())

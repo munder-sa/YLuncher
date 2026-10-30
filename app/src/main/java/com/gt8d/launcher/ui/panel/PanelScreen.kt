@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.gt8d.launcher.AppGraph
@@ -38,7 +39,7 @@ fun PanelScreen(
     val latestConfig by AppGraph.latestConfig.collectAsState()
     val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
     val now by MediaWatcher.nowPlaying.collectAsState()
-    var showAppList by remember { mutableStateOf(false) }
+    var showAppList by rememberSaveable { mutableStateOf(false) }
     val environment = rememberPanelEnvironment(AppGraph.catalog)
 
     val appListGridState = rememberLazyGridState()

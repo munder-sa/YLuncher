@@ -5,11 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -24,9 +24,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.gt8d.launcher.ui.layout.PanelLayout
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
@@ -39,45 +40,41 @@ private sealed interface GridCell {
 @Composable
 fun IconGrid(
     apps: List<AppInfo>,
-    columns: Int,
+    columns: Int? = null,
     onLaunch: (String) -> Unit,
     onAdd: (() -> Unit)?,
+    modifier: Modifier = Modifier.testTag("icon_grid"),
 ) {
-    val safeColumns = columns.coerceAtLeast(1)
-    val cells = buildList {
-        apps.forEach { add(GridCell.App(it)) }
-        if (onAdd != null) {
-            add(GridCell.Add(onAdd))
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val safeColumns = columns?.coerceAtLeast(1) ?: PanelLayout.columns(maxWidth.value)
+        val cells = buildList {
+            apps.forEach { add(GridCell.App(it)) }
+            if (onAdd != null) add(GridCell.Add(onAdd))
         }
-    }
 
-    val rows = cells.chunked(safeColumns)
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        for (row in rows) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                for (cell in row) {
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        when (cell) {
-                            is GridCell.App -> AppCell(
-                                app = cell.info,
-                                onLaunch = onLaunch,
-                            )
-                            is GridCell.Add -> AddCell(onAdd = cell.onClick)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (row in cells.chunked(safeColumns)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for (cell in row) {
+                        Box(
+                            modifier = Modifier.size(88.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            when (cell) {
+                                is GridCell.App -> AppCell(app = cell.info, onLaunch = onLaunch)
+                                is GridCell.Add -> AddCell(onAdd = cell.onClick)
+                            }
                         }
                     }
-                }
-                val emptyCount = safeColumns - row.size
-                repeat(emptyCount) {
-                    Spacer(modifier = Modifier.weight(1f))
+                    repeat(safeColumns - row.size) {
+                        Spacer(modifier = Modifier.size(88.dp))
+                    }
                 }
             }
         }
@@ -90,14 +87,15 @@ private fun AppCell(
     onLaunch: (String) -> Unit,
 ) {
     val tag = if (app.installed) "icon_${app.pkg}" else "missing_${app.pkg}"
-    val labelText = if (app.installed) app.label else "アプリが見つかりません"
+    val labelText = if (app.installed) app.label else "${app.label}(アプリが見つかりません)"
     val alpha = if (app.installed) 1f else 0.4f
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
-            .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+            .size(88.dp)
+            .semantics { contentDescription = labelText }
             .clickable {
                 if (app.installed) {
                     onLaunch(app.pkg)
@@ -115,16 +113,16 @@ private fun AppCell(
             }
             Image(
                 bitmap = app.icon,
-                contentDescription = labelText,
+                contentDescription = null,
                 colorFilter = colorFilter,
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(64.dp),
             )
         } else {
             val initial = app.label.firstOrNull()?.toString() ?: "?"
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(64.dp)
                     .clip(CircleShape)
                     .background(Palette.Panel),
             ) {
@@ -136,15 +134,6 @@ private fun AppCell(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = labelText,
-            fontSize = Dims.BodyText,
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 

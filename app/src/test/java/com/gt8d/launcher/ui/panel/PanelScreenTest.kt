@@ -152,10 +152,10 @@ class PanelScreenTest {
     }
     @Test fun panelScreen_packageAdded_enablesConfiguredAppWithoutConfigChange() {
         host()
-        rule.onNodeWithTag("missing_$pkg").performScrollTo().assert(hasText("アプリが見つかりません"))
+        rule.onNodeWithTag("missing_$pkg").performScrollTo().assert(hasContentDescription("$pkg(アプリが見つかりません)"))
         rule.runOnIdle { install() }
         broadcast(Intent.ACTION_PACKAGE_ADDED)
-        rule.onNodeWithTag("icon_$pkg").performScrollTo().assert(hasText("Label A")).performClick()
+        rule.onNodeWithTag("icon_$pkg").performScrollTo().assert(hasContentDescription("Label A")).performClick()
         assertEquals(listOf(pkg), launches)
     }
     @Test fun panelScreen_packageRemoved_disablesConfiguredAppWithoutConfigChange() {
@@ -164,7 +164,7 @@ class PanelScreenTest {
         assertEquals(listOf(pkg), launches)
         rule.runOnIdle { Shadows.shadowOf(app.packageManager).removePackage(pkg); launches.clear() }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
-        rule.onNodeWithTag("missing_$pkg").performScrollTo().assert(hasText("アプリが見つかりません")).performClick()
+        rule.onNodeWithTag("missing_$pkg").performScrollTo().assert(hasContentDescription("$pkg(アプリが見つかりません)")).performClick()
         assertEquals(emptyList<String>(), launches)
     }
     @Test fun panelScreen_openAppList_updatesAfterPackageChange() {

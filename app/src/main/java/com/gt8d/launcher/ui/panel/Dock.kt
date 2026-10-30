@@ -33,6 +33,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.MAX_DOCK_APPS
@@ -55,10 +57,11 @@ fun Dock(
     Surface(
         color = Palette.Background1,
         shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.width(88.dp).testTag("dock"),
     ) {
         Column(
             modifier = Modifier
-                .width(Dims.MinTouch)
+                .width(88.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -150,20 +153,21 @@ private fun DockAppButton(
         modifier = Modifier
             .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
             .clickable { onLaunch(app.pkg) }
+            .semantics { contentDescription = app.label }
             .testTag("dock_app_${app.pkg}"),
     ) {
         if (app.icon != null) {
             Image(
                 bitmap = app.icon,
-                contentDescription = app.label,
-                modifier = Modifier.size(44.dp),
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
             )
         } else {
             val initial = app.label.firstOrNull()?.toString() ?: "?"
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(64.dp)
                     .clip(CircleShape)
                     .background(Palette.Panel),
             ) {

@@ -1,0 +1,30 @@
+write app/src/main/java/com/gt8d/launcher/ui/layout/OneLineText.kt
+write app/src/main/java/com/gt8d/launcher/ui/layout/FitClock.kt
+write app/src/main/java/com/gt8d/launcher/ui/layout/Backgrounds.kt
+write app/src/main/java/com/gt8d/launcher/ui/layout/StripInsets.kt
+write app/src/main/java/com/gt8d/launcher/ui/layout/PanelLayout.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeContent.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/PanelLayoutTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/StripInsetsTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/FitClockTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/MediaCard.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/IconGrid.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/Dock.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/edge/EdgeStripService.kt
+write app/src/main/java/com/gt8d/launcher/ui/theme/Theme.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/IconGridTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/DockTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/MediaCardTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.* --tests com.gt8d.launcher.edge.*
+command /home/munde/tools/gradle-run.sh assembleDebug
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.layout.FitClockTest

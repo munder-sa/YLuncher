@@ -13,6 +13,8 @@ object Dims {
 }
 
 object Palette {
+    val WallTop = Color(0xFF101016)
+    val WallBottom = Color(0xFF0A0A0E)
     val Background0 = Color(0xFF0B0B0F)
     val Background1 = Color(0xFF17171D)
     val Panel = Color(0xFF2E2E38)

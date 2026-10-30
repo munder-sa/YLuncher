@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -24,10 +25,17 @@ import com.gt8d.launcher.curtain.CurtainView
 import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.ui.theme.Palette
 import kotlin.math.hypot
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+data class StripBounds(val left: Rect?, val right: Rect?)
 
 class EdgeStripService : Service() {
 
     companion object {
+        private val mutableStripBounds = MutableStateFlow(StripBounds(null, null))
+        val stripBounds: StateFlow<StripBounds> = mutableStripBounds.asStateFlow()
         private const val CHANNEL_ID = "gt8d_edge_strip"
         private const val CHANNEL_NAME = "GT8D Launcher"
         private const val NOTIFICATION_TEXT = "GT8D Launcher 動作中"
@@ -69,6 +77,8 @@ class EdgeStripService : Service() {
     private var rightStrip: View? = null
     private var leftAttached = false
     private var rightAttached = false
+    private var leftWidth = 0
+    private var rightWidth = 0
     internal var overlayAllowed: () -> Boolean = { Settings.canDrawOverlays(this) }
     internal var windowManagerFactory: () -> WindowManagerFacade = {
         AndroidWindowManagerFacade(getSystemService(WindowManager::class.java))
@@ -124,18 +134,21 @@ class EdgeStripService : Service() {
     private fun releaseOverlays() {
         handler.removeCallbacksAndMessages(null)
         val facade = wmFacade
-        if (leftAttached) leftStrip?.let { view -> runCatching { facade?.removeView(view) } }
-        if (rightAttached) rightStrip?.let { view -> runCatching { facade?.removeView(view) } }
-        leftStrip = null
-        rightStrip = null
-        leftAttached = false
-        rightAttached = false
+        if (leftAttached) leftStrip?.let { view ->
+            runCatching { requireNotNull(facade).removeView(view) }.onSuccess { leftAttached = false }
+        }
+        if (rightAttached) rightStrip?.let { view ->
+            runCatching { requireNotNull(facade).removeView(view) }.onSuccess { rightAttached = false }
+        }
+        publishStripBounds()
+        if (!leftAttached) leftStrip = null
+        if (!rightAttached) rightStrip = null
 
         val window = curtainWindow
         runCatching { window?.removeImmediately() }
         if (curtainView === window) curtainView = null
         curtainWindow = null
-        wmFacade = null
+        if (!leftAttached && !rightAttached) wmFacade = null
     }
 
     internal fun readdStrips() {
@@ -151,16 +164,31 @@ class EdgeStripService : Service() {
     }
 
     private fun ensureStripsAttached() {
-        if (!overlayAllowed()) return
+        if (!overlayAllowed()) {
+            publishStripBounds()
+            return
+        }
         val facade = wmFacade ?: return
         if (!leftAttached) leftStrip?.let { view ->
-            runCatching { facade.addView(view, buildStripParams(Side.Left)) }
-                .onSuccess { leftAttached = true }
+            val params = buildStripParams(Side.Left)
+            runCatching { facade.addView(view, params) }
+                .onSuccess { leftAttached = true; leftWidth = params.width }
         }
         if (!rightAttached) rightStrip?.let { view ->
-            runCatching { facade.addView(view, buildStripParams(Side.Right)) }
-                .onSuccess { rightAttached = true }
+            val params = buildStripParams(Side.Right)
+            runCatching { facade.addView(view, params) }
+                .onSuccess { rightAttached = true; rightWidth = params.width }
         }
+        publishStripBounds()
+    }
+
+    private fun publishStripBounds() {
+        // current は分割中に前面の窓の大きさを返すことがあるため、画面全体の大きさ(maximum)を使う。
+        val bounds = getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
+        mutableStripBounds.value = StripBounds(
+            if (leftAttached) Rect(0, 0, leftWidth, bounds.height()) else null,
+            if (rightAttached) Rect(bounds.width() - rightWidth, 0, bounds.width(), bounds.height()) else null,
+        )
     }
 
     private fun startForegroundNotification() {

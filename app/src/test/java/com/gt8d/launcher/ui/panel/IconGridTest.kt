@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.ui.theme.LauncherTheme
@@ -78,7 +79,7 @@ class IconGridTest {
         }
 
         rule.onNodeWithTag("missing_com.missing.app").assertIsDisplayed()
-        rule.onNodeWithText("アプリが見つかりません").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Missing App(アプリが見つかりません)").assertIsDisplayed()
         rule.onNodeWithTag("missing_com.missing.app").performClick()
         assertNull(launchedPkg)
     }

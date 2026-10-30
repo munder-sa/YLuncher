@@ -39,6 +39,14 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelActivityTest {
+    @Test fun appList_survivesRecreate() {
+        splitPanel()
+        rule.onNodeWithTag("dock_applist").performScrollTo().performClick()
+        rule.onNodeWithTag("applist_close").assertIsDisplayed()
+        controller!!.recreate()
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.onNodeWithTag("applist_close").assertIsDisplayed()
+    }
     @get:Rule val rule = createEmptyComposeRule()
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private var controller: ActivityController<PanelActivity>? = null

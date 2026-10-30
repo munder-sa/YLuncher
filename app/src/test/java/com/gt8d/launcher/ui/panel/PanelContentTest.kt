@@ -43,6 +43,25 @@ import org.robolectric.annotation.Config
 class PanelContentTest {
 
     @Test
+    fun panel_clockShownWhileIdleAndPlaying() {
+        var now by mutableStateOf<NowPlaying?>(null)
+        rule.setContent {
+            LauncherTheme {
+                PanelContent(
+                    PanelState(now, null, 0L, emptyList(), emptyList(), DockStatus(true, null), false, false),
+                    emptyActions(),
+                )
+            }
+        }
+        rule.onNodeWithTag("clock").assertIsDisplayed()
+        rule.runOnIdle {
+            now = NowPlaying("music", "曲名", "歌手", null, 180000L, true, true)
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        }
+        rule.onNodeWithTag("clock").assertIsDisplayed()
+    }
+
+    @Test
     fun panel_narrowShortWithFavorite_allControlsReachable() {
         val events = mutableListOf<String>()
         val seeks = mutableListOf<Long>()

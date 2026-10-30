@@ -7,11 +7,11 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -31,7 +31,6 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,20 +45,16 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.gt8d.launcher.R
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
-import kotlinx.coroutines.delay
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
+import com.gt8d.launcher.ui.layout.OneLineText
+import com.gt8d.launcher.ui.layout.PanelLayout
 import java.util.Locale
-
-private val ClockFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
 
 @Composable
 fun MediaCard(
@@ -73,7 +68,7 @@ fun MediaCard(
     Surface(
         color = Palette.Panel,
         shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag("media_card"),
     ) {
         if (now == null) {
             IdleMediaContent(idleApp = idleApp, onLaunch = onLaunch)
@@ -93,33 +88,19 @@ private fun IdleMediaContent(
     idleApp: AppInfo?,
     onLaunch: (String) -> Unit,
 ) {
-    var clockText by remember { mutableStateOf(LocalTime.now().format(ClockFormatter)) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            clockText = LocalTime.now().format(ClockFormatter)
-            delay(10_000L)
-        }
-    }
-
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(8.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = clockText,
-            fontSize = 96.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            modifier = Modifier.testTag("clock"),
-        )
+        val showName = maxWidth >= 300.dp
         if (idleApp != null) {
-            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                    .semantics { contentDescription = idleApp.label }
                     .clickable {
                         if (idleApp.installed) {
                             onLaunch(idleApp.pkg)
@@ -140,6 +121,7 @@ private fun IdleMediaContent(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .size(48.dp)
+                            .semantics { contentDescription = idleApp.label }
                             .clip(CircleShape)
                             .background(Palette.Background1),
                     ) {
@@ -150,12 +132,13 @@ private fun IdleMediaContent(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = if (idleApp.installed) idleApp.label else "アプリが見つかりません",
-                    fontSize = Dims.BodyText,
-                    color = Color.White,
-                )
+                if (showName || !idleApp.installed) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    OneLineText(
+                        text = if (idleApp.installed) idleApp.label else "アプリが見つかりません",
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
             }
         }
     }
@@ -171,7 +154,7 @@ private fun ActiveMediaContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(8.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -199,22 +182,18 @@ private fun ActiveMediaContent(
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                OneLineText(
                     text = now.title,
                     fontSize = Dims.BodyText,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag("title"),
                 )
                 if (now.artist != null) {
-                    Text(
+                    OneLineText(
                         text = now.artist,
                         fontSize = Dims.BodyText,
                         color = Color.LightGray,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.testTag("artist"),
                     )
                 }
@@ -275,12 +254,12 @@ private fun ActiveMediaContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
+                OneLineText(
                     text = formatTime(displayPos),
                     fontSize = Dims.BodyText,
                     color = Color.White,
                 )
-                Text(
+                OneLineText(
                     text = "-${formatTime(remaining)}",
                     fontSize = Dims.BodyText,
                     color = Color.White,
@@ -288,71 +267,37 @@ private fun ActiveMediaContent(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = { onAction(MediaAction.Prev) },
-                modifier = Modifier
-                    .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                    .testTag("btn_prev"),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = "前へ",
-                    tint = Palette.Accent,
-                    modifier = Modifier.size(36.dp),
-                )
-            }
-
-            IconButton(
-                onClick = {
-                    onAction(if (now.playing) MediaAction.Pause else MediaAction.Play)
-                },
-                modifier = Modifier
-                    .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                    .testTag("btn_playpause"),
-            ) {
-                Icon(
-                    imageVector = if (now.playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (now.playing) "一時停止" else "再生",
-                    tint = Palette.Accent,
-                    modifier = Modifier.size(40.dp),
-                )
-            }
-
-            IconButton(
-                onClick = { onAction(MediaAction.Next) },
-                modifier = Modifier
-                    .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                    .testTag("btn_next"),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = "次へ",
-                    tint = Palette.Accent,
-                    modifier = Modifier.size(36.dp),
-                )
-            }
-
-            if (now.hasFavorite) {
-                IconButton(
-                    onClick = { onAction(MediaAction.Favorite) },
-                    modifier = Modifier
-                        .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                        .testTag("btn_favorite"),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.StarBorder,
-                        contentDescription = "お気に入り",
-                        tint = Palette.Accent,
-                        modifier = Modifier.size(36.dp),
-                    )
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val controls = listOf(MediaAction.Prev, if (now.playing) MediaAction.Pause else MediaAction.Play, MediaAction.Next) +
+                if (now.hasFavorite) listOf(MediaAction.Favorite) else emptyList()
+            val rows = PanelLayout.controlRows(maxWidth.value, controls.size)
+            val perRow = if (rows == 1) controls.size else (controls.size + 1) / 2
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (row in controls.chunked(perRow)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        for (action in row) MediaControl(action, onAction)
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MediaControl(action: MediaAction, onAction: (MediaAction) -> Unit) {
+    val (icon, description, tag) = when (action) {
+        MediaAction.Prev -> Triple(Icons.Default.SkipPrevious, "前へ", "btn_prev")
+        MediaAction.Play -> Triple(Icons.Default.PlayArrow, "再生", "btn_playpause")
+        MediaAction.Pause -> Triple(Icons.Default.Pause, "一時停止", "btn_playpause")
+        MediaAction.Next -> Triple(Icons.Default.SkipNext, "次へ", "btn_next")
+        MediaAction.Favorite -> Triple(Icons.Default.StarBorder, "お気に入り", "btn_favorite")
+    }
+    IconButton(onClick = { onAction(action) }, modifier = Modifier.size(72.dp).testTag(tag)) {
+        Icon(icon, description, tint = Palette.Accent, modifier = Modifier.size(36.dp))
     }
 }
 

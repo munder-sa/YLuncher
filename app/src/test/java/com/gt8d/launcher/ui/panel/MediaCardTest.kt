@@ -124,7 +124,6 @@ class MediaCardTest {
             }
         }
 
-        rule.onNodeWithTag("clock").assertIsDisplayed()
         rule.onNodeWithText("Apple Music").assertIsDisplayed()
         rule.onNodeWithTag("idle_app").performClick()
         assertEquals("com.apple.android.music", launchedPkg)

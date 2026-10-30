@@ -170,7 +170,7 @@ class HomeActivityUiTest {
         val config = flow.value
         rule.runOnIdle { install() }
         broadcast(Intent.ACTION_PACKAGE_ADDED)
-        rule.onNodeWithTag("icon_$pkg").assert(hasText("Home App"))
+        rule.onNodeWithTag("icon_$pkg").assert(hasContentDescription("Home App"))
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
         assertLaunch()
@@ -182,7 +182,7 @@ class HomeActivityUiTest {
         rule.onNodeWithTag("icon_$pkg").assertExists()
         rule.runOnIdle { shadowOf(app.packageManager).removePackage(pkg) }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
-        rule.onNodeWithTag("missing_$pkg").assert(hasText("アプリが見つかりません")).performClick()
+        rule.onNodeWithTag("missing_$pkg").assert(hasContentDescription("$pkg(アプリが見つかりません)")).performClick()
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
@@ -191,10 +191,10 @@ class HomeActivityUiTest {
         install(); host()
         val config = flow.value
         val media = MediaWatcher.nowPlaying.value
-        rule.onNodeWithTag("icon_$pkg").assert(hasText("Home App"))
+        rule.onNodeWithTag("icon_$pkg").assert(hasContentDescription("Home App"))
         rule.runOnIdle { install("Changed Home") }
         broadcast(Intent.ACTION_PACKAGE_CHANGED)
-        rule.onNodeWithTag("icon_$pkg").assert(hasText("Changed Home"))
+        rule.onNodeWithTag("icon_$pkg").assert(hasContentDescription("Changed Home"))
         assertSame(config, flow.value)
         assertEquals(listOf(pkg), flow.value!!.homeApps)
         assertSame(media, MediaWatcher.nowPlaying.value)
@@ -206,7 +206,7 @@ class HomeActivityUiTest {
         val media = MediaWatcher.nowPlaying.value
         rule.onNodeWithTag("missing_$pkg").assertExists()
         rule.runOnIdle { controller!!.pause(); install(); controller!!.resume() }
-        rule.onNodeWithTag("icon_$pkg").assert(hasText("Home App"))
+        rule.onNodeWithTag("icon_$pkg").assert(hasContentDescription("Home App"))
         assertSame(activity, controller!!.get())
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
