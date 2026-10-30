@@ -15,6 +15,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.config.LauncherConfig
+import com.gt8d.launcher.config.ScreenSet
+import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.safety.SafetyGuard
 import java.io.File
@@ -67,6 +69,7 @@ class HomeActivityUiTest {
         usageMode = ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName)
         shadowOf(ops).setMode(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName, AppOpsManager.MODE_ERRORED)
         flow = MutableStateFlow(Defaults.build(emptySet()).copy(
+            screenSets = listOf(ScreenSet("home-test", Slot.App(pkg), Slot.Panel)),
             homeApps = listOf(pkg), panelApps = emptyList(), dockApps = emptyList(), idleApp = "example.other.idle",
         ))
         AppGraph.configFlowForHomeTest = flow
@@ -113,10 +116,27 @@ class HomeActivityUiTest {
         rule.runOnIdle { app.sendBroadcast(Intent(action, Uri.parse("package:$pkg"))) }
         rule.waitForIdle()
     }
-    private fun assertLaunch() {
-        rule.onNodeWithTag("icon_$pkg").performScrollTo().performClick()
-        assertEquals(component, shadowOf(controller!!.get()).nextStartedActivity?.component)
-        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+    private fun assertOpen() {
+        val runner = AppGraph.runner
+        val field = runner.javaClass.getDeclaredField("d").apply { isAccessible = true }
+        val original = field.get(runner) as com.gt8d.launcher.sets.SetRunnerDeps
+        val index = runner.currentIndex
+        val scheduler = com.gt8d.launcher.time.FakeScheduler()
+        field.set(runner, original.copy(config = { flow.value }, installed = { emptySet() },
+            scheduler = scheduler, clock = scheduler, startHome = {}))
+        try {
+            runner.followIndex(0)
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+            rule.onNodeWithTag("home_set_home-test").performScrollTo().performClick()
+            assertEquals(1, runner.currentIndex)
+            assertEquals(pkg, runner.opening.value?.left)
+            assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+        } finally {
+            original.curtain.ready()
+            scheduler.advanceBy(10000L)
+            runner.followIndex(index)
+            field.set(runner, original)
+        }
     }
 
     @Test fun splitButton_startsSettingsWithNewSet() {
@@ -163,53 +183,57 @@ class HomeActivityUiTest {
         assertTrue(AppGraph.bootHandled); assertEquals(phase, AppGraph.boot.phase.value)
     }
 
-    @Test fun homeActivity_packageAdded_enablesHomeAppWithoutConfigChange() {
+    @Test fun homeActivity_packageAdded_enablesSetCardWithoutConfigChange() {
         host()
         val media = MediaWatcher.nowPlaying.value
-        rule.onNodeWithTag("missing_$pkg").assertExists()
+        rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
         val config = flow.value
         rule.runOnIdle { install() }
         broadcast(Intent.ACTION_PACKAGE_ADDED)
-        rule.onNodeWithTag("icon_$pkg").assert(hasContentDescription("Home App"))
+        rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("Home App | パネル", useUnmergedTree = true).assertExists()
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
-        assertLaunch()
+        assertOpen()
     }
-    @Test fun homeActivity_packageRemoved_disablesHomeAppWithoutConfigChange() {
+    @Test fun homeActivity_packageRemoved_marksSetCardMissingWithoutConfigChange() {
         install(); host()
         val config = flow.value
         val media = MediaWatcher.nowPlaying.value
-        rule.onNodeWithTag("icon_$pkg").assertExists()
+        rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
         rule.runOnIdle { shadowOf(app.packageManager).removePackage(pkg) }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
-        rule.onNodeWithTag("missing_$pkg").assert(hasContentDescription("$pkg(アプリが見つかりません)")).performClick()
-        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+        rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("$pkg | パネル", useUnmergedTree = true).assertExists()
+        assertOpen()
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
     }
-    @Test fun homeActivity_packageChanged_refreshesHomeAppWithoutConfigChange() {
+    @Test fun homeActivity_packageChanged_refreshesSetCardWithoutConfigChange() {
         install(); host()
         val config = flow.value
         val media = MediaWatcher.nowPlaying.value
-        rule.onNodeWithTag("icon_$pkg").assert(hasContentDescription("Home App"))
+        rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
         rule.runOnIdle { install("Changed Home") }
         broadcast(Intent.ACTION_PACKAGE_CHANGED)
-        rule.onNodeWithTag("icon_$pkg").assert(hasContentDescription("Changed Home"))
+        rule.onNodeWithContentDescription("Changed Home", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("Changed Home | パネル", useUnmergedTree = true).assertExists()
         assertSame(config, flow.value)
         assertEquals(listOf(pkg), flow.value!!.homeApps)
         assertSame(media, MediaWatcher.nowPlaying.value)
     }
-    @Test fun homeActivity_resume_refreshesHomeAppWithoutPackageBroadcast() {
+    @Test fun homeActivity_resume_refreshesSetCardWithoutPackageBroadcast() {
         host()
         val activity = controller!!.get()
         val config = flow.value
         val media = MediaWatcher.nowPlaying.value
-        rule.onNodeWithTag("missing_$pkg").assertExists()
+        rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
         rule.runOnIdle { controller!!.pause(); install(); controller!!.resume() }
-        rule.onNodeWithTag("icon_$pkg").assert(hasContentDescription("Home App"))
+        rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("Home App | パネル", useUnmergedTree = true).assertExists()
         assertSame(activity, controller!!.get())
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
-        assertLaunch()
+        assertOpen()
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.home.HomeContent
 import com.gt8d.launcher.ui.panel.*
@@ -69,8 +70,10 @@ class LayoutMatrixTest(
                     pixelsPerDp = density.density
                     CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
                         Box(Modifier.fillMaxSize().testTag("matrix_root")) {
-                            if (home) HomeContent(apps, {}) { modifier ->
-                                Box(modifier) { PanelContent(state, actions) }
+                            if (home) HomeContent { wide ->
+                                if (wide) HomeWideContent(state, actions, Defaults.build(emptySet()),
+                                    { AppInfo(it, it, null, true) }, 0, {}, {})
+                                else PanelContent(state, actions)
                             } else PanelContent(state, actions)
                         }
                     }
@@ -87,11 +90,16 @@ class LayoutMatrixTest(
             val cb = clock.fetchSemanticsNode().boundsInRoot
             assertTrue(cb.left >= root.left && cb.right <= root.right && cb.top >= root.top && cb.bottom <= root.bottom)
             if (home) {
-                if (width < 840) rule.onNodeWithTag("home_grid").assertDoesNotExist()
-                else rule.onNodeWithTag("home_grid").assertExists()
+                if (width < 840) rule.onNodeWithTag("home_sets").assertDoesNotExist()
+                else {
+                    rule.onNodeWithTag("home_sets").assertExists()
+                    rule.onNodeWithTag("home_player").assertExists()
+                    rule.onNodeWithTag("media_card").assertDoesNotExist()
+                    rule.onNodeWithTag("icon_grid").assertDoesNotExist()
+                }
             }
-            val tags = listOf("clock", "media_card", "icon_grid", "dock") +
-                if (home && width >= 840) listOf("home_grid") else emptyList()
+            val tags = if (home && width >= 840) listOf("clock", "home_sets", "home_player", "dock")
+                else listOf("clock", "media_card", "icon_grid", "dock")
             fun checkDisjoint() {
                 val bounds = tags.map { rule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
                 for (i in bounds.indices) for (j in i + 1 until bounds.size) {
@@ -102,14 +110,17 @@ class LayoutMatrixTest(
                 }
             }
             checkDisjoint()
-            for (tag in listOf("media_card", "icon_grid")) {
+            for (tag in if (home && width >= 840) emptyList() else listOf("media_card", "icon_grid")) {
                 rule.onNodeWithTag(tag).performScrollTo()
                 checkDisjoint()
             }
             val clickCount = rule.onAllNodes(hasClickAction()).fetchSemanticsNodes().size
             for (index in 0 until clickCount) {
                 val target = rule.onAllNodes(hasClickAction())[index]
-                target.performScrollTo().assertIsDisplayed()
+                if (home && width >= 840 && target.fetchSemanticsNode().config
+                        .getOrElse(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { "" } in
+                        listOf("player_idle_app", "permission_banner")) target.assertIsDisplayed()
+                else target.performScrollTo().assertIsDisplayed()
                 val node = target.fetchSemanticsNode()
                 assertTrue("click width ${node.size}", node.size.width >= 72 * pixelsPerDp)
                 assertTrue("click height ${node.size}", node.size.height >= 72 * pixelsPerDp)
@@ -139,8 +150,8 @@ class HomeResizeStateTest {
             controller.get().setContent {
                 LauncherTheme {
                     Box(Modifier.width(width).fillMaxHeight()) {
-                        HomeContent(emptyList(), {}) { modifier ->
-                            Box(modifier) { PanelScreen(inSplit = false, onLaunchApp = {}) }
+                        HomeContent { wide ->
+                            Box(Modifier.fillMaxSize()) { PanelScreen(inSplit = false, homeWide = wide, onLaunchApp = {}) }
                         }
                     }
                 }

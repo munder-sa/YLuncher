@@ -3,8 +3,6 @@ package com.gt8d.launcher.ui.panel
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,22 +24,14 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
@@ -54,7 +44,6 @@ import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.layout.OneLineText
 import com.gt8d.launcher.ui.layout.PanelLayout
-import java.util.Locale
 
 @Composable
 fun MediaCard(
@@ -200,72 +189,7 @@ private fun ActiveMediaContent(
             }
         }
 
-        val duration = now.durationMs
-        if (duration != null && duration > 0L) {
-            val clampedPos = positionMs.coerceIn(0L, duration)
-            var dragPos by remember { mutableStateOf<Float?>(null) }
-            var endpoint by remember { mutableStateOf<Long?>(null) }
-            val sliderValue = dragPos ?: clampedPos.toFloat()
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                    .semantics(mergeDescendants = true) {}
-                    .testTag("progress"),
-                contentAlignment = Alignment.Center,
-            ) {
-                Slider(
-                    value = sliderValue,
-                    onValueChange = { dragPos = it },
-                    onValueChangeFinished = {
-                        dragPos?.let { onSeek(endpoint ?: it.toLong()) }
-                        endpoint = null
-                        dragPos = null
-                    },
-                    valueRange = 0f..duration.toFloat(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Palette.Accent,
-                        activeTrackColor = Palette.Accent,
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                        .pointerInput(duration) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                                endpoint = null
-                                do {
-                                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                                    val pointer = event.changes.firstOrNull { it.id == down.id } ?: break
-                                    endpoint = when {
-                                        pointer.position.x <= 1f -> 0L
-                                        pointer.position.x >= size.width - 1f -> duration
-                                        else -> null
-                                    }
-                                } while (pointer.pressed)
-                            }
-                        },
-                )
-            }
-            val displayPos = dragPos?.toLong() ?: clampedPos
-            val remaining = (duration - displayPos).coerceAtLeast(0L)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                OneLineText(
-                    text = formatTime(displayPos),
-                    fontSize = Dims.BodyText,
-                    color = Color.White,
-                )
-                OneLineText(
-                    text = "-${formatTime(remaining)}",
-                    fontSize = Dims.BodyText,
-                    color = Color.White,
-                )
-            }
-        }
+        SeekBar(now.durationMs, positionMs, onSeek)
 
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val controls = listOf(MediaAction.Prev, if (now.playing) MediaAction.Pause else MediaAction.Play, MediaAction.Next) +
@@ -299,11 +223,4 @@ private fun MediaControl(action: MediaAction, onAction: (MediaAction) -> Unit) {
     IconButton(onClick = { onAction(action) }, modifier = Modifier.size(72.dp).testTag(tag)) {
         Icon(icon, description, tint = Palette.Accent, modifier = Modifier.size(36.dp))
     }
-}
-
-private fun formatTime(ms: Long): String {
-    val totalSeconds = (ms / 1000L).coerceAtLeast(0L)
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-    return String.format(Locale.US, "%d:%02d", minutes, seconds)
 }

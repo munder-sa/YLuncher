@@ -1,0 +1,93 @@
+package com.gt8d.launcher.ui.home
+
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.unit.dp
+import com.gt8d.launcher.config.*
+import com.gt8d.launcher.ui.panel.AppInfo
+import com.gt8d.launcher.ui.theme.LauncherTheme
+import org.junit.*
+import org.junit.Assert.*
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.android.controller.ActivityController
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], qualifiers = "w1000dp-h1000dp")
+class HomeSetCardsTest {
+    @get:Rule val rule = createEmptyComposeRule()
+    private lateinit var controller: ActivityController<ComponentActivity>
+    private fun sets(count: Int) = (1..count).map {
+        ScreenSet("s$it", Slot.App("left"), if (it == 1) Slot.Panel else Slot.App("right"), SplitRatio.R6_4)
+    }
+    private fun host(width: Int = 700, height: Int = 800, count: Int = 1,
+                     current: Int = 0, onOpen: (Int) -> Unit = {}, onAdd: () -> Unit = {}) {
+        controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        controller.get().setContent { LauncherTheme {
+            Box(Modifier.size(width.dp, height.dp).testTag("area")) {
+                HomeSetCards(sets(count), { AppInfo(it, if (it == "left") "左アプリ" else "右アプリ", null, true) },
+                    current, onOpen, onAdd, Modifier.fillMaxSize())
+            }
+        } }
+        controller.visible()
+    }
+    @After fun cleanup() { if (::controller.isInitialized) controller.pause().stop().destroy() }
+    @Test fun cards_showNamesAndPanelLabel() {
+        host(count = 2)
+        rule.onNodeWithText("左アプリ | パネル").assertExists()
+        rule.onNodeWithText("左アプリ | 右アプリ").assertExists()
+        rule.onAllNodesWithContentDescription("左アプリ", useUnmergedTree = true).assertCountEquals(2)
+    }
+    @Test fun currentSet_isSelected_withAccentBorder() {
+        host(count = 2, current = 2)
+        rule.onNodeWithTag("home_set_s2").assertIsSelected()
+            .assert(SemanticsMatcher.expectValue(HomeSetHighlight, true))
+        rule.onNodeWithTag("home_set_s1").assertIsNotSelected()
+            .assert(SemanticsMatcher.expectValue(HomeSetHighlight, false))
+    }
+    @Test fun click_opensIndex() {
+        var index = 0
+        host(count = 2, onOpen = { index = it })
+        rule.onNodeWithTag("home_set_s2").performClick()
+        assertEquals(2, index)
+    }
+    @Test fun add_callsOnAdd() {
+        var calls = 0
+        host(onAdd = { calls++ })
+        rule.onNodeWithTag("home_set_add").performClick()
+        assertEquals(1, calls)
+    }
+    @Test fun fewCards_areVerticallyCentered() {
+        host()
+        val area = rule.onNodeWithTag("area").fetchSemanticsNode().boundsInRoot
+        val first = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
+        val last = rule.onNodeWithTag("home_set_add").fetchSemanticsNode().boundsInRoot
+        assertEquals(first.top - area.top, area.bottom - last.bottom, 2f * area.height / 800f)
+    }
+    @Test fun manyCards_scrollFromTop() {
+        host(height = 500, count = 8)
+        val area = rule.onNodeWithTag("area").fetchSemanticsNode().boundsInRoot
+        assertEquals(area.top, rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot.top, 0f)
+        rule.onNodeWithTag("home_set_s8").performScrollTo().assertIsDisplayed()
+    }
+    @Test fun columns_followWidth() {
+        host(width = 600, count = 2)
+        val first = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
+        val second = rule.onNodeWithTag("home_set_s2").fetchSemanticsNode().boundsInRoot
+        assertEquals(first.left, second.left, 0f)
+        assertTrue(second.top > first.top)
+        controller.pause().stop().destroy()
+        host(width = 700, count = 2)
+        val wideFirst = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
+        val wideSecond = rule.onNodeWithTag("home_set_s2").fetchSemanticsNode().boundsInRoot
+        assertEquals(wideFirst.top, wideSecond.top, 0f)
+        assertTrue(wideSecond.left > wideFirst.left)
+    }
+}

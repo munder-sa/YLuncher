@@ -31,6 +31,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SetRunnerTest {
+    @Test fun currentIndexFlow_followsOpenAndHome() {
+        val env = TestEnv(initialLastSetIndex = 2)
+        assertEquals(2, env.runner.currentIndexFlow.value)
+        env.runner.open(1)
+        assertEquals(1, env.runner.currentIndexFlow.value)
+        env.events.events.add(ResumeEvent("youtube", 100L))
+        env.runner.panelResumedInSplit()
+        env.scheduler.advanceBy(200L)
+        env.runner.home()
+        assertEquals(0, env.runner.currentIndexFlow.value)
+        env.runner.followIndex(3)
+        assertEquals(3, env.runner.currentIndexFlow.value)
+    }
     @Test fun panelSet_passesPanelHostToVendor() {
         val env = TestEnv()
         env.runner.open(1)

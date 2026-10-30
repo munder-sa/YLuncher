@@ -8,6 +8,10 @@ object PanelLayout {
     const val DOCK_DP = 88f
     const val HOME_SPLIT_MIN_DP = 840f
 
+    fun homePlayerWidthDp(totalDp: Float): Float = (totalDp / 3f).coerceIn(360f, 600f)
+
+    fun homeSetColumns(leftAreaDp: Float): Int = if (leftAreaDp >= 624f) 2 else 1
+
     fun columns(availableDp: Float): Int =
         floor((availableDp + GAP_DP) / (CELL_DP + GAP_DP)).toInt().coerceAtLeast(1)
 

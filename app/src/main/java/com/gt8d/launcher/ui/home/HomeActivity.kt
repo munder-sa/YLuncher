@@ -29,7 +29,6 @@ import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.panel.PanelScreen
-import com.gt8d.launcher.ui.panel.rememberPanelEnvironment
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import com.gt8d.launcher.ui.layout.launcherBackground
@@ -76,8 +75,6 @@ class HomeActivity : ComponentActivity() {
             LauncherTheme {
                 val latestConfig by AppGraph.configForHome.collectAsState()
                 val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
-                val environment = rememberPanelEnvironment(AppGraph.catalog)
-                val homeApps = config.homeApps.map { AppGraph.catalog.info(it, environment.installedPkgs) }
                 val bootPhase by AppGraph.boot.phase.collectAsState()
                 val secondsLeft by AppGraph.boot.secondsLeft.collectAsState()
 
@@ -94,13 +91,12 @@ class HomeActivity : ComponentActivity() {
                             }
                         },
                 ) {
-                    HomeContent(
-                        homeApps = homeApps,
-                        onLaunchHome = { pkg -> activityLauncher.startApp(pkg, adjacent = false) },
-                    ) { panelModifier ->
-                        Box(panelModifier) {
+                    HomeContent { homeWide ->
+                        Box(Modifier.fillMaxSize()) {
                             PanelScreen(
                                 inSplit = false,
+                                homeWide = homeWide,
+                                homeConfig = config,
                                 onNewSet = {
                                     startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
                                 },

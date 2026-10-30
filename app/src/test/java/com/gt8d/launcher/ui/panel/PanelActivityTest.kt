@@ -209,7 +209,7 @@ class PanelActivityTest {
         splitPanel()
         rule.onNodeWithTag("icon_add").performScrollTo().performClick()
         androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
-        rule.onNodeWithTag("lists_home_add").assertExists()
+        rule.onNodeWithTag("lists_panel_add").assertExists()
         assertTrue(controller!!.get().settingsShown)
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }

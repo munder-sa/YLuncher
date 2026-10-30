@@ -6,6 +6,21 @@ import android.net.Uri
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import com.gt8d.launcher.config.LauncherConfig
+import com.gt8d.launcher.ui.home.HomeClockHeader
+import com.gt8d.launcher.ui.home.HomeMiniPlayer
+import com.gt8d.launcher.ui.home.HomeSetCards
+import com.gt8d.launcher.ui.layout.OneLineText
+import com.gt8d.launcher.ui.layout.PanelLayout
+import com.gt8d.launcher.ui.theme.Palette
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,11 +48,13 @@ fun PanelScreen(
     onOpenSettings: () -> Unit = {},
     onNewSet: () -> Unit = {},
     onEditLists: () -> Unit = {},
+    homeWide: Boolean = false,
+    homeConfig: LauncherConfig? = null,
     onLaunchApp: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val latestConfig by AppGraph.latestConfig.collectAsState()
-    val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
+    val config = homeConfig ?: latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
     val now by MediaWatcher.nowPlaying.collectAsState()
     var showAppList by rememberSaveable { mutableStateOf(false) }
     val environment = rememberPanelEnvironment(AppGraph.catalog)
@@ -134,8 +151,48 @@ fun PanelScreen(
         },
     )
 
-    PanelContent(
-        state = state,
-        actions = actions,
-    )
+    if (homeWide) {
+        val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
+        HomeWideContent(state, actions, config, { catalog.info(it, installedPkgs) }, currentIndex,
+            onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet)
+    } else {
+        PanelContent(state = state, actions = actions)
+    }
+}
+
+@Composable
+internal fun HomeWideContent(
+    state: PanelState,
+    actions: PanelActions,
+    config: LauncherConfig,
+    appInfo: (String) -> AppInfo,
+    currentIndex: Int,
+    onOpen: (Int) -> Unit,
+    onNewSet: () -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val playerWidth = PanelLayout.homePlayerWidthDp(maxWidth.value)
+        Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                val clockHeight = maxHeight * 0.22f
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (state.needsPermission) {
+                        Surface(color = Palette.Panel, shape = RoundedCornerShape(12.dp), modifier = Modifier
+                            .fillMaxWidth().heightIn(min = 72.dp).clickable(onClick = actions.onOpenPermissions)
+                            .testTag("permission_banner")) {
+                            Box(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.Center) { OneLineText("許可が必要", color = Palette.Accent) }
+                        }
+                    }
+                    HomeClockHeader(clockHeight)
+                    HomeSetCards(config.screenSets, appInfo, currentIndex, onOpen, onNewSet,
+                        Modifier.fillMaxWidth().weight(1f))
+                }
+            }
+            HomeMiniPlayer(state.now, state.idleApp, state.positionMs, appInfo, actions.onMediaAction,
+                actions.onSeek, actions.onLaunch, Modifier.width(playerWidth.dp).fillMaxHeight())
+            Dock(state.dockStatus, state.dockApps, state.showCar, actions.onHome, actions.onSplit,
+                actions.onCar, actions.onAppList, actions.onAppListLongPress, actions.onLaunch)
+        }
+    }
 }

@@ -62,18 +62,21 @@ class DailyScreensTest {
         assertEquals(0, writes)
     }
     @Test fun lists_removeAndReorder_updatesImmediately() {
+        config = config.copy(panelApps = listOf("a", "b"))
         host(SettingsRoute.Lists)
-        rule.onNodeWithTag("lists_home_row_a").assertWidthIsAtLeast(Dims.MinTouch)
+        rule.onNodeWithTag("lists_home_add").assertDoesNotExist()
+        rule.onNodeWithTag("lists_panel_row_a").assertWidthIsAtLeast(Dims.MinTouch)
         listOf("up", "down", "remove").forEach {
-            val node = rule.onNodeWithTag("lists_home_${it}_a").performScrollTo().assertIsDisplayed()
+            val node = rule.onNodeWithTag("lists_panel_${it}_a").performScrollTo().assertIsDisplayed()
                 .assertWidthIsAtLeast(Dims.MinTouch).assertHeightIsAtLeast(Dims.MinTouch)
             val bounds = node.fetchSemanticsNode().boundsInRoot
             val root = rule.onRoot().fetchSemanticsNode().boundsInRoot
             assertTrue(bounds.left >= root.left && bounds.right <= root.right)
         }
-        click("lists_home_down_a"); assertEquals(listOf("b", "a"), config.homeApps)
-        click("lists_home_up_a"); assertEquals(listOf("a", "b"), config.homeApps)
-        click("lists_home_remove_a"); assertEquals(listOf("b"), config.homeApps)
+        click("lists_panel_down_a"); assertEquals(listOf("b", "a"), config.panelApps)
+        click("lists_panel_up_a"); assertEquals(listOf("a", "b"), config.panelApps)
+        click("lists_panel_remove_a"); assertEquals(listOf("b"), config.panelApps)
+        assertEquals(listOf("a", "b"), config.homeApps)
         assertEquals(3, writes)
     }
     @Test fun lists_idleChange_setsIdleApp() {
@@ -81,9 +84,13 @@ class DailyScreensTest {
         assertEquals("b", config.idleApp); assertEquals(1, writes)
     }
     @Test fun lists_add_disablesDuplicates_andSaves() {
-        host(SettingsRoute.Lists); click("lists_home_add")
-        rule.onNodeWithTag("lists_home_pick_a").assertIsNotEnabled()
-        click("lists_home_pick_c"); assertEquals(listOf("a", "b", "c"), config.homeApps)
+        config = config.copy(panelApps = listOf("a", "b"))
+        host(SettingsRoute.Lists)
+        rule.onNodeWithTag("lists_home_add").assertDoesNotExist()
+        click("lists_panel_add")
+        rule.onNodeWithTag("lists_panel_pick_a").assertIsNotEnabled()
+        click("lists_panel_pick_c"); assertEquals(listOf("a", "b", "c"), config.panelApps)
+        assertEquals(listOf("a", "b"), config.homeApps)
     }
     @Test fun link_switchToChrome_saves() {
         host(SettingsRoute.Link); click("link_mode_chrome")

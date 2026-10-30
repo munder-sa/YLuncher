@@ -69,7 +69,13 @@ class SetRunner(private val d: SetRunnerDeps) {
     var currentIndex: Int = d.config()?.let {
         SetNavigator.clamp(d.lastIndex.lastSetIndex, it.screenSets.size)
     } ?: d.lastIndex.lastSetIndex
-        private set
+        private set(value) {
+            field = value
+            _currentIndex.value = value
+        }
+
+    private val _currentIndex = MutableStateFlow(currentIndex)
+    val currentIndexFlow: StateFlow<Int> = _currentIndex.asStateFlow()
 
     var lastOpenedPair: Pair<String, String>? = null
         private set

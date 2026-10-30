@@ -63,7 +63,7 @@ fun ListsScreen(
         }
         return
     }
-    listOf("home" to "ホームのアイコン", "panel" to "パネルのアイコン", "dock" to "右端バーのよく使うアプリ").forEach { (key, title) ->
+    listOf("panel" to "パネルのアイコン", "dock" to "右端バーのよく使うアプリ").forEach { (key, title) ->
         val list = apps(config, key)
         val prefix = "lists_${key}_"
         SettingsSection(title) {
