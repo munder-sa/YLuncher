@@ -36,6 +36,7 @@
             android:name=".ui.home.HomeActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:taskAffinity="com.gt8d.launcher.home"
             android:resizeableActivity="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
