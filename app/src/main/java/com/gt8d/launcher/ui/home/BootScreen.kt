@@ -1,6 +1,10 @@
 package com.gt8d.launcher.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,97 +51,106 @@ fun BootScreen(
         "$secondsLeft 秒後に前回のセットを開きます"
     }
 
-    Column(
-        modifier = modifier
-            .widthIn(max = 640.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Palette.Panel)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = message,
-            fontSize = Dims.BodyText,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.testTag("boot_message"),
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = target.setName,
-            fontSize = Dims.BodyText,
-            fontWeight = FontWeight.Bold,
-            color = Palette.Accent,
-            textAlign = TextAlign.Center,
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
+    BoxWithConstraints(modifier.widthIn(max = 640.dp)) {
+        val stacked = maxWidth < 600.dp
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(96.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .clip(RoundedCornerShape(16.dp))
+                .background(Palette.Panel)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            BootSlotBlock(
-                slot = target.left,
-                modifier = Modifier
-                    .weight(leftWeight)
-                    .fillMaxHeight(),
+            Text(
+                text = message,
+                fontSize = Dims.BodyText,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("boot_message"),
             )
-            BootSlotBlock(
-                slot = target.right,
-                modifier = Modifier
-                    .weight(rightWeight)
-                    .fillMaxHeight(),
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = target.setName,
+                fontSize = Dims.BodyText,
+                fontWeight = FontWeight.Bold,
+                color = Palette.Accent,
+                textAlign = TextAlign.Center,
             )
-        }
 
-        Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (!opening) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                BootSlotBlock(
+                    slot = target.left,
+                    modifier = Modifier
+                        .weight(leftWeight)
+                        .fillMaxHeight(),
+                )
+                BootSlotBlock(
+                    slot = target.right,
+                    modifier = Modifier
+                        .weight(rightWeight)
+                        .fillMaxHeight(),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            val buttons: @Composable (Modifier) -> Unit = { buttonModifier ->
+                if (!opening) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = buttonModifier
+                            .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Palette.Accent)
+                            .clickable(onClick = onOpenNow)
+                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                            .testTag("boot_open_now"),
+                    ) {
+                        OneLineText(
+                            text = "今すぐ開く",
+                            fontSize = Dims.BodyText,
+                            fontWeight = FontWeight.Bold,
+                            color = Palette.Background0,
+                        )
+                    }
+                }
+
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
+                    modifier = buttonModifier
                         .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Palette.Accent)
-                        .clickable(onClick = onOpenNow)
+                        .background(Palette.Background1)
+                        .clickable(onClick = onStayHome)
                         .padding(horizontal = 24.dp, vertical = 16.dp)
-                        .testTag("boot_open_now"),
+                        .testTag("boot_stay_home"),
                 ) {
-                    Text(
-                        text = "今すぐ開く",
+                    OneLineText(
+                        text = "ホームのまま使う",
                         fontSize = Dims.BodyText,
                         fontWeight = FontWeight.Bold,
-                        color = Palette.Background0,
+                        color = Color.White,
                     )
                 }
             }
-
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Palette.Background1)
-                    .clickable(onClick = onStayHome)
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
-                    .testTag("boot_stay_home"),
-            ) {
-                Text(
-                    text = "ホームのまま使う",
-                    fontSize = Dims.BodyText,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
+            if (stacked) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    buttons(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    buttons(Modifier.weight(1f))
+                }
             }
         }
     }

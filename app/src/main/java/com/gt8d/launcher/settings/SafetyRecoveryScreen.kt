@@ -1,6 +1,7 @@
 package com.gt8d.launcher.settings
 
 import android.content.Context
+import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,10 +29,10 @@ fun SafetyRecoveryScreen(onRecover: () -> Unit, onStock: () -> Unit, modifier: M
         .verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("安全のため純正ランチャーを使っています", fontSize = Dims.BodyText, color = MaterialTheme.colorScheme.onBackground)
         Button(onRecover, Modifier.fillMaxWidth().sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag("safety_recover")) {
-            Text("安全モードを解除してホームへ", fontSize = Dims.BodyText)
+            OneLineText("安全モードを解除してホームへ", fontSize = Dims.BodyText, color = androidx.compose.material3.LocalContentColor.current)
         }
         Button(onStock, Modifier.fillMaxWidth().sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag("safety_stock")) {
-            Text("純正ランチャーに戻る", fontSize = Dims.BodyText)
+            OneLineText("純正ランチャーに戻る", fontSize = Dims.BodyText, color = androidx.compose.material3.LocalContentColor.current)
         }
     }
 }

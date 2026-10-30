@@ -3,6 +3,7 @@ package com.gt8d.launcher.settings
 import android.app.Application
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -111,19 +112,31 @@ fun SetsScreen(
             if (loaded.isEmpty()) Text("セットがありません", fontSize = Dims.BodyText)
             loaded.forEachIndexed { index, set ->
                 key(set.id) {
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        SetButton("${labelFor(set.left.pkg)} | ${when (val right = set.right) {
-                            Slot.Panel -> "パネル"
-                            is Slot.App -> labelFor(right.pkg)
-                        }}", "set_row_${set.id}", Modifier.weight(1f), enabled = !busy,
-                            subtitle = set.ratio.label) { onEdit(set.id) }
-                        SetButton("▲", "set_up_${set.id}", enabled = !busy && index > 0) {
-                            change({ SetsEdit.moveUp(it, set.id) }, {})
+                    BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        val stacked = maxWidth <= 516.dp
+                        val name: @Composable (Modifier) -> Unit = { nameModifier ->
+                            SetButton("${labelFor(set.left.pkg)} | ${when (val right = set.right) {
+                                Slot.Panel -> "パネル"
+                                is Slot.App -> labelFor(right.pkg)
+                            }}", "set_row_${set.id}", nameModifier, enabled = !busy,
+                                subtitle = set.ratio.label) { onEdit(set.id) }
                         }
-                        SetButton("▼", "set_down_${set.id}", enabled = !busy && index < loaded.lastIndex) {
-                            change({ SetsEdit.moveDown(it, set.id) }, {})
+                        val controls: @Composable () -> Unit = {
+                            SetButton("▲", "set_up_${set.id}", enabled = !busy && index > 0) {
+                                change({ SetsEdit.moveUp(it, set.id) }, {})
+                            }
+                            SetButton("▼", "set_down_${set.id}", enabled = !busy && index < loaded.lastIndex) {
+                                change({ SetsEdit.moveDown(it, set.id) }, {})
+                            }
+                            SetButton("削除", "set_delete_${set.id}", enabled = !busy) { deleting = set.id }
                         }
-                        SetButton("削除", "set_delete_${set.id}", enabled = !busy) { deleting = set.id }
+                        if (stacked) Column {
+                            name(Modifier.fillMaxWidth())
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { controls() }
+                        } else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            name(Modifier.weight(1f))
+                            controls()
+                        }
                     }
                 }
             }
@@ -164,7 +177,7 @@ fun SetsScreen(
                         }
                         SetButton("アプリ", "set_right_app", enabled = !busy, selected = draft.right is Slot.App) { pickingLeft = false }
                     }
-                    (draft.right as? Slot.App)?.let { Text("右のアプリ: ${labelFor(it.pkg)}", fontSize = Dims.BodyText) }
+                    (draft.right as? Slot.App)?.let { OneLineText("右のアプリ: ${labelFor(it.pkg)}", fontSize = Dims.BodyText) }
                     SplitRatio.entries.filter { it.allowedFor(draft.right) }.chunked(3).forEach { ratios ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ratios.forEach { ratio ->
@@ -207,8 +220,8 @@ private fun SetButton(
             contentColor = if (selected == false) MaterialTheme.colorScheme.onSurface else Palette.Background0,
         )) {
         Column {
-            Text(text, fontSize = Dims.BodyText)
-            subtitle?.let { Text(it, fontSize = Dims.BodyText) }
+            OneLineText(text, fontSize = Dims.BodyText, color = LocalContentColor.current)
+            subtitle?.let { OneLineText(it, fontSize = Dims.BodyText, color = LocalContentColor.current) }
         }
     }
 }

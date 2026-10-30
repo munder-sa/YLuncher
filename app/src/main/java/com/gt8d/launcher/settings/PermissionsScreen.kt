@@ -1,6 +1,7 @@
 package com.gt8d.launcher.settings
 
 import android.app.Activity
+import com.gt8d.launcher.ui.layout.OneLineText
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.background
@@ -70,17 +71,28 @@ fun PermissionsScreen(
     }
     Column(Modifier.fillMaxWidth().background(Palette.Background0), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         permissionItems(currentMode).forEach { item ->
-            Row(Modifier.fillMaxWidth().heightIn(min = Dims.MinTouch)
-                .semantics(mergeDescendants = true) {}.testTag("perm_row_$item"), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).padding(8.dp)) {
-                    PermissionText(item.label)
-                    PermissionText(if (grants[item] == true) "許可済み" else "未許可")
-                }
-                if (grants[item] != true) {
-                    Button(onClick = { opener.open(item) }, modifier = Modifier
-                        .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag("perm_open_$item")) {
-                        Text("設定を開く", fontSize = Dims.BodyText)
+            BoxWithConstraints(Modifier.fillMaxWidth().heightIn(min = Dims.MinTouch)
+                .semantics(mergeDescendants = true) {}.testTag("perm_row_$item")) {
+                val labels: @Composable (Modifier) -> Unit = { modifier ->
+                    Column(modifier.padding(8.dp)) {
+                        OneLineText(item.label)
+                        OneLineText(if (grants[item] == true) "許可済み" else "未許可")
                     }
+                }
+                val button: @Composable () -> Unit = {
+                    if (grants[item] != true) {
+                        Button(onClick = { opener.open(item) }, modifier = Modifier
+                            .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag("perm_open_$item")) {
+                            OneLineText("設定を開く", fontSize = Dims.BodyText, color = androidx.compose.material3.LocalContentColor.current)
+                        }
+                    }
+                }
+                if (maxWidth <= 516.dp) Column {
+                    labels(Modifier.fillMaxWidth())
+                    button()
+                } else Row(verticalAlignment = Alignment.CenterVertically) {
+                    labels(Modifier.weight(1f))
+                    button()
                 }
             }
         }
@@ -96,7 +108,7 @@ fun PermissionsScreen(
         if (currentMode != SplitMode.Vendor) {
             Button(onClick = { restoreVendor(); refresh() }, modifier = Modifier
                 .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag("split_restore")) {
-                Text("メーカー方式に戻す", fontSize = Dims.BodyText)
+                OneLineText("メーカー方式に戻す", fontSize = Dims.BodyText, color = androidx.compose.material3.LocalContentColor.current)
             }
         }
     }

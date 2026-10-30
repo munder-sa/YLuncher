@@ -1,6 +1,7 @@
 package com.gt8d.launcher.settings
 
 import androidx.activity.compose.BackHandler
+import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -63,12 +64,12 @@ fun ListsScreen(
         return
     }
     listOf("home" to "ホームのアイコン", "panel" to "パネルのアイコン", "dock" to "右端バーのよく使うアプリ").forEach { (key, title) ->
-        Text(title, fontSize = Dims.BodyText, modifier = Modifier.padding(vertical = 8.dp))
+        OneLineText(title, fontSize = Dims.BodyText, modifier = Modifier.padding(vertical = 8.dp))
         val list = apps(config, key)
         val prefix = "lists_${key}_"
         list.forEachIndexed { index, pkg ->
             Column(Modifier.fillMaxWidth().testTag("${prefix}row_$pkg")) {
-                Text(labelFor(pkg), fontSize = Dims.BodyText)
+                OneLineText(labelFor(pkg), fontSize = Dims.BodyText)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     DailyButton("▲", "${prefix}up_$pkg", enabled = index > 0) { change(key) { DailySettings.moveUp(it, pkg) } }
                     DailyButton("▼", "${prefix}down_$pkg", enabled = index < list.lastIndex) { change(key) { DailySettings.moveDown(it, pkg) } }
@@ -82,7 +83,7 @@ fun ListsScreen(
         if (full) Text("最大 $max 個まで", fontSize = Dims.BodyText)
     }
     Text("停止中に表示するアプリ", Modifier.padding(vertical = 8.dp), fontSize = Dims.BodyText)
-    Text(labelFor(config.idleApp), Modifier.testTag("lists_idle_row_${config.idleApp}"), fontSize = Dims.BodyText)
+    OneLineText(labelFor(config.idleApp), Modifier.testTag("lists_idle_row_${config.idleApp}"), fontSize = Dims.BodyText)
     DailyButton("変更", "lists_idle_change", Modifier.fillMaxWidth()) { picking = "idle" }
 }
 
@@ -101,5 +102,5 @@ internal fun DailyButton(
         enabled = enabled, colors = ButtonDefaults.buttonColors(
             containerColor = if (selected == false) Palette.Panel else Palette.Accent,
             contentColor = if (selected == false) MaterialTheme.colorScheme.onSurface else Palette.Background0,
-        )) { Text(title, fontSize = Dims.BodyText) }
+        )) { OneLineText(title, fontSize = Dims.BodyText, color = LocalContentColor.current) }
 }

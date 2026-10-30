@@ -1,6 +1,7 @@
 package com.gt8d.launcher.settings
 
 import androidx.compose.foundation.layout.*
+import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,10 +20,10 @@ fun LinkScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> LauncherCo
     DailyButton("Chrome で開く", "link_mode_chrome", Modifier.fillMaxWidth(), selected = config.link.mode == LinkMode.Chrome) {
         onUpdate { it.copy(link = it.link.copy(mode = LinkMode.Chrome)) }
     }
-    Text("Chrome に回すドメイン", fontSize = Dims.BodyText)
+    OneLineText("Chrome に回すドメイン", fontSize = Dims.BodyText)
     config.link.chromeDomains.forEach { domain ->
         Column(Modifier.fillMaxWidth()) {
-            Text(domain, fontSize = Dims.BodyText)
+            OneLineText(domain, fontSize = Dims.BodyText)
             DailyButton("削除", "link_domain_remove_$domain") {
                 onUpdate { it.copy(link = it.link.copy(chromeDomains = DailySettings.remove(it.link.chromeDomains, domain))) }
             }
@@ -30,7 +31,7 @@ fun LinkScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> LauncherCo
     }
     OutlinedTextField(input, { input = it; invalid = false },
         modifier = Modifier.fillMaxWidth().heightIn(min = Dims.MinTouch).testTag("link_domain_input"),
-        label = { Text("ドメイン", fontSize = Dims.BodyText) }, singleLine = true,
+        label = { OneLineText("ドメイン", fontSize = Dims.BodyText) }, singleLine = true,
         textStyle = LocalTextStyle.current.copy(fontSize = Dims.BodyText), isError = invalid)
     DailyButton("追加", "link_domain_add", Modifier.fillMaxWidth()) {
         val domain = DailySettings.normalizeDomain(input)

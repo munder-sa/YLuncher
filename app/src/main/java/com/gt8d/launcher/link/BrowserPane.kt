@@ -8,6 +8,13 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.sizeIn
@@ -76,33 +83,40 @@ fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier)
     }
     BackHandler(onBack = goBackOrClose)
     Column(modifier) {
-        Row(
-            Modifier.fillMaxWidth().background(Palette.Panel).sizeIn(minHeight = 72.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = goBackOrClose,
-                modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_back")) {
-                Text("戻る", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
-                    fontSize = Dims.BodyText)
-            }
-            Text(SiteLabel.label(siteName, pageUrl), modifier = Modifier.weight(1f),
-                color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = Dims.BodyText,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            TextButton(onClick = {
-                val current = webView.url ?: pageUrl
-                runCatching {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(current))
-                        .setPackage(LinkRouter.CHROME_PKG).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val compact = maxWidth < 600.dp
+            Row(
+                Modifier.fillMaxWidth().background(Palette.Panel).sizeIn(minHeight = 72.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = goBackOrClose,
+                    modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_back")) {
+                    OneLineText("戻る", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
+                        fontSize = Dims.BodyText)
                 }
-                onClose()
-            }, modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_chrome")) {
-                Text("Chromeで開き直す", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
-                    fontSize = Dims.BodyText)
-            }
-            TextButton(onClick = onClose,
-                modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_close")) {
-                Text("閉じる", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
-                    fontSize = Dims.BodyText)
+                OneLineText(SiteLabel.label(siteName, pageUrl), modifier = Modifier.weight(1f),
+                    color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = Dims.BodyText)
+                val openChrome = {
+                    val current = webView.url ?: pageUrl
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(current))
+                            .setPackage(LinkRouter.CHROME_PKG).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                    onClose()
+                }
+                if (compact) {
+                    IconButton(onClick = openChrome, modifier = Modifier.size(Dims.MinTouch).testTag("browser_chrome")) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Chromeで開き直す", tint = Palette.Accent)
+                    }
+                } else TextButton(onClick = openChrome, modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_chrome")) {
+                    OneLineText("Chromeで開き直す", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
+                        fontSize = Dims.BodyText)
+                }
+                TextButton(onClick = onClose,
+                    modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_close")) {
+                    OneLineText("閉じる", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
+                        fontSize = Dims.BodyText)
+                }
             }
         }
         AndroidView(factory = { webView },

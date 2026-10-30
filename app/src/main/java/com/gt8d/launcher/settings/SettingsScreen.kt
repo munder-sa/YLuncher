@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -95,7 +96,7 @@ fun SettingsHost(
     Column(modifier.fillMaxSize().background(Palette.Background0).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             SettingsButton("戻る", "settings_back", onClick = back)
-            Text(
+            OneLineText(
                 when (nav.current) {
                     SettingsRoute.Root -> "設定"
                     is SettingsRoute.SetEdit -> "画面セットの編集"
@@ -185,7 +186,7 @@ private fun SettingsButton(
     Button(onClick, modifier.padding(vertical = 4.dp).sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag(tag),
         enabled = enabled) {
         Column {
-            Text(title, fontSize = Dims.BodyText)
+            OneLineText(title, fontSize = Dims.BodyText, color = androidx.compose.material3.LocalContentColor.current)
             if (subtitle != null) Text(subtitle, fontSize = Dims.BodyText)
         }
     }
