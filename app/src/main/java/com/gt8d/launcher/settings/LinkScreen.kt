@@ -14,17 +14,17 @@ import com.gt8d.launcher.ui.theme.Dims
 fun LinkScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> LauncherConfig) -> Unit) {
     var input by remember { mutableStateOf("") }
     var invalid by remember { mutableStateOf(false) }
-    DailyButton("内蔵ブラウザで分割", "link_mode_inapp", Modifier.fillMaxWidth(), selected = config.link.mode == LinkMode.InAppSplit) {
+    SettingsChoice("内蔵ブラウザで分割", "link_mode_inapp", config.link.mode == LinkMode.InAppSplit, modifier = Modifier.fillMaxWidth(), onClick = {
         onUpdate { it.copy(link = it.link.copy(mode = LinkMode.InAppSplit)) }
-    }
-    DailyButton("Chrome で開く", "link_mode_chrome", Modifier.fillMaxWidth(), selected = config.link.mode == LinkMode.Chrome) {
+    })
+    SettingsChoice("Chrome で開く", "link_mode_chrome", config.link.mode == LinkMode.Chrome, modifier = Modifier.fillMaxWidth(), onClick = {
         onUpdate { it.copy(link = it.link.copy(mode = LinkMode.Chrome)) }
-    }
+    })
     OneLineText("Chrome に回すドメイン", fontSize = Dims.BodyText)
     config.link.chromeDomains.forEach { domain ->
         Column(Modifier.fillMaxWidth()) {
             OneLineText(domain, fontSize = Dims.BodyText)
-            DailyButton("削除", "link_domain_remove_$domain") {
+            DailyButton("削除", "link_domain_remove_$domain", kind = SettingsButtonKind.Danger) {
                 onUpdate { it.copy(link = it.link.copy(chromeDomains = DailySettings.remove(it.link.chromeDomains, domain))) }
             }
         }

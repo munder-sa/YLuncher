@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -81,10 +80,8 @@ fun PermissionsScreen(
                 }
                 val button: @Composable () -> Unit = {
                     if (grants[item] != true) {
-                        Button(onClick = { opener.open(item) }, modifier = Modifier
-                            .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag("perm_open_$item")) {
-                            OneLineText("設定を開く", fontSize = Dims.BodyText, color = androidx.compose.material3.LocalContentColor.current)
-                        }
+                        SettingsRow("設定を開く", "perm_open_$item", { opener.open(item) },
+                            kind = SettingsRowKind.External, modifier = Modifier.widthIn(max = 240.dp))
                     }
                 }
                 if (maxWidth <= 516.dp) Column {
@@ -106,10 +103,7 @@ fun PermissionsScreen(
             SplitMode.AppPair -> "予備方式で動作中"
         }, Modifier.testTag("split_status"))
         if (currentMode != SplitMode.Vendor) {
-            Button(onClick = { restoreVendor(); refresh() }, modifier = Modifier
-                .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag("split_restore")) {
-                OneLineText("メーカー方式に戻す", fontSize = Dims.BodyText, color = androidx.compose.material3.LocalContentColor.current)
-            }
+            SettingsButton("メーカー方式に戻す", "split_restore", onClick = { restoreVendor(); refresh() })
         }
     }
 }
