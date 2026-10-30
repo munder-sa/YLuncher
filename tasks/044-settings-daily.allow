@@ -1,0 +1,19 @@
+create app/src/main/java/com/gt8d/launcher/settings/DailySettings.kt
+create app/src/main/java/com/gt8d/launcher/settings/ListsScreen.kt
+create app/src/main/java/com/gt8d/launcher/settings/LinkScreen.kt
+create app/src/main/java/com/gt8d/launcher/settings/GestureScreen.kt
+create app/src/main/java/com/gt8d/launcher/settings/BootSettingsScreen.kt
+create app/src/test/java/com/gt8d/launcher/settings/DailySettingsTest.kt
+create app/src/test/java/com/gt8d/launcher/settings/DailyScreensTest.kt
+create app/src/test/java/com/gt8d/launcher/edge/EdgeStripWidthTest.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsNav.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsActivity.kt
+write app/src/main/java/com/gt8d/launcher/edge/EdgeStripService.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.edge.EdgeStripWidthTest --tests com.gt8d.launcher.edge.EdgeStripServiceTest --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest
+command /home/munde/tools/gradle-run.sh assembleDebug

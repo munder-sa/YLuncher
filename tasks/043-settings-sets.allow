@@ -1,0 +1,14 @@
+create app/src/main/java/com/gt8d/launcher/settings/SetsEdit.kt
+create app/src/main/java/com/gt8d/launcher/settings/SetsScreen.kt
+create app/src/test/java/com/gt8d/launcher/settings/SetsEditTest.kt
+create app/src/test/java/com/gt8d/launcher/settings/SetsScreenTest.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsNav.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest --tests com.gt8d.launcher.ui.home.HomeActivityUiTest
+command /home/munde/tools/gradle-run.sh assembleDebug
