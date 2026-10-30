@@ -1,0 +1,16 @@
+create app/src/main/java/com/gt8d/launcher/ui/home/HomeSetCards.kt
+create app/src/main/java/com/gt8d/launcher/ui/home/HomeMiniPlayer.kt
+create app/src/main/java/com/gt8d/launcher/ui/home/HomeClockHeader.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/HomeSetCardsTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/HomeMiniPlayerTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/HomeClockHeaderTest.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeContent.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/layout/PanelLayout.kt
+write app/src/main/java/com/gt8d/launcher/settings/ListsScreen.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/PanelLayoutTest.kt
+write app/src/test/java/com/gt8d/launcher/settings/DailyScreensTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.home.* --tests com.gt8d.launcher.ui.layout.* --tests com.gt8d.launcher.settings.*
+command /home/munde/tools/gradle-run.sh assembleDebug
