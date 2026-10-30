@@ -1,7 +1,7 @@
 package com.gt8d.launcher.settings
 
 object DailySettings {
-    val stripWidthChoices = listOf(8, 16, 24, 32)
+    val stripWidthChoices = listOf(24, 48, 72, 96)
     val longPressChoices = listOf(500, 750, 1000, 1500)
 
     fun longPressLabel(ms: Int): String = when (ms) {

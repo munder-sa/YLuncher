@@ -47,7 +47,7 @@ class EdgeStripWidthTest {
         controller!!.get().windowManagerFactory = { facade }
         controller!!.get().overlayAllowed = { true }
         controller!!.create()
-        assertEquals(listOf(8, 8), facade.widths)
+        assertEquals(listOf(48, 48), facade.widths)
         return facade
     }
     @Test fun applyGesture_widthChanged_reattachesWithNewWidth() {
@@ -55,13 +55,13 @@ class EdgeStripWidthTest {
         val thread = Thread { EdgeStripService.applyGesture(GestureConfig(stripWidthPx = 24)) }
         thread.start(); thread.join()
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(listOf(8, 8, 24, 24), facade.widths); assertEquals(2, facade.removes)
+        assertEquals(listOf(48, 48, 24, 24), facade.widths); assertEquals(2, facade.removes)
     }
     @Test fun applyGesture_sameWidth_doesNotReattach() {
         val facade = start()
         EdgeStripService.applyGesture(GestureConfig(glow = false, longPressMs = 750))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(listOf(8, 8), facade.widths); assertEquals(0, facade.removes)
+        assertEquals(listOf(48, 48), facade.widths); assertEquals(0, facade.removes)
         assertEquals(GestureConfig(glow = false, longPressMs = 750), EdgeStripService.gestureConfig)
     }
     @Test fun applyGesture_noService_onlyStores() {
