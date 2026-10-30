@@ -12,5 +12,11 @@ write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
 write app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt
 write app/src/test/java/com/gt8d/launcher/ui/layout/PanelLayoutTest.kt
 write app/src/test/java/com/gt8d/launcher/settings/DailyScreensTest.kt
-command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.home.* --tests com.gt8d.launcher.ui.layout.* --tests com.gt8d.launcher.settings.*
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/SeekBar.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/MediaCard.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.home.* --tests com.gt8d.launcher.ui.layout.* --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.ui.panel.* --tests com.gt8d.launcher.sets.SetRunnerTest
 command /home/munde/tools/gradle-run.sh assembleDebug
