@@ -1,0 +1,15 @@
+write app/src/main/java/com/gt8d/launcher/link/BrowserPane.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/BootScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/SetsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/ListsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/LinkScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/GestureScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/BootSettingsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/PermissionsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/AppPairPrepScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/SafetyRecoveryScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/apps/AppListScreen.kt
+create app/src/test/java/com/gt8d/launcher/ui/layout/OtherScreensLayoutTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.* --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.link.*
+command /home/munde/tools/gradle-run.sh assembleDebug
