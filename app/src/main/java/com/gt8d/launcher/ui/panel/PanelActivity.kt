@@ -22,6 +22,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.R
+import com.gt8d.launcher.apps.stockLauncherIntent
+import com.gt8d.launcher.safety.SafetyGuard
+import com.gt8d.launcher.settings.SettingsActivity
+import com.gt8d.launcher.settings.SettingsActions
+import com.gt8d.launcher.settings.SettingsHost
+import com.gt8d.launcher.settings.SafetyRecoveryScreen
+import com.gt8d.launcher.settings.safetyRecover
 import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.link.BrowserPane
 import com.gt8d.launcher.edge.EdgeAction
@@ -41,10 +48,15 @@ class PanelActivity : ComponentActivity() {
         { component, adjacent -> activityLauncher.startComponent(component, adjacent) }
     private var inSplitState by mutableStateOf(false)
     private var browserUrl: String? by mutableStateOf(null)
+    private var settingsOpen by mutableStateOf(false)
+    internal val settingsShown: Boolean get() = settingsOpen
+    private var safetyMode = false
     internal val shownBrowserUrl: String? get() = browserUrl
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        safetyMode = SafetyGuard.isFallbackActive(this)
+        settingsOpen = savedInstanceState?.getBoolean("settings_open") ?: false
         browserUrl = savedInstanceState?.getString("browser_url")
         inSplitState = isInMultiWindowMode
         onBackPressedDispatcher.addCallback(this) { DiagLog.d("Panel", "back ignored") }
@@ -55,6 +67,13 @@ class PanelActivity : ComponentActivity() {
         }
         setContent {
             LauncherTheme {
+                if (safetyMode) {
+                    SafetyRecoveryScreen(
+                        onRecover = { safetyRecover(this); goHome() },
+                        onStock = { runCatching { startActivity(stockLauncherIntent()) }; finish() },
+                    )
+                    return@LauncherTheme
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -76,8 +95,18 @@ class PanelActivity : ComponentActivity() {
                     val url = browserUrl
                     if (url != null) {
                         BrowserPane(url, onClose = { browserUrl = null }, modifier = Modifier.fillMaxSize())
+                    } else if (settingsOpen) {
+                        SettingsHost(SettingsActions.forApp(this@PanelActivity),
+                            onExit = { settingsOpen = false }, onSafetyCleared = ::goHome)
                     } else PanelScreen(
                         inSplit = inSplitState,
+                        onOpenSettings = {
+                            if (AppGraph.runner.opening.value != null) {
+                                DiagLog.d("Panel", "settings ignored while opening")
+                            } else if (isInMultiWindowMode) {
+                                settingsOpen = true
+                            } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java))
+                        },
                         onLaunchComponent = { component ->
                             val succeeded = launchComponent(component, isInMultiWindowMode)
                             AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
@@ -99,18 +128,13 @@ class PanelActivity : ComponentActivity() {
         AppGraph.panelInSplit = isInMultiWindowMode
         AppGraph.panelSplitPausedAtMs = null
         inSplitState = isInMultiWindowMode
+        if (safetyMode) return
         EdgeStripService.ensureRunning(this)
         if (isInMultiWindowMode) {
             AppGraph.runner.panelResumedInSplit()
             consumePendingUrl()
         }
-        forwarder.onShown(isInMultiWindowMode) {
-            val intent = Intent(this, HomeActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-            finish()
-        }
+        forwarder.onShown(isInMultiWindowMode, ::goHome)
     }
 
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
@@ -118,6 +142,7 @@ class PanelActivity : ComponentActivity() {
         if (!isInMultiWindowMode) AppGraph.panelSplitPausedAtMs = null
         inSplitState = isInMultiWindowMode
         AppGraph.panelInSplit = isInMultiWindowMode
+        if (safetyMode) return
         forwarder.onMultiWindowChanged(isInMultiWindowMode)
         if (isInMultiWindowMode) {
             AppGraph.runner.panelResumedInSplit()
@@ -138,6 +163,7 @@ class PanelActivity : ComponentActivity() {
     }
 
     private fun consumePendingUrl() {
+        if (safetyMode) return
         if (AppGraph.runner.opening.value != null) return
         if (!isInMultiWindowMode) return
         val url = AppGraph.pendingUrl.take() ?: return
@@ -145,7 +171,15 @@ class PanelActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("settings_open", settingsOpen)
         outState.putString("browser_url", browserUrl)
         super.onSaveInstanceState(outState)
+    }
+
+    private fun goHome() {
+        startActivity(Intent(this, HomeActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        })
+        finish()
     }
 }

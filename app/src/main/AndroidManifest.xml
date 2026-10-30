@@ -56,6 +56,11 @@
         </activity>
 
         <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false"
+            android:resizeableActivity="true" />
+
+        <activity
             android:name=".link.LinkEntryActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"

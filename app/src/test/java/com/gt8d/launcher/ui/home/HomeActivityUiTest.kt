@@ -42,6 +42,7 @@ class HomeActivityUiTest {
     private var savedFlow: StateFlow<LauncherConfig?>? = null
     private var savedHandled = false
     private var savedHome = false
+    private var savedPausedAt: Long? = null
     private var safety: String? = null
     private lateinit var safetyFile: File
     private var index: String? = null
@@ -55,6 +56,7 @@ class HomeActivityUiTest {
         savedFlow = AppGraph.configFlowForHomeTest
         savedHandled = AppGraph.bootHandled
         savedHome = AppGraph.homeResumed
+        savedPausedAt = AppGraph.homePausedAtMs
         safetyFile = File(app.filesDir, "safety.json")
         safety = safetyFile.takeIf { it.exists() }?.readText()
         SafetyGuard.clear(app)
@@ -87,6 +89,7 @@ class HomeActivityUiTest {
         AppGraph.configFlowForHomeTest = savedFlow
         AppGraph.bootHandled = savedHandled
         AppGraph.homeResumed = savedHome
+        AppGraph.homePausedAtMs = savedPausedAt
         safety?.let { safetyFile.writeText(it) } ?: safetyFile.delete()
         index?.let { indexFile.writeText(it) } ?: indexFile.delete()
         shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
@@ -114,6 +117,43 @@ class HomeActivityUiTest {
         rule.onNodeWithTag("icon_$pkg").performScrollTo().performClick()
         assertEquals(component, shadowOf(controller!!.get()).nextStartedActivity?.component)
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+    }
+
+    @Test fun longPressAppList_startsSettingsActivity() {
+        host()
+        rule.onNodeWithTag("dock_applist").performScrollTo().performTouchInput { longClick() }
+        assertEquals(com.gt8d.launcher.settings.SettingsActivity::class.java.name,
+            shadowOf(controller!!.get()).nextStartedActivity?.component?.className)
+    }
+    @Test fun longPressAppList_whileOpening_doesNothing() {
+        val runner = AppGraph.runner
+        val field = runner.javaClass.getDeclaredField("d").apply { isAccessible = true }
+        val original = field.get(runner) as com.gt8d.launcher.sets.SetRunnerDeps
+        val scheduler = com.gt8d.launcher.time.FakeScheduler()
+        field.set(runner, original.copy(scheduler = scheduler, clock = scheduler, startHome = {}))
+        try {
+            runner.openForBoot(1); assertNotNull(runner.opening.value); host()
+            rule.onNodeWithTag("dock_applist").performScrollTo().performTouchInput { longClick() }
+            assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+        } finally { runner.abortBootToHome(); field.set(runner, original) }
+    }
+    @Test fun createdInSafety_thenCleared_recreatesOnResume() {
+        SafetyGuard.recordStart(app); repeat(3) { SafetyGuard.recordCrash(app) }
+        AppGraph.config.lastSetIndex = 1
+        AppGraph.bootHandled = false
+        host()
+        rule.onNodeWithText("安全のため純正ランチャーを使っています").assertIsDisplayed()
+        val old = controller!!.get()
+        controller!!.pause()
+        com.gt8d.launcher.settings.safetyRecover(app)
+        val phase = AppGraph.boot.phase.value
+        controller!!.resume()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        rule.waitForIdle()
+        assertNotSame(old, controller!!.get())
+        rule.onNodeWithText("安全のため純正ランチャーを使っています").assertDoesNotExist()
+        rule.onNodeWithTag("dock_applist").assertIsDisplayed()
+        assertTrue(AppGraph.bootHandled); assertEquals(phase, AppGraph.boot.phase.value)
     }
 
     @Test fun homeActivity_packageAdded_enablesHomeAppWithoutConfigChange() {

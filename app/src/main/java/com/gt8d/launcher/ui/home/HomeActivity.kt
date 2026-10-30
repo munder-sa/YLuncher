@@ -1,6 +1,7 @@
 package com.gt8d.launcher.ui.home
 
 import android.os.Bundle
+import android.content.Intent
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +34,8 @@ import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.safety.SafetyGuard
+import com.gt8d.launcher.settings.SettingsActivity
+import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.panel.IconGrid
@@ -53,11 +56,13 @@ class HomeActivity : ComponentActivity() {
 
     private val activityLauncher by lazy { AndroidActivityLauncher(this) }
     private var bootConfigJob: Job? = null
+    private var createdInSafety = false
     internal var onBootDecisionForTest: () -> Unit = {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (SafetyGuard.isFallbackActive(this)) {
+        createdInSafety = SafetyGuard.isFallbackActive(this)
+        if (createdInSafety) {
             setContent {
                 LauncherTheme {
                     Box(
@@ -127,6 +132,11 @@ class HomeActivity : ComponentActivity() {
                         ) {
                             PanelScreen(
                                 inSplit = false,
+                                onOpenSettings = {
+                                    if (AppGraph.runner.opening.value != null) {
+                                        DiagLog.d("Home", "settings ignored while opening")
+                                    } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java))
+                                },
                                 onLaunchComponent = { component ->
                                     val succeeded = activityLauncher.startComponent(component, adjacent = false)
                                     AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
@@ -156,6 +166,10 @@ class HomeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (createdInSafety && !SafetyGuard.isFallbackActive(this)) {
+            recreate()
+            return
+        }
         AppGraph.homeResumed = true
         AppGraph.homePausedAtMs = null
         if (SafetyGuard.isFallbackActive(this)) {

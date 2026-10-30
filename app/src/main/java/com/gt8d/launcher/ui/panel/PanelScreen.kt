@@ -29,6 +29,7 @@ import kotlinx.coroutines.delay
 fun PanelScreen(
     inSplit: Boolean,
     onLaunchComponent: ((ComponentName) -> Unit)? = null,
+    onOpenSettings: () -> Unit = {},
     onLaunchApp: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -116,7 +117,7 @@ fun PanelScreen(
         onSplit = { /* Task 18 で接続 */ },
         onCar = { AppGraph.bridge.switchToCarScreen() },
         onAppList = { showAppList = true },
-        onAppListLongPress = { /* Task 18 で接続 */ },
+        onAppListLongPress = onOpenSettings,
         onOpenPermissions = {
             runCatching {
                 val intent = Intent(
