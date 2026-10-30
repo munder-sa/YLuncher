@@ -108,7 +108,7 @@ class DailyScreensTest {
     }
     @Test fun gesture_unknownWidth_noneSelected() {
         config = config.copy(gesture = GestureConfig(stripWidthPx = 12, longPressMs = 600)); host(SettingsRoute.Gesture)
-        listOf(8, 16, 24, 32).forEach { rule.onNodeWithTag("gesture_width_$it").assertIsNotSelected() }
+        listOf(24, 48, 72, 96).forEach { rule.onNodeWithTag("gesture_width_$it").assertIsNotSelected() }
         listOf(500, 750, 1000, 1500).forEach { rule.onNodeWithTag("gesture_longpress_$it").assertIsNotSelected() }
         assertEquals(12, config.gesture.stripWidthPx); assertEquals(600, config.gesture.longPressMs); assertEquals(0, writes)
     }

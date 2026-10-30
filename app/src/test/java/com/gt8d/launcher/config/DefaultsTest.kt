@@ -71,7 +71,7 @@ class DefaultsTest {
         assertEquals(Defaults.PKG_APPLE_MUSIC, cfg.idleApp)
         assertEquals(LinkMode.InAppSplit, cfg.link.mode)
         assertEquals(listOf("accounts.google.com"), cfg.link.chromeDomains)
-        assertEquals(GestureConfig(stripWidthPx = 8, glow = true, longPressMs = 1000), cfg.gesture)
+        assertEquals(GestureConfig(stripWidthPx = 48, glow = true, longPressMs = 1000), cfg.gesture)
     }
 
     @Test

@@ -74,7 +74,7 @@ enum class LinkMode {
 
 @Serializable
 data class GestureConfig(
-    val stripWidthPx: Int = 8,
+    val stripWidthPx: Int = 48,
     val glow: Boolean = true,
     val longPressMs: Int = 1000,
 )
