@@ -7,6 +7,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.After
@@ -51,6 +53,11 @@ class BrowserPaneTest {
         host()
         rule.onNodeWithTag("browser_close").performClick()
         assertEquals(1, closes)
+    }
+
+    @Test fun title_showsHostBeforeSiteName() {
+        host()
+        rule.onNodeWithText("example.com").assertIsDisplayed()
     }
 
     @Test fun back_withoutHistory_callsOnClose() {

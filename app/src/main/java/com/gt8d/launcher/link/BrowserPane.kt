@@ -2,7 +2,6 @@ package com.gt8d.launcher.link
 
 import android.content.Intent
 import android.net.Uri
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -22,20 +21,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.gt8d.launcher.ui.theme.Palette
+import com.gt8d.launcher.ui.theme.Dims
 
 const val EXTRA_URL = "url"
 
 @Composable
 fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var pageTitle by remember { mutableStateOf("") }
+    var siteName by remember { mutableStateOf<String?>(null) }
     var pageUrl by remember { mutableStateOf(url) }
     val webView = remember(context) {
         WebView(context).apply {
@@ -53,19 +55,19 @@ fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier)
                 }
                 override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                     pageUrl = url.orEmpty()
-                    pageTitle = ""
+                    siteName = null
                 }
-            }
-            webChromeClient = object : WebChromeClient() {
-                override fun onReceivedTitle(view: WebView, title: String?) {
-                    pageTitle = title.orEmpty()
+                override fun onPageFinished(view: WebView, url: String?) {
+                    view.evaluateJavascript("(function(){var m=document.querySelector('meta[property=\"og:site_name\"]');return m?m.content:null;})()") { raw ->
+                        siteName = SiteLabel.parseJsString(raw)
+                    }
                 }
             }
         }
     }
     DisposableEffect(webView) { onDispose { webView.destroy() } }
     LaunchedEffect(webView, url) {
-        pageTitle = ""
+        siteName = null
         pageUrl = url
         webView.loadUrl(url)
     }
@@ -80,9 +82,11 @@ fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier)
         ) {
             TextButton(onClick = goBackOrClose,
                 modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_back")) {
-                Text("戻る")
+                Text("戻る", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
+                    fontSize = Dims.BodyText)
             }
-            Text(pageTitle.ifEmpty { pageUrl }, modifier = Modifier.weight(1f),
+            Text(SiteLabel.label(siteName, pageUrl), modifier = Modifier.weight(1f),
+                color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = Dims.BodyText,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             TextButton(onClick = {
                 val current = webView.url ?: pageUrl
@@ -92,11 +96,13 @@ fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier)
                 }
                 onClose()
             }, modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_chrome")) {
-                Text("Chromeで開き直す")
+                Text("Chromeで開き直す", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
+                    fontSize = Dims.BodyText)
             }
             TextButton(onClick = onClose,
                 modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp).testTag("browser_close")) {
-                Text("閉じる")
+                Text("閉じる", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
+                    fontSize = Dims.BodyText)
             }
         }
         AndroidView(factory = { webView },
