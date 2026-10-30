@@ -15,9 +15,9 @@ fun GestureScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> Launche
     DailySettings.stripWidthChoices.chunked(2).forEach { choices ->
         Row(Modifier.fillMaxWidth()) {
             choices.forEach { width ->
-                DailyButton("${width}px", "gesture_width_$width", Modifier.weight(1f), selected = config.gesture.stripWidthPx == width) {
+                SettingsChoice("${width}px", "gesture_width_$width", config.gesture.stripWidthPx == width, modifier = Modifier.weight(1f), onClick = {
                     onUpdate { it.copy(gesture = it.gesture.copy(stripWidthPx = width)) }
-                }
+                })
             }
         }
     }
@@ -28,9 +28,9 @@ fun GestureScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> Launche
     DailySettings.longPressChoices.chunked(2).forEach { choices ->
         Row(Modifier.fillMaxWidth()) {
             choices.forEach { ms ->
-                DailyButton(DailySettings.longPressLabel(ms), "gesture_longpress_$ms", Modifier.weight(1f), selected = config.gesture.longPressMs == ms) {
+                SettingsChoice(DailySettings.longPressLabel(ms), "gesture_longpress_$ms", config.gesture.longPressMs == ms, modifier = Modifier.weight(1f), onClick = {
                     onUpdate { it.copy(gesture = it.gesture.copy(longPressMs = ms)) }
-                }
+                })
             }
         }
     }

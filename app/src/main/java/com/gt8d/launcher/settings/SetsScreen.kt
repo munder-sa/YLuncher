@@ -10,8 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.config.ScreenSet
@@ -19,7 +17,6 @@ import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.config.allowedFor
 import com.gt8d.launcher.ui.theme.Dims
-import com.gt8d.launcher.ui.theme.Palette
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -115,11 +112,11 @@ fun SetsScreen(
                     BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         val stacked = maxWidth <= 516.dp
                         val name: @Composable (Modifier) -> Unit = { nameModifier ->
-                            SetButton("${labelFor(set.left.pkg)} | ${when (val right = set.right) {
+                            SettingsRow("${labelFor(set.left.pkg)} | ${when (val right = set.right) {
                                 Slot.Panel -> "パネル"
                                 is Slot.App -> labelFor(right.pkg)
-                            }}", "set_row_${set.id}", nameModifier, enabled = !busy,
-                                subtitle = set.ratio.label) { onEdit(set.id) }
+                            }}", "set_row_${set.id}", { onEdit(set.id) }, modifier = nameModifier, enabled = !busy,
+                                subtitle = set.ratio.label)
                         }
                         val controls: @Composable () -> Unit = {
                             SetButton("▲", "set_up_${set.id}", enabled = !busy && index > 0) {
@@ -128,7 +125,7 @@ fun SetsScreen(
                             SetButton("▼", "set_down_${set.id}", enabled = !busy && index < loaded.lastIndex) {
                                 change({ SetsEdit.moveDown(it, set.id) }, {})
                             }
-                            SetButton("削除", "set_delete_${set.id}", enabled = !busy) { deleting = set.id }
+                            SetButton("削除", "set_delete_${set.id}", enabled = !busy, kind = SettingsButtonKind.Danger) { deleting = set.id }
                         }
                         if (stacked) Column {
                             name(Modifier.fillMaxWidth())
@@ -144,7 +141,7 @@ fun SetsScreen(
             deleting?.let { id ->
                 AlertDialog(onDismissRequest = { deleting = null },
                     text = { Text("このセットを削除しますか?", fontSize = Dims.BodyText) },
-                    confirmButton = { SetButton("はい", "set_delete_yes") {
+                    confirmButton = { SettingsButton("はい", "set_delete_yes", kind = SettingsButtonKind.Danger) {
                         deleting = null
                         change({ SetsEdit.delete(it, id) }, {})
                     } },
@@ -163,10 +160,10 @@ fun SetsScreen(
                     val ownPkg = LocalContext.current.packageName
                     SetButton("アプリの選択を戻る", "set_pick_back") { pickingLeft = null }
                     launchablePackages().distinct().filterNot { it == ownPkg }.sortedBy(labelFor).forEach { pkg ->
-                        SetButton(labelFor(pkg), "set_pick_$pkg", Modifier.fillMaxWidth()) {
+                        SettingsRow(labelFor(pkg), "set_pick_$pkg", onClick = {
                             draft = if (pickingLeft == true) draft.copy(left = pkg) else draft.withRight(Slot.App(pkg))
                             pickingLeft = null
-                        }
+                        })
                     }
                 } else {
                     SetButton("左のアプリ", "set_left", Modifier.fillMaxWidth(), enabled = !busy,
@@ -189,7 +186,7 @@ fun SetsScreen(
                     }
                     Text("分割に対応していないアプリは、分割できないことがあります",
                         Modifier.padding(vertical = 8.dp).testTag("set_unresizeable_note"), fontSize = Dims.BodyText)
-                    SetButton("保存", "set_save", Modifier.fillMaxWidth(), enabled = !busy && draft.canSave) {
+                    SettingsButton("保存", "set_save", Modifier.fillMaxWidth(), kind = SettingsButtonKind.Primary, enabled = !busy && draft.canSave) {
                         val saved = draft.toScreenSet()
                         change({ SetsEdit.upsert(it, saved) }) { after ->
                             if (route.fromSplitButton) onOpenSet(after.indexOfFirst { it.id == saved.id } + 1) else onBack()
@@ -210,18 +207,12 @@ private fun SetButton(
     enabled: Boolean = true,
     selected: Boolean? = null,
     subtitle: String? = null,
+    kind: SettingsButtonKind = SettingsButtonKind.Secondary,
     onClick: () -> Unit,
 ) {
-    Button(onClick, modifier.padding(vertical = 4.dp)
-        .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch).testTag(tag)
-        .semantics { selected?.let { this.selected = it } }, enabled = enabled,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected == false) Palette.Panel else Palette.Accent,
-            contentColor = if (selected == false) MaterialTheme.colorScheme.onSurface else Palette.Background0,
-        )) {
-        Column {
-            OneLineText(text, fontSize = Dims.BodyText, color = LocalContentColor.current)
-            subtitle?.let { OneLineText(it, fontSize = Dims.BodyText, color = LocalContentColor.current) }
-        }
+    when {
+        selected != null -> SettingsChoice(text, tag, selected, onClick, modifier, enabled)
+        subtitle != null -> SettingsRow(text, tag, onClick, subtitle, enabled, modifier = modifier)
+        else -> SettingsButton(text, tag, modifier, enabled = enabled, kind = kind, onClick = onClick)
     }
 }
