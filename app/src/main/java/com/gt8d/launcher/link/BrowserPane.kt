@@ -38,6 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.theme.Dims
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 
 const val EXTRA_URL = "url"
 
@@ -45,6 +48,8 @@ const val EXTRA_URL = "url"
 fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var siteName by remember { mutableStateOf<String?>(null) }
+    var appName by remember { mutableStateOf<String?>(null) }
+    var pageTitle by remember { mutableStateOf<String?>(null) }
     var pageUrl by remember { mutableStateOf(url) }
     val webView = remember(context) {
         WebView(context).apply {
@@ -63,10 +68,23 @@ fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier)
                 override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                     pageUrl = url.orEmpty()
                     siteName = null
+                    appName = null
+                    pageTitle = null
                 }
                 override fun onPageFinished(view: WebView, url: String?) {
-                    view.evaluateJavascript("(function(){var m=document.querySelector('meta[property=\"og:site_name\"]');return m?m.content:null;})()") { raw ->
-                        siteName = SiteLabel.parseJsString(raw)
+                    pageTitle = view.title
+                    view.evaluateJavascript("(function(){var og=document.querySelector('meta[property=\"og:site_name\"]');var app=document.querySelector('meta[name=\"application-name\"]');return JSON.stringify([og?og.content:null,app?app.content:null]);})()") { raw ->
+                        val names = SiteLabel.parseJsString(raw)?.let {
+                            try {
+                                Json.parseToJsonElement(it) as? JsonArray
+                            } catch (_: IllegalArgumentException) {
+                                null
+                            }
+                        }
+                        siteName = (names?.getOrNull(0) as? JsonPrimitive)
+                            ?.takeIf { it.isString }?.content
+                        appName = (names?.getOrNull(1) as? JsonPrimitive)
+                            ?.takeIf { it.isString }?.content
                     }
                 }
             }
@@ -75,6 +93,8 @@ fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier)
     DisposableEffect(webView) { onDispose { webView.destroy() } }
     LaunchedEffect(webView, url) {
         siteName = null
+        appName = null
+        pageTitle = null
         pageUrl = url
         webView.loadUrl(url)
     }
@@ -94,7 +114,7 @@ fun BrowserPane(url: String, onClose: () -> Unit, modifier: Modifier = Modifier)
                     OneLineText("戻る", color = Palette.Accent, fontWeight = FontWeight.SemiBold,
                         fontSize = Dims.BodyText)
                 }
-                OneLineText(SiteLabel.label(siteName, pageUrl), modifier = Modifier.weight(1f),
+                OneLineText(SiteLabel.label(siteName, appName, pageTitle, pageUrl), modifier = Modifier.weight(1f),
                     color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = Dims.BodyText)
                 val openChrome = {
                     val current = webView.url ?: pageUrl
