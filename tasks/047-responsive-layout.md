@@ -5,6 +5,9 @@ UI の決まり(計画の Global Constraints): 文言は日本語、ダーク固
 
 パス接頭辞: `M = app/src/main/java/com/gt8d/launcher`、`T = app/src/test/java/com/gt8d/launcher`
 
+## 参考にする決まり
+- 迷ったら Android の Material Design(画面幅の区分 Compact <600・Medium 600〜839・Expanded ≥840dp、補助パネル型の配置)と、iOS のヒューマンインターフェースガイドラインに合わせる。ただし、タッチ領域 72dp・本文 20sp は車の画面のためにこの仕様の値を優先する。決まりと違う判断をしたら「決めたこと」に書く。
+
 ## 背景(司令塔とユーザーが実機で確かめた事実、2026-10-31)
 - 画面は 1920x1080px、全画面で w1291dp h726dp。分割の右は 4:6 で約 516dp、5:5 で約 645dp、6:4 で約 774dp、3:7 で約 387dp。仕切りのドラッグで任意の幅になる。
 - 仕切りをドラッグしても PanelActivity は作り直されず、Compose が新しい幅で描き直す(状態は保たれる)。
@@ -48,10 +51,10 @@ object PanelLayout {
     const val CELL_DP = 88f        // アイコンのセル(アイコン 64dp)
     const val GAP_DP = 8f
     const val DOCK_DP = 88f        // ドックの幅(固定)
-    const val HOME_SPLIT_MIN_DP = 900f
+    const val HOME_SPLIT_MIN_DP = 840f   // Material の画面幅の区分「Expanded」の下限に合わせる
     fun columns(availableDp: Float): Int                  // floor((available + GAP) / (CELL + GAP))、最低 1
     fun controlRows(availableDp: Float, buttons: Int): Int // 72dp のボタン buttons 個(間隔 GAP)が1段に入れば 1、入らなければ 2(2段で入らない幅は 2 のまま)
-    fun homePanelWidthDp(totalDp: Float): Float?           // total >= 900 なら clamp(total*0.45, 516, 640)(丸めない)、未満なら null(パネルだけ)
+    fun homePanelWidthDp(totalDp: Float): Float?           // total >= 840 なら clamp(total*0.45, 516, 640)(丸めない)、未満なら null(パネルだけ)
 }
 ```
 
@@ -102,7 +105,7 @@ object PanelLayout {
   - 実機で確かめるため、余白が変わったときに `DiagLog.d("Layout", "strip window=… left=… right=… pad=…")` を出す。
 
 ## テスト(先に書き、修正前に失敗することを確かめる)
-1. `PanelLayoutTest`(純粋な JUnit): `columns_boundaries`(87→0 ではなく 1、88→1、183→1、184→2、279→2、280→3)、`controlRows_fitOrWrap`(4個: 311→2、312→1)、`homePanelWidth_cases`(899→null、900→516、1291→581、2000→640)。
+1. `PanelLayoutTest`(純粋な JUnit): `columns_boundaries`(87→0 ではなく 1、88→1、183→1、184→2、279→2、280→3)、`controlRows_fitOrWrap`(4個: 311→2、312→1)、`homePanelWidth_cases`(839→null、840→516、1291→580.95(誤差 0.01)、2000→640)。
 2. `StripInsetsTest`(純粋): 全画面の窓で左右とも重なる、右の分割の窓では右だけ、左の分割の窓では左だけ、帯が無い側は 0、帯が窓より広い場合は窓の幅まで。
 3. `FitClockTest`(Robolectric + Compose): 幅 360/516/1291dp・高さ 400/726dp で、`clock` の TextLayoutResult(`SemanticsActions.GetTextLayoutResult` で取る)が `lineCount == 1`・`hasVisualOverflow == false`、
    時計のノードの境界が親の境界の内側。fontScale 1.3 でも同じ。時刻 "00:00" と "23:59" で大きさが同じ。
@@ -110,13 +113,13 @@ object PanelLayout {
    - 描画の大きさは `RuntimeEnvironment.setQualifiers("w<W>dp-h<H>dp")` で決め(既存の `HomeActivityUiTest` の作り方)、**描いた根の実際の大きさが指定どおりかを最初に確かめる**。文字の大きさは `Density(density, fontScale)` を `LocalDensity` で与えてよい。
    - 境界の比較は、画面に見えている(クリップ後の)境界(`fetchSemanticsNode().boundsInRoot`)で行う。スクロールの中の部品は `performScrollTo` してから確かめ、スクロールの外(時計の段など)の部品にはしない。
    - パネル(`PanelContent`。停止中と再生中(☆あり)の両方)を、幅 360・387・516・645・774dp × 高さ 400・600・726dp、fontScale 1.0 と 1.3 で描く。
-   - ホーム(`HomeContent`、パネル付き)を、幅 387・516・645・774・899・900・903・1291dp × 高さ 600・726dp で描く。
+   - ホーム(`HomeContent`、パネル付き)を、幅 387・516・645・774・839・840・903・1291dp × 高さ 600・726dp で描く。
    - それぞれで確かめる:
      (a) `clock` が1行・はみ出しなし・境界が画面の内側。
      (b) 次のタグの領域が互いに重ならない(親子は除く): `clock`、`media_card`(再生カードに付ける)、`icon_grid`(格子に付ける)、`dock`(ドックに付ける)、ホームなら `home_grid`(ホームの格子に付ける)。
      (c) 押せる部品(`hasClickAction()`)の、クリップ前の大きさが 72dp 以上。各部品にスクロールして(`performScrollTo`)届き、画面の横の範囲の内側にある。
      (d) `OneLineText` の印の付いた文字がすべて1行(lineCount == 1)。
-     (e) 899dp ではホームの格子が無く、900dp では有る。
+     (e) 839dp ではホームの格子が無く、840dp では有る。
    - **状態の保持**: ホームを 1291dp で描き、ドックの「アプリ一覧」を開く → 幅を 516dp に変える(テストの中で幅の状態を変えて描き直す)→ アプリ一覧が開いたまま → 1291dp に戻しても開いたまま。
    - **作り直しの後の復元**: `PanelActivityTest` に `appList_survivesRecreate`(分割の中でアプリ一覧を開き `controller.recreate()` → 開いたまま)を足す。
 5. 既存のテストは、上で許した置き換え以外は変えずに通ること。
