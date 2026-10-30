@@ -15,6 +15,8 @@
 ## 司令塔が実機で確かめた事実(この前提で書く)
 - adb は Windows の `adb.exe -s 192.168.137.248:5555`(WSL の adb は届かない)。`ADB` 環境変数で上書きできるようにする。
 - タスクの一覧: `adb shell dumpsys activity activities` の `* Task{… #<番号> … A=<uid>:<affinity> …}` の行。分割の中のタスクは `rootTaskId=2` を持ち、分割の左右の枠は `Task{… #3 type=undefined …}` と `#4`(番号は端末で変わりうるので、`type=undefined` かつ `mode=multi-window` の枠の子として見つける)。
+- **左右の枠の見分け方(実機で確かめた)**: 枠のタスクの行(`* Task{… #<番号> type=undefined … mode=multi-window …}`)の**次の行**に `mBounds=Rect(<左>, 0 - <右>, 1080)` がある。**左端が 0 より大きい枠が右側**、0 の枠が左側。
+  枠の子のタスクは、その枠の行より深く字下げされた `* Task{… type=standard A=…}` の行。子のタスクの一番上の Activity は、子のタスクの区画の中の `topResumedActivity=ActivityRecord{… <パッケージ>/<クラス> …}` の行、それが無ければ区画の中の最初の `Hist #` の行の `ActivityRecord{…}`(dumpsys は上の Activity から順に並べる)。枠の子が無い(`sz=0`)なら「空」と判定する。
 - YLuncher のタスクを消す: `adb shell am stack remove <タスク番号>`(affinity が `com.gt8d.launcher` で始まるタスクだけを対象にする。**分割の枠や他のアプリのタスクは消さない**)。
 - 送り元つきのリンク: `adb shell am start -a android.intent.action.VIEW -d <URL> --es android.intent.extra.REFERRER_NAME android-app://<pkg>`
 - アプリを全画面で開く: `adb shell monkey -p <pkg> -c android.intent.category.LAUNCHER 1`
