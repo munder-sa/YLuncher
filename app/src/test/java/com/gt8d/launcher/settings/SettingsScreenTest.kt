@@ -79,8 +79,8 @@ class SettingsScreenTest {
     @Test fun safety_active_clearsThenCallsCleared() {
         host(safety = true); click("item_safety"); assertEquals(listOf("clear", "cleared"), calls)
     }
-    @Test fun detail_showsPlaceholder_andBackReturnsToRoot() {
-        host(); click("item_sets"); rule.onNodeWithTag("settings_placeholder").assertTextEquals("この画面は準備中です")
+    @Test fun detail_backReturnsToRoot() {
+        host(); click("item_sets"); rule.onNodeWithTag("settings_item_sets").assertDoesNotExist()
         rule.onNodeWithTag("settings_back").performClick(); rule.onNodeWithTag("settings_item_sets").assertIsDisplayed()
     }
     @Test fun back_atRoot_exits() { host(); rule.onNodeWithTag("settings_back").performClick(); assertEquals(listOf("exit"), calls) }

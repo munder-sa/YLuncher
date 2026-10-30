@@ -30,6 +30,7 @@ fun PanelScreen(
     inSplit: Boolean,
     onLaunchComponent: ((ComponentName) -> Unit)? = null,
     onOpenSettings: () -> Unit = {},
+    onNewSet: () -> Unit = {},
     onLaunchApp: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -114,7 +115,7 @@ fun PanelScreen(
         onLaunch = onLaunchApp,
         onAdd = { /* Task 18 で接続 */ },
         onHome = { AppGraph.runner.home() },
-        onSplit = { /* Task 18 で接続 */ },
+        onSplit = { if (AppGraph.runner.opening.value == null) onNewSet() },
         onCar = { AppGraph.bridge.switchToCarScreen() },
         onAppList = { showAppList = true },
         onAppListLongPress = onOpenSettings,
