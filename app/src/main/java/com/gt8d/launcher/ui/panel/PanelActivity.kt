@@ -23,7 +23,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.R
 import com.gt8d.launcher.diag.DiagLog
-import com.gt8d.launcher.link.BrowserActivity
+import com.gt8d.launcher.link.BrowserPane
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.split.AndroidActivityLauncher
@@ -40,9 +40,12 @@ class PanelActivity : ComponentActivity() {
     internal var launchComponent: (ComponentName, Boolean) -> Boolean =
         { component, adjacent -> activityLauncher.startComponent(component, adjacent) }
     private var inSplitState by mutableStateOf(false)
+    private var browserUrl: String? by mutableStateOf(null)
+    internal val shownBrowserUrl: String? get() = browserUrl
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        browserUrl = savedInstanceState?.getString("browser_url")
         inSplitState = isInMultiWindowMode
         onBackPressedDispatcher.addCallback(this) { DiagLog.d("Panel", "back ignored") }
         lifecycleScope.launch {
@@ -70,7 +73,10 @@ class PanelActivity : ComponentActivity() {
                         alignment = Alignment.Center,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    PanelScreen(
+                    val url = browserUrl
+                    if (url != null) {
+                        BrowserPane(url, onClose = { browserUrl = null }, modifier = Modifier.fillMaxSize())
+                    } else PanelScreen(
                         inSplit = inSplitState,
                         onLaunchComponent = { component ->
                             val succeeded = launchComponent(component, isInMultiWindowMode)
@@ -135,8 +141,11 @@ class PanelActivity : ComponentActivity() {
         if (AppGraph.runner.opening.value != null) return
         if (!isInMultiWindowMode) return
         val url = AppGraph.pendingUrl.take() ?: return
-        startActivity(Intent(this, BrowserActivity::class.java)
-            .putExtra(BrowserActivity.EXTRA_URL, url)
-            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        browserUrl = url
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("browser_url", browserUrl)
+        super.onSaveInstanceState(outState)
     }
 }

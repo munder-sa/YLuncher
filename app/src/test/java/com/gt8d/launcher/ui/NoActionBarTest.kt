@@ -2,7 +2,8 @@ package com.gt8d.launcher.ui
 
 import android.app.Activity
 import android.content.Intent
-import com.gt8d.launcher.link.BrowserActivity
+import com.gt8d.launcher.link.FullscreenBrowserActivity
+import com.gt8d.launcher.link.EXTRA_URL
 import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.panel.PanelActivity
 import org.junit.Assert.assertNull
@@ -26,8 +27,8 @@ class NoActionBarTest {
 
     @Test fun homeActivity_hasNoActionBar() = checkActivity(HomeActivity::class.java)
     @Test fun panelActivity_hasNoActionBar() = checkActivity(PanelActivity::class.java)
-    @Test fun browserActivity_hasNoActionBar() = checkActivity(
-        BrowserActivity::class.java,
-        Intent().putExtra(BrowserActivity.EXTRA_URL, "https://example.com"),
+    @Test fun fullscreenBrowserActivity_hasNoActionBar() = checkActivity(
+        FullscreenBrowserActivity::class.java,
+        Intent().putExtra(EXTRA_URL, "https://example.com"),
     )
 }

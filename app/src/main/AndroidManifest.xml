@@ -71,10 +71,6 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".link.BrowserActivity"
-            android:exported="false"
-            android:resizeableActivity="true" />
-        <activity
             android:name=".link.FullscreenBrowserActivity"
             android:exported="false"
             android:resizeableActivity="true"

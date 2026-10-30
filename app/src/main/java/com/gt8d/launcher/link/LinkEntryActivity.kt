@@ -117,7 +117,7 @@ class LinkEntryActivity : ComponentActivity() {
         private fun openFullscreen(context: Context, url: String) {
             runCatching {
                 context.startActivity(Intent(context, FullscreenBrowserActivity::class.java)
-                    .putExtra(BrowserActivity.EXTRA_URL, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    .putExtra(EXTRA_URL, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }.onFailure { DiagLog.d("Link", "fullscreen failed: $it") }
         }
     }

@@ -18,7 +18,6 @@ import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
-import com.gt8d.launcher.link.BrowserActivity
 import com.gt8d.launcher.sets.SetRunnerDeps
 import com.gt8d.launcher.curtain.CurtainController
 import com.gt8d.launcher.curtain.CurtainView
@@ -181,12 +180,49 @@ class PanelActivityTest {
 
     private fun assertBrowserOnce() {
         val activity = controller!!.get()
-        val started = shadowOf(activity).nextStartedActivity
-        assertNotNull(started)
-        assertEquals(ComponentName(activity, BrowserActivity::class.java), started.component)
-        assertEquals("https://example.com", started.getStringExtra(BrowserActivity.EXTRA_URL))
         assertNull(shadowOf(activity).nextStartedActivity)
+        assertEquals("https://example.com", activity.shownBrowserUrl)
         assertNull(AppGraph.pendingUrl.take())
+    }
+
+    @Test fun browser_close_returnsToPanel() {
+        AppGraph.pendingUrl.set("https://example.com")
+        splitPanel()
+        rule.onNodeWithTag("browser_close").performClick()
+        rule.runOnIdle { assertNull(controller!!.get().shownBrowserUrl) }
+        rule.onNodeWithTag("dock_applist").assertIsDisplayed()
+        assertFalse(controller!!.get().isFinishing)
+    }
+
+    @Test fun browser_systemBack_returnsToPanel_thenBackIgnored() {
+        AppGraph.pendingUrl.set("https://example.com")
+        splitPanel()
+        rule.runOnIdle { controller!!.get().onBackPressedDispatcher.onBackPressed() }
+        rule.runOnIdle { assertNull(controller!!.get().shownBrowserUrl) }
+        rule.runOnIdle { controller!!.get().onBackPressedDispatcher.onBackPressed() }
+        assertFalse(controller!!.get().isFinishing)
+    }
+
+    @Test fun pendingUrl_whileBrowserShown_replacesUrl() {
+        AppGraph.pendingUrl.set("https://example.com/a")
+        splitPanel()
+        assertEquals("https://example.com/a", controller!!.get().shownBrowserUrl)
+        AppGraph.pendingUrl.set("https://example.com/b")
+        controller!!.pause().resume()
+        // Robolectric ではテスト間で Compose のグローバルな変更通知が止まることがあるため、Activity の中で書いた状態の通知を明示的に送る
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.waitForIdle()
+        assertEquals("https://example.com/b", controller!!.get().shownBrowserUrl)
+        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+        assertNull(AppGraph.pendingUrl.take())
+    }
+
+    @Test fun browserUrl_survivesRecreate() {
+        AppGraph.pendingUrl.set("https://example.com")
+        splitPanel()
+        controller!!.recreate()
+        rule.waitForIdle()
+        assertEquals("https://example.com", controller!!.get().shownBrowserUrl)
     }
 
     @Test fun pendingUrl_whileOpening_isNotConsumedUntilOpeningEnds() {
