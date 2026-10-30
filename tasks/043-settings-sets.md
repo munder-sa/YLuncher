@@ -28,10 +28,12 @@ UI の決まり(計画の Global Constraints): 文言は日本語、ダーク固
 - `M/settings/SettingsActivity.kt`(extra `open_new_set=true` のとき `SetEdit(null, fromSplitButton = true)` から始める)
 - `M/ui/panel/PanelScreen.kt`(引数 `onNewSet: () -> Unit = {}` を `onOpenSettings` の直後に足し、`onSplit = onNewSet` にする)
 - `M/ui/panel/PanelActivity.kt`、`M/ui/home/HomeActivity.kt`(`onNewSet` の接続)
+- `M/sets/SetRunner.kt`(`followIndex` を足すだけ)
+- `T/sets/SetRunnerTest.kt`(テスト `followIndex_updatesCurrentAndSaved_withoutOpening` を1つ足すだけ。E が呼ばれず、`currentIndex` と保存値が変わる)
 - `T/ui/panel/PanelActivityTest.kt`、`T/ui/home/HomeActivityUiTest.kt`(テストを足す。既存のテストは変えない)
 
 使ってよいコマンド:
-- `/home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest --tests com.gt8d.launcher.ui.home.HomeActivityUiTest`
+- `/home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.panel.PanelScreenTest --tests com.gt8d.launcher.ui.home.HomeActivityUiTest --tests com.gt8d.launcher.sets.SetRunnerTest`
 - `/home/munde/tools/gradle-run.sh assembleDebug`
 
 ## 仕様
@@ -62,8 +64,13 @@ object SetsEdit {
 ### 保存の流れ(SetsScreen.kt の中、または SetsScreen.kt に置く関数)
 設定を書き換えるときは必ず次の順にする(`ConfigRepository.update` の中で `before` と `after` が分かる):
 1. `AppGraph.config.update { cfg -> cfg.copy(screenSets = 変更後) }`
-2. 同じ `before`・`after` で `SetsEdit.remapIndex` を計算し、`AppGraph.runner.currentIndex` と `AppGraph.config.lastSetIndex` に入れる。
-   (書き込みは main スレッドで行う。`runner.currentIndex` は今 `var` で公開されている。見て、そうでなければ推測で変えずに止まって報告する)
+2. 同じ `before`・`after` で `SetsEdit.remapIndex` を計算し、`AppGraph.runner.followIndex(新しい番号)` を呼ぶ(main スレッドで)。
+   `SetRunner` に次の関数を足す(`currentIndex` は `private set` のため):
+   ```kotlin
+   // 設定でセットの並びが変わったとき、今のセットの番号だけを付け替える(画面は切り替えない)
+   fun followIndex(index: Int) { currentIndex = index; d.lastIndex.lastSetIndex = index }
+   ```
+   `SetRunner` のほかの部分は変えない。
 - テストしやすいように、この流れは `class SetsStore(update: suspend ((List<ScreenSet>) -> List<ScreenSet>) -> Pair<List<ScreenSet>, List<ScreenSet>>, currentIndex: () -> Int, setCurrentIndex: (Int) -> Unit)` のような小さな部品に分けてよい(名前と形は自由。報告の「決めたこと」に書く)。
 
 ### SetsScreen.kt
@@ -114,7 +121,7 @@ object SetsEdit {
 
 ## この Task でしないこと
 - §6 の 2〜7 の詳細画面、パネルの「+」、分割非対応の判定、D のペアのラベルの編集。
-- `SetRunner`・`SetNavigator`・`ConfigRepository` の中身の変更(公開されているものを使うだけ)。
+- `SetRunner`(`followIndex` を除く)・`SetNavigator`・`ConfigRepository` の中身の変更。
 - 全テストの実行、実機の操作、git のコミット等。
 
 ## 報告
