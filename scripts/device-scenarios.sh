@@ -5,7 +5,7 @@ read -r -a adb_cmd <<< "${ADB:-adb.exe -s 192.168.137.248:5555}"
 adb() { "${adb_cmd[@]}" "$@"; }
 with_home=0
 only=''
-names=(link_cold_noTasks link_panelTaskPresent link_warm_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel)
+names=(link_cold_noTasks link_appPanelFront link_panelTaskPresent link_warm_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel)
 while (($#)); do
     case "$1" in
         --with-ylauncher-home) with_home=1; shift ;;
@@ -99,11 +99,24 @@ remove_yl_tasks() {
 reset() {
     adb shell input keyevent KEYCODE_HOME || return 1
     remove_yl_tasks || return 1
-    if [[ ${1:-} == cold ]]; then adb shell am force-stop com.gt8d.launcher || return 1; fi
+    if [[ ${1:-} == cold ]]; then
+        adb shell am force-stop com.gt8d.launcher || return 1
+        adb shell am force-stop com.gt8d.launcher.panel || return 1
+    fi
     sleep 1
     adb logcat -c && adb logcat -b events -c
 }
-home_activity() { adb shell am start -n com.gt8d.launcher/.ui.home.HomeActivity && sleep 3; }
+home_activity() {
+    local current
+    current=$(adb shell cmd role get-role-holders android.app.role.HOME) || return 1
+    current=${current//$'\r'/}
+    if [[ $current == com.gt8d.launcher ]]; then
+        adb shell input keyevent KEYCODE_HOME || return 1
+    else
+        adb shell am start -n com.gt8d.launcher/.ui.home.HomeActivity || return 1
+    fi
+    sleep 3
+}
 chatgpt() { adb shell monkey -p com.openai.chatgpt -c android.intent.category.LAUNCHER 1 && sleep 4; }
 link() {
     adb shell am start -a android.intent.action.VIEW -d https://example.com/ --es android.intent.extra.REFERRER_NAME "android-app://$1"
@@ -121,7 +134,7 @@ parse_slots() {
     {
         depth=indent($0)
         if(slot && depth<=slotdepth && $0 ~ /[^[:space:]]/) {emit(); slot=0}
-        if(/\* Task\{/ && /type=undefined/ && /mode=multi-window/) {
+        if(/\* Task\{/ && /type=undefined/ && /mode=multi-window/ && / visible=true([[:space:]}]|$)/) {
             slot=1; slotdepth=depth; side="UNKNOWN"; top=""; hist=""; child=0; next
         }
         if(!slot) next
@@ -143,16 +156,38 @@ browser_created() { grep -E 'wm_create_activity.*com\.gt8d\.launcher/([^], ]*\.)
 right_is() {
     local expected=$1 actual
     actual=$(awk '$1=="RIGHT" {print $2}' "$active/slots.txt")
-    if [[ $expected == com.gt8d.launcher ]]; then
+    if [[ $expected == com.gt8d.launcher || $expected == com.gt8d.launcher.panel ]]; then
         [[ $actual == com.gt8d.launcher/.ui.panel.PanelActivity || $actual == com.gt8d.launcher/com.gt8d.launcher.ui.panel.PanelActivity ]] || reasons+=("右の最前面が PanelActivity でない: ${actual:-枠なし}")
     else
         [[ $actual == "$expected/"* ]] || reasons+=("右の最前面が $expected でない: ${actual:-枠なし}")
     fi
 }
+home_task_ids() {
+    awk '/\* Task\{/ && / A=[0-9]+:com\.gt8d\.launcher / {
+        for (i=1;i<=NF;i++) if ($i ~ /^#[0-9]+$/) {sub(/^#/, "", $i); print $i}
+    }' "$1"
+}
 judge() {
-    local name=$1 right
+    local name=$1 right id
     parse_slots "$active/activities.txt" > "$active/slots.txt"
     case "$name" in
+        link_appPanelFront)
+            expect_log '\[Link\] front=AppPanel'
+            expect_log 'route=PanelTaskBrowser'
+            right_is com.gt8d.launcher
+            # 消去しなかったイベントログから、準備時点までの行を出現回数ごとに除く。
+            awk 'FILENAME==ARGV[1] {seen[$0]++; next} seen[$0]>0 {seen[$0]--; next} /wm_/ {print}' \
+                "$active/events-before.txt" "$active/events-full.txt" > "$active/events-new.txt"
+            if grep -Eq 'wm_create_activity.*com\.gt8d\.launcher/([^], ]*\.)?(PanelActivity|FullscreenBrowserActivity)' "$active/events-new.txt"; then
+                reasons+=('wm_create_activity に PanelActivity または FullscreenBrowserActivity がある')
+            fi
+            home_task_ids "$active/activities.txt" > "$active/home-tasks-after.txt"
+            while IFS= read -r id; do
+                if ! grep -Fxq "$id" "$active/home-tasks-before.txt"; then
+                    reasons+=("com.gt8d.launcher affinity のタスクが増えた: $id")
+                fi
+            done < "$active/home-tasks-after.txt"
+            ;;
         link_fromYlHome)
             expect_log '\[Link\] front=Home'
             browser_created || reasons+=('wm_create_activity に FullscreenBrowserActivity がない')
@@ -163,7 +198,7 @@ judge() {
             right=$(sed -n 's/.*openSplit left=[^ ]* right=\([^ ]*\).*/\1/p' "$active/logcat.txt" | tail -n 1)
             if [[ $right =~ ^[a-zA-Z0-9_.]+$ ]]; then
                 right_is "$right"
-                [[ $right != com.gt8d.launcher ]] || no_safety
+                [[ $right != com.gt8d.launcher && $right != com.gt8d.launcher.panel ]] || no_safety
             else reasons+=('openSplit の右パッケージを取得できない'); fi
             ;;
         *)
@@ -179,6 +214,12 @@ prepare_and_run() {
     local name=$1
     case "$name" in
         link_cold_noTasks) reset cold || return 1 ;;
+        link_appPanelFront)
+            adb shell dumpsys activity activities > "$active/activities-before.txt" || return 1
+            home_task_ids "$active/activities-before.txt" > "$active/home-tasks-before.txt"
+            adb logcat -b events -d -v time > "$active/events-before.txt" || return 1
+            adb logcat -c || return 1
+            ;;
         link_warm_noTasks)
             reset || return 1
             adb shell am start -n com.gt8d.launcher/.link.FullscreenBrowserActivity --es url about:blank || return 1
@@ -195,10 +236,15 @@ prepare_and_run() {
             adb shell input keyevent KEYCODE_HOME || return 1
             adb logcat -c && adb logcat -b events -c || return 1 ;;
         link_fromYlHome) reset && home_activity || return 1 ;;
-        set_strip_coldPanel) reset cold && home_activity && chatgpt || return 1 ;;
+        set_strip_coldPanel)
+            reset cold || return 1
+            adb shell run-as com.gt8d.launcher sh -c 'echo 0 > files/last_set_index.txt' || return 1
+            home_activity && chatgpt || return 1
+            ;;
     esac
     case "$name" in
         link_fromYlHome) link com.google.android.gm && sleep 6 ;;
+        link_appPanelFront) link com.openai.chatgpt && sleep 6 ;;
         set_strip_coldPanel) adb shell input swipe 20 540 500 540 300 && sleep 10 ;;
         *) chatgpt && link com.openai.chatgpt && sleep 10 ;;
     esac
@@ -216,6 +262,7 @@ run() {
         failed=1
     else
         case "$name" in
+            link_appPanelFront) row "$name$suffix" PASS 'front=AppPanel、route=PanelTaskBrowser、右最前面 PanelActivity、Activity 生成なし、ホーム affinity のタスク増加なし' ;;
             link_fromYlHome) row "$name$suffix" PASS 'front=Home、ブラウザ生成あり、分割枠なし' ;;
             set_strip_coldPanel) row "$name$suffix" PASS 'waitBoth ready、openSplit の右パッケージと右最前面が一致（YLuncher なら PanelActivity、Safety なし）' ;;
             *) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt)、waitBoth ready、Safety なし、右最前面 PanelActivity、ブラウザ生成なし' ;;
@@ -236,13 +283,14 @@ mkdir -p "$out/initial" || exit 1
 capture "$out/initial" || { row setup FAIL '開始時の証跡保存に失敗'; exit 1; }
 for name in "${names[@]}"; do
     [[ -z $only || $only == "$name" ]] || continue
-    if [[ $name == link_panelTaskPresent && -n $only ]]; then run link_cold_noTasks '@prerequisite'; fi
+    if [[ ( $name == link_panelTaskPresent || $name == link_appPanelFront ) && -n $only ]]; then run link_cold_noTasks '@prerequisite'; fi
     run "$name" ''
 done
 if ((with_home)); then
     switch_home com.gt8d.launcher || { row setup FAIL 'YLuncher ホームへの切り替えに失敗'; exit 1; }
-    for name in link_cold_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel; do
+    for name in link_cold_noTasks link_appPanelFront link_homeTaskPresent link_fromYlHome set_strip_coldPanel; do
         [[ -z $only || $only == "$name" ]] || continue
+        if [[ $name == link_appPanelFront && -n $only ]]; then run link_cold_noTasks '@prerequisite@ylhome'; fi
         run "$name" '@ylhome'
     done
 fi
