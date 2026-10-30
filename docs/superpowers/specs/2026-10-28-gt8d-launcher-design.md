@@ -215,7 +215,7 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 | SplitModeSelector | 方式を選ぶ：E が健全なら E。E が使えず D の準備が揃っていれば D。どちらもなければ「左だけ全画面」。失敗回数を数える（§7.1） | — |
 | ForegroundWatcher | 指定パッケージの前面化を待つ（幕を外す合図、片側欠けの検知） | `UsageStatsManager`（`ACTIVITY_RESUMED`） |
 | TransitionCurtain | 切り替えの幕（配置図、進行線、フェード、4 秒の安全タイマー） | `EdgeStripService` のオーバーレイ |
-| HomeActivity | 既定のホーム（左アイコン一覧＋右パネル）。起動画面（§4.8） | `category.HOME` |
+| HomeActivity | 既定のホーム（左アイコン一覧＋右パネル）。起動画面（§4.8）。**専用の `taskAffinity`（`com.gt8d.launcher.home`）を持ち、パネルのタスクと混ざらない**（2026-10-31 追加：同じ所属だと、E が右に「自作パッケージ」を開くとき既存のホームのタスクが前に出て、パネルの代わりにホームが分割に入っていたため） | `category.HOME` |
 | PanelActivity | **自作アプリのランチャー用の入口**（MAIN/LAUNCHER、表示名「GT8D パネル」）。分割の右側。**分割の外（`isInMultiWindowMode == false`）にいるときの転送**：起動直後には判定しない。`SetRunner` の「分割を開いている最中」の印（同じプロセス内の共有状態、開始時刻つき）があるあいだは転送しない。印が消えた（完了または 4 秒の安全タイマー）あとも分割の外なら HomeActivity へ転送して閉じる。印が無いときに分割の外で開かれたら、1.5 秒待って分割に入らなければ転送する（冷えた起動では E がパネルをいったん全画面で起動するため。§5.3） | resizeable、`onMultiWindowModeChanged` |
 | PanelContent | パネルの Composable。**右がパネルのときの最小幅 516dp でも崩れない**。車接続時の解像度でも崩れない | Compose |
 | MediaWatcher | 再生セッションの監視と操作 | NotificationListenerService、MediaSessionManager |
