@@ -1,0 +1,2 @@
+create scripts/device-scenarios.sh
+command bash -n scripts/device-scenarios.sh
