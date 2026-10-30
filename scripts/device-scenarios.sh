@@ -36,6 +36,7 @@ row() {
 capture() {
     local dir=$1 rc=0
     adb logcat -d -v time GT8D:D '*:S' > "$dir/logcat.txt" || rc=1
+    adb logcat -d -v time > "$dir/logcat-full.txt" || rc=1
     adb logcat -b events -d -v time > "$dir/events-full.txt" || rc=1
     awk '/wm_/ {print}' "$dir/events-full.txt" > "$dir/events.txt"
     adb shell dumpsys activity activities > "$dir/activities.txt" || rc=1
@@ -238,7 +239,7 @@ prepare_and_run() {
         link_fromYlHome) reset && home_activity || return 1 ;;
         set_strip_coldPanel)
             reset cold || return 1
-            adb shell run-as com.gt8d.launcher sh -c 'echo 0 > files/last_set_index.txt' || return 1
+            adb shell "run-as com.gt8d.launcher sh -c 'mkdir -p /data/data/com.gt8d.launcher/files && echo 0 > /data/data/com.gt8d.launcher/files/last_set_index.txt'" || return 1
             home_activity && chatgpt || return 1
             ;;
     esac
