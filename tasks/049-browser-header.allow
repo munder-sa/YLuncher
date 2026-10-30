@@ -1,0 +1,6 @@
+write app/src/main/java/com/gt8d/launcher/link/BrowserPane.kt
+create app/src/main/java/com/gt8d/launcher/link/SiteLabel.kt
+create app/src/test/java/com/gt8d/launcher/link/SiteLabelTest.kt
+write app/src/test/java/com/gt8d/launcher/link/BrowserPaneTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.link.*
+command /home/munde/tools/gradle-run.sh assembleDebug

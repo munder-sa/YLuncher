@@ -344,7 +344,7 @@ enum class LinkMode { InAppSplit, Chrome }
 - 右端バーのよく使うアプリ：NewPipe、Chrome、YouTube、Apple Music
 - 停止中表示アプリ：Apple Music
 - リンク：内蔵ブラウザで分割、Chromeドメイン＝`accounts.google.com`
-- 操作：帯幅 8px、光る ON、長押し 1000ms
+- 操作：帯幅 48px（約 32dp。2026-10-31 変更：8px では狭すぎて操作しにくいため。選択肢は 24・48・72・96px）、光る ON、長押し 1000ms
 - 起動時：車との接続を待たない（実験⑩⑪で見直す）
 - パッケージ名（GT8D の `pm list packages` で確定済み）：Video=`com.zdj.videoplayer`、VLC=`org.videolan.vlc`、U-NEXT=`jp.unext.mediaplayer`、Prime Video=`com.amazon.avod.thirdpartyclient`、TVer=`jp.hamitv.hamiand1`（端末の APK でラベル「TVer」を確認）、ABEMA=`tv.abema`、Apple Music=`com.apple.android.music`、NewPipe=`org.schabi.newpipe`、YouTube=`com.google.android.youtube`、Chrome=`com.android.chrome`、Googleマップ=`com.google.android.apps.maps`
 

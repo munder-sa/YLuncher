@@ -1,0 +1,6 @@
+write app/src/main/java/com/gt8d/launcher/config/Model.kt
+write app/src/main/java/com/gt8d/launcher/settings/DailySettings.kt
+write app/src/test/java/com/gt8d/launcher/config/DefaultsTest.kt
+write app/src/test/java/com/gt8d/launcher/settings/DailyScreensTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.config.* --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.edge.*
+command /home/munde/tools/gradle-run.sh assembleDebug
