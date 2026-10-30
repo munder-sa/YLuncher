@@ -1,0 +1,12 @@
+create app/src/main/java/com/gt8d/launcher/link/BrowserPane.kt
+create app/src/test/java/com/gt8d/launcher/link/BrowserPaneTest.kt
+write app/src/main/java/com/gt8d/launcher/link/FullscreenBrowserActivity.kt
+write app/src/main/java/com/gt8d/launcher/link/BrowserActivity.kt
+write app/src/main/java/com/gt8d/launcher/link/LinkEntryActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/AndroidManifest.xml
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/NoActionBarTest.kt
+write app/src/test/java/com/gt8d/launcher/link/LinkEntryActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.link.BrowserPaneTest --tests com.gt8d.launcher.ui.panel.PanelActivityTest --tests com.gt8d.launcher.ui.NoActionBarTest --tests com.gt8d.launcher.link.LinkEntryActivityTest
+command /home/munde/tools/gradle-run.sh assembleDebug

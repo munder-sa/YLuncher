@@ -153,7 +153,7 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 
 ### 4.7 内蔵ブラウザ（URL 受け口）
 - 既定のブラウザ（RoleManager の ROLE_BROWSER）として http/https の VIEW を受ける
-- E にはパッケージ名しか渡せないため、**分割の右側の自作アプリは「パネルのタスク」1つにまとめ、分割の右に出すブラウザはその上に重ねる**（ブラウザを閉じるとパネルに戻る）
+- E にはパッケージ名しか渡せないため、**分割の右側の自作アプリは「パネルのタスク」1つにまとめ、分割の右に出すブラウザは PanelActivity の画面の中に表示する**（別の Activity にしない。「閉じる」や戻りきった「戻る」でパネルの表示に戻る）。2026-10-30 変更：別の Activity を重ねる方式では、冷えた起動で E の遷移中に開いたブラウザが分割から外れ、全画面になったため
 - **全画面で開くブラウザは、パネルのタスクに重ねず別のタスクで開く**（全画面用の別名の Activity、別の `taskAffinity`）。「戻る」で閉じると、下にあるホームや元のアプリにそのまま戻る（パネルが分割の外で出てくる経路をなくす）
 - **前面の判定方法**：手がかりは ①自作の HomeActivity・PanelActivity の再開状態と `isInMultiWindowMode`、②`SetRunner` が最後に開いたセットの記録（左右のパッケージ）、③`ForegroundWatcher` の直近の前面化イベント、④リンクを送ってきたアプリ（`BrowserActivity` の `referrer`）。判定の順：
   1. ホームが再開中 → 「ホーム」
@@ -164,8 +164,8 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 - 開き方（設定で選択）：
   - 既定：内蔵ブラウザで分割
     - 前面がホームのとき：内蔵ブラウザを全画面で開く
-    - 前面が全画面アプリ X のとき：E で「X ｜ 自作」を開き、パネルのタスクの上にブラウザを重ねる（右にブラウザ）
-    - 前面が「アプリ ｜ パネル」の分割のとき：パネルのタスクの上にブラウザを重ねる（右だけ入れ替わる）
+    - 前面が全画面アプリ X のとき：E で「X ｜ 自作」を開き、パネルの画面の中にブラウザを表示する（右にブラウザ）
+    - 前面が「アプリ ｜ パネル」の分割のとき：パネルの画面の中にブラウザを表示する（右だけ入れ替わる）
     - 前面が「アプリ ｜ アプリ」の分割のとき：E で「左のアプリ ｜ 自作」にして、右をブラウザにする
   - Chrome で開く
 - 内蔵ブラウザに「Chromeで開き直す」ボタンを常設
@@ -207,7 +207,7 @@ GT8D純正ランチャー（改造Launcher3）の使い勝手の不満を解消�
 | PanelContent | パネルの Composable。**右がパネルのときの最小幅 516dp でも崩れない**。車接続時の解像度でも崩れない | Compose |
 | MediaWatcher | 再生セッションの監視と操作 | NotificationListenerService、MediaSessionManager |
 | EdgeStripService | 左右の帯を常駐。幕を出す役も兼ねる（帯の窓は幕より上） | フォアグラウンドサービス（specialUse）、`TYPE_APPLICATION_OVERLAY` |
-| BrowserActivity | URL受け口・内蔵ブラウザ。分割の右に出すときはパネルのタスクの上に重ねる（`taskAffinity` をパネルと同じにし `NEW_TASK` を付けない）。全画面のときは別名の Activity（別の `taskAffinity`）で別タスクに開く。`referrer` で送り元を取る | WebView、ROLE_BROWSER |
+| BrowserPane / FullscreenBrowserActivity | 内蔵ブラウザ。表示部分（上のバーと WebView）は Composable の `BrowserPane` にまとめる。分割の右に出すときは PanelActivity の画面の中に `BrowserPane` を表示する。全画面のときは `FullscreenBrowserActivity`（別の `taskAffinity`）で別タスクに開く。URL の受け口は `LinkEntryActivity`（`referrer` で送り元を取る） | WebView、ROLE_BROWSER |
 | LinkRouter | URL の振り分け（§4.7） | — |
 | AppPairService（D 用） | 純正ホームのペアの走査とクリック。**D のときだけ使う**。タッチ探索は使わない（タッチの挙動を変えない）。画面内容の読み取りあり | AccessibilityService |
 | SettingsActivity | 設定画面 §6 | Compose |
