@@ -132,6 +132,26 @@ fun SettingsHost(
                 AppPermissionsScreen()
             } else if (nav.current == SettingsRoute.AppPairPrep) {
                 AppPairPrepScreen()
+            } else if (nav.current in listOf(SettingsRoute.Lists, SettingsRoute.Link, SettingsRoute.Gesture, SettingsRoute.Boot)) {
+                val config by AppGraph.latestConfig.collectAsState()
+                val loaded = config
+                if (loaded == null) {
+                    Text("読み込み中", fontSize = Dims.BodyText)
+                } else {
+                    val update: ((com.gt8d.launcher.config.LauncherConfig) -> com.gt8d.launcher.config.LauncherConfig) -> Unit = { transform ->
+                        settingsScope.launch {
+                            runCatching { AppGraph.config.update(transform) }
+                                .onFailure { DiagLog.d("Settings", "update failed: $it") }
+                        }
+                    }
+                    when (nav.current) {
+                        SettingsRoute.Lists -> ListsScreen(loaded, update, labelFor, launchablePackages)
+                        SettingsRoute.Link -> LinkScreen(loaded, update)
+                        SettingsRoute.Gesture -> GestureScreen(loaded, update)
+                        SettingsRoute.Boot -> BootSettingsScreen(loaded, update)
+                        else -> Unit
+                    }
+                }
             } else {
                 Text("この画面は準備中です", Modifier.padding(16.dp).testTag("settings_placeholder"),
                     fontSize = Dims.BodyText, color = MaterialTheme.colorScheme.onBackground)

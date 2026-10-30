@@ -197,6 +197,15 @@ class PanelActivityTest {
         assertFalse(controller!!.get().settingsShown)
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }
+    @Test fun plus_inSplit_opensListsInPanel() {
+        splitPanel()
+        rule.onNodeWithTag("icon_add").performScrollTo().performClick()
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.onNodeWithTag("lists_home_add").assertExists()
+        assertTrue(controller!!.get().settingsShown)
+        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+    }
+
     private fun splitPanel() {
         controller = Robolectric.buildActivity(PanelActivity::class.java)
         shadowOf(controller!!.get()).setInMultiWindowMode(true)

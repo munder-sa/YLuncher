@@ -48,6 +48,18 @@ class EdgeStripService : Service() {
 
         @Volatile
         var gestureConfig: GestureConfig = GestureConfig()
+
+        @Volatile private var running: EdgeStripService? = null
+
+        fun applyGesture(cfg: GestureConfig) {
+            val widthChanged = gestureConfig.stripWidthPx != cfg.stripWidthPx
+            gestureConfig = cfg
+            if (widthChanged) running?.let { service ->
+                service.handler.post {
+                    if (running === service) service.readdStrips()
+                }
+            }
+        }
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -70,6 +82,7 @@ class EdgeStripService : Service() {
             stopSelf()
             return
         }
+        running = this
         startForegroundNotification()
 
         val facade = windowManagerFactory()
@@ -103,6 +116,7 @@ class EdgeStripService : Service() {
     }
 
     override fun onDestroy() {
+        if (running === this) running = null
         releaseOverlays()
         super.onDestroy()
     }

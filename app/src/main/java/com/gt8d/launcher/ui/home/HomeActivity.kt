@@ -135,6 +135,11 @@ class HomeActivity : ComponentActivity() {
                                 onNewSet = {
                                     startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
                                 },
+                                onEditLists = {
+                                    if (AppGraph.runner.opening.value != null) {
+                                        DiagLog.d("Home", "settings ignored while opening")
+                                    } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_route", "lists"))
+                                },
                                 onOpenSettings = {
                                     if (AppGraph.runner.opening.value != null) {
                                         DiagLog.d("Home", "settings ignored while opening")

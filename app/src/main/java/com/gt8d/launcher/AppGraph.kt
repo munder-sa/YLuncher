@@ -172,7 +172,7 @@ object AppGraph {
         try {
             source().collect { cfg ->
                 _latestConfig.value = cfg
-                EdgeStripService.gestureConfig = cfg.gesture
+                EdgeStripService.applyGesture(cfg.gesture)
             }
         } catch (e: CancellationException) {
             throw e

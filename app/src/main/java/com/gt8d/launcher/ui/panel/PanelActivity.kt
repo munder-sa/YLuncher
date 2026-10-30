@@ -60,6 +60,7 @@ class PanelActivity : ComponentActivity() {
         safetyMode = SafetyGuard.isFallbackActive(this)
         settingsOpen = savedInstanceState?.getBoolean("settings_open") ?: false
         settingsInitialRoute = if (savedInstanceState?.getBoolean("settings_new_set") == true) SettingsRoute.SetEdit(null, true) else null
+        if (savedInstanceState?.getString("settings_route") == "lists") settingsInitialRoute = SettingsRoute.Lists
         browserUrl = savedInstanceState?.getString("browser_url")
         inSplitState = isInMultiWindowMode
         onBackPressedDispatcher.addCallback(this) { DiagLog.d("Panel", "back ignored") }
@@ -110,6 +111,14 @@ class PanelActivity : ComponentActivity() {
                                 settingsInitialRoute = SettingsRoute.SetEdit(null, true)
                                 settingsOpen = true
                             } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
+                        },
+                        onEditLists = {
+                            if (AppGraph.runner.opening.value != null) {
+                                DiagLog.d("Panel", "settings ignored while opening")
+                            } else if (isInMultiWindowMode) {
+                                settingsInitialRoute = SettingsRoute.Lists
+                                settingsOpen = true
+                            } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_route", "lists"))
                         },
                         onOpenSettings = {
                             if (AppGraph.runner.opening.value != null) {
@@ -185,6 +194,7 @@ class PanelActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("settings_open", settingsOpen)
         outState.putBoolean("settings_new_set", (settingsInitialRoute as? SettingsRoute.SetEdit)?.fromSplitButton == true)
+        if (settingsInitialRoute == SettingsRoute.Lists) outState.putString("settings_route", "lists")
         outState.putString("browser_url", browserUrl)
         super.onSaveInstanceState(outState)
     }

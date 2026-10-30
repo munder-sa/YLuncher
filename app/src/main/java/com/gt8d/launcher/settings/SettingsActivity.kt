@@ -18,7 +18,8 @@ class SettingsActivity : ComponentActivity() {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     })
                     finish()
-                }, initialRoute = if (intent.getBooleanExtra("open_new_set", false)) SettingsRoute.SetEdit(null, true) else null,
+                }, initialRoute = if (intent.getBooleanExtra("open_new_set", false)) SettingsRoute.SetEdit(null, true)
+                    else if (intent.getStringExtra("open_route") == "lists") SettingsRoute.Lists else null,
                     onOpenSet = { AppGraph.runner.open(it); finish() })
             }
         }

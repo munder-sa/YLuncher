@@ -31,6 +31,7 @@ fun PanelScreen(
     onLaunchComponent: ((ComponentName) -> Unit)? = null,
     onOpenSettings: () -> Unit = {},
     onNewSet: () -> Unit = {},
+    onEditLists: () -> Unit = {},
     onLaunchApp: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -113,7 +114,7 @@ fun PanelScreen(
         },
         onSeek = { ms -> MediaWatcher.seekTo(ms) },
         onLaunch = onLaunchApp,
-        onAdd = { /* Task 18 で接続 */ },
+        onAdd = onEditLists,
         onHome = { AppGraph.runner.home() },
         onSplit = { if (AppGraph.runner.opening.value == null) onNewSet() },
         onCar = { AppGraph.bridge.switchToCarScreen() },
