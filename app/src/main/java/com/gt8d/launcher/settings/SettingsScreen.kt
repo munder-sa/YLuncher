@@ -128,6 +128,10 @@ fun SettingsHost(
                     onBack = back, onOpenSet = onOpenSet, labelFor = labelFor,
                     onMissing = { nav = SettingsNav(listOf(SettingsRoute.Root, SettingsRoute.Sets)) },
                     launchablePackages = launchablePackages)
+            } else if (nav.current == SettingsRoute.Permissions) {
+                AppPermissionsScreen()
+            } else if (nav.current == SettingsRoute.AppPairPrep) {
+                AppPairPrepScreen()
             } else {
                 Text("この画面は準備中です", Modifier.padding(16.dp).testTag("settings_placeholder"),
                     fontSize = Dims.BodyText, color = MaterialTheme.colorScheme.onBackground)
