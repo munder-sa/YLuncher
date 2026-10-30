@@ -44,7 +44,7 @@ UI の決まり: 文言は日本語、ダーク固定、配色は `Palette`、�
 - `SetRunner` に `val currentIndexFlow: StateFlow<Int>` を足し、`currentIndex` が変わる所(setter)で更新する。カードの緑の枠はこれを `collectAsState` で見る。ほかの `SetRunner` の動きは変えない。
 
 ### 時計+日付(HomeClockHeader)
-- 時計は 047 の `FitClock`(最大 150sp、高さの上限は左の領域の高さの 22%)。大きさは左の領域の幅で決める(日付のために縮めない)。日付は「10月31日(金)」(`Locale.JAPAN`、`M月d日(E)`)、灰色 `Palette.Muted`、32sp、**省略・折り返しをしない**(`softWrap = false`、`maxLines = 1`、`TextOverflow.Clip`。`OneLineText` は省略記号を付けるので使わない)。
+- 時計は 047 の `FitClock`(最大 150sp、高さの上限は左の領域の高さの 22%)。大きさは左の領域の幅で決める(日付のために縮めない)。日付は「10月31日(土)」(`Locale.JAPAN`、`M月d日(E)`)、灰色 `Palette.Muted`、32sp、**省略・折り返しをしない**(`softWrap = false`、`maxLines = 1`、`TextOverflow.Clip`。`OneLineText` は省略記号を付けるので使わない)。
 - 横に並べられる(時計の幅+24dp+日付の幅 ≦ 左の領域の幅。`rememberTextMeasurer` で測る)なら、時計の右に**文字のベースライン揃え**(`Modifier.alignByBaseline()`)で並べる。並べられなければ、日付を時計の下に置く。
 - 時刻と日付は定期的に更新する(日付が変わったら変わる)。テストのため、今の日時を渡せる引数(`now: () -> LocalDateTime`)を持たせる。
 
@@ -87,7 +87,7 @@ UI の決まり: 文言は日本語、ダーク固定、配色は `Palette`、�
   `fewCards_areVerticallyCentered`(高さ 800dp の領域にカード1枚+追加 → 格子の上の余白と下の余白の差が 2dp 以内)、`manyCards_scrollFromTop`(幅 700dp・高さ 500dp の領域にカード 8枚 → 最初のカードの上端が領域の上端、最後のカードに `performScrollTo` で届く)、
   `columns_followWidth`(幅 600dp で1列、700dp で2列)。
 - `HomeMiniPlayerTest`: `paused_showsPlayerWithPlayIcon`、`seek_sendsOnceOnRelease`、`unknownDuration_hidesSeek`、`idle_uninstalled_showsWarning_notClickable`、`height400_keepsTitleAndPlay`(☆あり)、`playing_showsTitleArtistAndControls`、`play_pause_next_prev_fav_callActions`、`noFavorite_hidesFav`、`idle_showsIdleApp_andOpens`、`shortHeight_keepsTitleAndControlsVisible`(高さ 480dp でも `player_title`・`player_play` が見える)、`longTitle_isOneLine`。
-- `HomeClockHeaderTest`: `clockAndDate_sameRow_whenWide`(幅 700dp)、`date_movesBelow_whenNarrow`(幅 330dp)(どちらも日付が1行で、はみ出さない)、`dateFormat_japanese`(2026-10-31 → 「10月31日(金)」)。
+- `HomeClockHeaderTest`: `clockAndDate_sameRow_whenWide`(幅 700dp)、`date_movesBelow_whenNarrow`(幅 330dp)(どちらも日付が1行で、はみ出さない)、`dateFormat_japanese`(2026-10-31 → 「10月31日(土)」)。
 - `SetRunnerTest`: `currentIndexFlow_followsOpenAndHome`。
 - 既存のテストは、上で許した変更以外は変えずに通ること。
 
