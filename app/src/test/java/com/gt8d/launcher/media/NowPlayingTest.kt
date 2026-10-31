@@ -6,6 +6,28 @@ import org.junit.Test
 
 class NowPlayingTest {
 
+    @Test fun pick_pausedFallback_usesNewestAndKeepsFirstOnTie() {
+        val older = snapshot(pkg = "older").copy(paused = true, positionUpdatedAt = 100)
+        val newer = older.copy(pkg = "newer", positionUpdatedAt = 200)
+        assertEquals(older, pickSession(listOf(older), null))
+        assertEquals(newer, pickSession(listOf(older, newer), null))
+        assertEquals(newer, pickSession(listOf(older, newer), "missing"))
+        assertEquals(older, pickSession(listOf(older, newer.copy(positionUpdatedAt = 100)), null))
+    }
+
+    @Test fun pick_pausedFallback_rejectsMissingTitlesAndStopped() {
+        for (title in listOf(null, "", "   ")) {
+            assertNull(pickSession(listOf(snapshot(title = title).copy(paused = true)), null))
+        }
+        val paused = snapshot(pkg = "paused").copy(paused = true, positionUpdatedAt = 100)
+        val stopped = snapshot(pkg = "stopped", positionUpdatedAt = 200)
+        assertNull(pickSession(listOf(stopped), null))
+        assertEquals(paused, pickSession(listOf(stopped, paused), null))
+        assertEquals(stopped, pickSession(listOf(stopped, paused), "stopped"))
+        val playing = snapshot(pkg = "playing", playing = true)
+        assertEquals(playing, pickSession(listOf(stopped, paused, playing), "stopped"))
+    }
+
     private fun snapshot(
         pkg: String = "com.example.music",
         appLabel: String = "Music",

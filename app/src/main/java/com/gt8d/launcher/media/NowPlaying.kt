@@ -14,6 +14,7 @@ data class SessionSnapshot(
     val speed: Float,
     val playing: Boolean,
     val hasFavoriteAction: Boolean,
+    val paused: Boolean = false,
 )
 
 data class NowPlaying(
@@ -74,6 +75,7 @@ fun pickSession(sessions: List<SessionSnapshot>, lastActivePkg: String?): Sessio
     if (playingSessions.isNotEmpty()) {
         return playingSessions.firstOrNull { it.pkg == lastActivePkg } ?: playingSessions.first()
     }
-    if (lastActivePkg == null) return null
-    return sessions.firstOrNull { it.pkg == lastActivePkg }
+    sessions.firstOrNull { it.pkg == lastActivePkg }?.let { return it }
+    return sessions.filter { it.paused && !it.title.isNullOrBlank() }
+        .maxByOrNull { it.positionUpdatedAt }
 }
