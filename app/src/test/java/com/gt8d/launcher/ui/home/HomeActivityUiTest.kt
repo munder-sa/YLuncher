@@ -191,7 +191,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { install() }
         broadcast(Intent.ACTION_PACKAGE_ADDED)
         rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("Home App | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("1  Home App | パネル", useUnmergedTree = true).assertExists()
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
         assertOpen()
@@ -204,7 +204,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { shadowOf(app.packageManager).removePackage(pkg) }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
         rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("$pkg | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("1  $pkg | パネル", useUnmergedTree = true).assertExists()
         assertOpen()
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
@@ -217,7 +217,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { install("Changed Home") }
         broadcast(Intent.ACTION_PACKAGE_CHANGED)
         rule.onNodeWithContentDescription("Changed Home", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("Changed Home | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("1  Changed Home | パネル", useUnmergedTree = true).assertExists()
         assertSame(config, flow.value)
         assertEquals(listOf(pkg), flow.value!!.homeApps)
         assertSame(media, MediaWatcher.nowPlaying.value)
@@ -230,7 +230,7 @@ class HomeActivityUiTest {
         rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
         rule.runOnIdle { controller!!.pause(); install(); controller!!.resume() }
         rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("Home App | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("1  Home App | パネル", useUnmergedTree = true).assertExists()
         assertSame(activity, controller!!.get())
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)

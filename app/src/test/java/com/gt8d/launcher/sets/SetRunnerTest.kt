@@ -193,8 +193,18 @@ class SetRunnerTest {
         val e = leftPanelEnv()
         e.runner.open(1)
         val target = e.curtainView.shownTargets.single()
+        assertEquals("1  パネル | y", target.setName)
         assertEquals(com.gt8d.launcher.curtain.SlotPreview.Panel, target.left)
         assertEquals(com.gt8d.launcher.curtain.SlotPreview.App("y", "y"), target.right)
+    }
+
+    @Test fun curtainAndBootTarget_useNumberedSetLabel() {
+        val e = TestEnv()
+        assertEquals("1  youtube | パネル", e.runner.targetFor(1).setName)
+        assertEquals("2  youtube | applemusic", e.runner.targetFor(2).setName)
+        assertEquals("ホーム", e.runner.targetFor(0).setName)
+        e.runner.open(1)
+        assertEquals("1  youtube | パネル", e.curtainView.shownTargets.single().setName)
     }
 
     @Test fun panelLaunched_updatesPartner_leftAndRight() {

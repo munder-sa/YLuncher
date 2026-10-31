@@ -10,6 +10,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import com.gt8d.launcher.config.*
 import com.gt8d.launcher.ui.panel.AppInfo
 import com.gt8d.launcher.ui.theme.LauncherTheme
@@ -44,8 +45,8 @@ class HomeSetCardsTest {
     @After fun cleanup() { if (::controller.isInitialized) controller.pause().stop().destroy() }
     @Test fun cards_showNamesAndPanelLabel() {
         host(count = 2)
-        rule.onNodeWithText("左アプリ | パネル").assertExists()
-        rule.onNodeWithText("左アプリ | 右アプリ").assertExists()
+        rule.onNodeWithText("1  左アプリ | パネル").assertExists()
+        rule.onNodeWithText("2  左アプリ | 右アプリ").assertExists()
         rule.onAllNodesWithContentDescription("左アプリ", useUnmergedTree = true).assertCountEquals(2)
     }
     @Test fun panel_shows56dpIcon_withoutStandaloneText() {
@@ -61,7 +62,7 @@ class HomeSetCardsTest {
             .assertWidthIsEqualTo(56.dp).assertHeightIsEqualTo(56.dp)
             .fetchSemanticsNode().boundsInRoot
         assertTrue(panel.center.x < card.center.x)
-        rule.onNodeWithText("パネル | 右アプリ").assertExists()
+        rule.onNodeWithText("1  パネル | 右アプリ").assertExists()
     }
     @Test fun panelIcon_mirroredOnlyOnLeft() {
         host(screenSets = listOf(
@@ -84,7 +85,7 @@ class HomeSetCardsTest {
     @Test fun shortName_isCenteredInCard() {
         host()
         val card = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
-        val name = rule.onNodeWithText("左アプリ | パネル", useUnmergedTree = true)
+        val name = rule.onNodeWithText("1  左アプリ | パネル", useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot
         assertEquals(card.center.x, name.center.x, with(rule.density) { 1.dp.toPx() })
     }
@@ -92,7 +93,7 @@ class HomeSetCardsTest {
         val label = "長".repeat(40)
         host(leftLabel = label)
         val card = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
-        val name = rule.onNodeWithText("$label | パネル", useUnmergedTree = true)
+        val name = rule.onNodeWithText("1  $label | パネル", useUnmergedTree = true)
         val layouts = mutableListOf<TextLayoutResult>()
         name.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(1, layouts.size)
@@ -132,7 +133,7 @@ class HomeSetCardsTest {
         assertEquals(first.top - area.top, area.bottom - last.bottom, 2f * area.height / 800f)
     }
     @Test fun threeRows_fitWithoutClipping() {
-        host(height = 480, count = 5)
+        host(height = 560, count = 5)
         val area = rule.onNodeWithTag("area").fetchSemanticsNode().boundsInRoot
         val first = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
         val last = rule.onNodeWithTag("home_set_add").fetchSemanticsNode().boundsInRoot
@@ -144,6 +145,31 @@ class HomeSetCardsTest {
         val area = rule.onNodeWithTag("area").fetchSemanticsNode().boundsInRoot
         assertEquals(area.top, rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot.top, 0f)
         rule.onNodeWithTag("home_set_s8").performScrollTo().assertIsDisplayed()
+    }
+    @Test fun addRow_is72dpFullWidthBelowLastCard() {
+        host(count = 4)
+        val add = rule.onNodeWithTag("home_set_add")
+            .assertHeightIsEqualTo(72.dp).assertWidthIsEqualTo(700.dp)
+            .fetchSemanticsNode().boundsInRoot
+        val last = rule.onNodeWithTag("home_set_s4").fetchSemanticsNode().boundsInRoot
+        assertEquals(with(rule.density) { 24.dp.toPx() }, add.top - last.bottom, 1f)
+    }
+    @Test fun fourSets_cardHeightExcludesAddRow() {
+        host(height = 420, count = 4)
+        for (index in 1..4) {
+            val bounds = rule.onNodeWithTag("home_set_s$index").getBoundsInRoot()
+            assertEquals(150f, bounds.height.value, 1f)
+        }
+    }
+    @Test fun noSets_showsOnlyAddRow() {
+        host(count = 0)
+        rule.onAllNodes(hasTestTag("home_set_add")).assertCountEquals(1)
+        rule.onNodeWithTag("home_set_s1").assertDoesNotExist()
+        val add = rule.onNodeWithTag("home_set_add")
+            .assertHeightIsEqualTo(72.dp).assertWidthIsEqualTo(700.dp)
+            .fetchSemanticsNode().boundsInRoot
+        val area = rule.onNodeWithTag("area").fetchSemanticsNode().boundsInRoot
+        assertEquals(area.center.y, add.center.y, 1f)
     }
     @Test fun columns_followWidth() {
         host(width = 600, count = 2)

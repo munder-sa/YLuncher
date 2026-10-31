@@ -19,6 +19,10 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.ScreenSet
@@ -26,6 +30,7 @@ import com.gt8d.launcher.config.Side
 import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.slotAt
 import com.gt8d.launcher.ui.layout.OneLineText
+import com.gt8d.launcher.ui.layout.OneLineKey
 import com.gt8d.launcher.ui.layout.PanelLayout
 import com.gt8d.launcher.ui.panel.AppInfo
 import com.gt8d.launcher.ui.theme.Dims
@@ -45,32 +50,22 @@ fun HomeSetCards(
     BoxWithConstraints(modifier.testTag("home_sets")) {
         val columns = PanelLayout.homeSetColumns(maxWidth.value)
         val areaHeight = maxHeight
-        val rows = (sets.size + 1 + columns - 1) / columns
-        val cardHeight = ((areaHeight - 24.dp * (rows - 1)) / rows).coerceIn(136.dp, 160.dp)
+        val rows = (sets.size + columns - 1) / columns
+        val cardHeight = if (rows == 0) null else
+            ((areaHeight - 72.dp - 24.dp - 24.dp * (rows - 1)) / rows).coerceIn(136.dp, 160.dp)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Column(Modifier.fillMaxWidth().heightIn(min = areaHeight),
                 verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically)) {
-                for (row in (0..sets.size).toList().chunked(columns)) {
+                for (row in sets.indices.toList().chunked(columns)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                         for (index in row) {
                             val shape = RoundedCornerShape(28.dp)
-                            if (index == sets.size) {
-                                Box(Modifier.weight(1f).height(cardHeight).clip(shape).drawBehind {
-                                    val stroke = 2.dp.toPx()
-                                    drawRoundRect(Palette.PanelAccent,
-                                        topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
-                                        size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
-                                        cornerRadius = CornerRadius(28.dp.toPx()),
-                                        style = Stroke(stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))))
-                                }.clickable(onClick = onAdd).testTag("home_set_add"), contentAlignment = Alignment.Center) {
-                                    OneLineText("＋ セットを追加", color = Palette.PanelAccent)
-                                }
-                            } else {
+                            run {
                                 val set = sets[index]
                                 val left = (set.slotAt(Side.Left) as? Slot.App)?.let { appInfo(it.pkg) }
                                 val right = (set.slotAt(Side.Right) as? Slot.App)?.let { appInfo(it.pkg) }
                                 val highlight = currentIndex == index + 1
-                                Column(Modifier.weight(1f).height(cardHeight).clip(shape).background(Palette.Background1)
+                                Column(Modifier.weight(1f).height(requireNotNull(cardHeight)).clip(shape).background(Palette.Background1)
                                     .then(if (highlight) Modifier.border(4.dp, Palette.PanelAccent, shape) else Modifier)
                                     .clickable { onOpen(index + 1) }
                                     .semantics { selected = highlight; this[HomeSetHighlight] = highlight }
@@ -82,13 +77,28 @@ fun HomeSetCards(
                                         SetBlock(right, Modifier.weight(ratio[1]).fillMaxHeight().testTag("home_set_${set.id}_right"), Side.Right)
                                     }
                                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                        OneLineText("${left?.label ?: "パネル"} | ${right?.label ?: "パネル"}")
+                                        Text(buildAnnotatedString {
+                                            withStyle(SpanStyle(color = Palette.Muted)) { append("${index + 1}  ") }
+                                            append(setLabel(set) { appInfo(it).label })
+                                        }, modifier = Modifier.semantics { this[OneLineKey] = true },
+                                            color = Color.White, fontSize = Dims.BodyText,
+                                            maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
                             }
                         }
                         if (row.size < columns) Spacer(Modifier.weight(1f))
                     }
+                }
+                Box(Modifier.fillMaxWidth().height(72.dp).clip(RoundedCornerShape(28.dp)).drawBehind {
+                    val stroke = 2.dp.toPx()
+                    drawRoundRect(Color.White,
+                        topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
+                        size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
+                        cornerRadius = CornerRadius(28.dp.toPx()),
+                        style = Stroke(stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))))
+                }.clickable(onClick = onAdd).testTag("home_set_add"), contentAlignment = Alignment.Center) {
+                    OneLineText("＋ セットを追加", color = Color.White, fontSize = Dims.BodyText)
                 }
             }
         }
