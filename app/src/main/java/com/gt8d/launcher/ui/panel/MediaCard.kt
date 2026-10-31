@@ -221,6 +221,6 @@ private fun MediaControl(action: MediaAction, onAction: (MediaAction) -> Unit) {
         MediaAction.Favorite -> Triple(Icons.Default.StarBorder, "お気に入り", "btn_favorite")
     }
     IconButton(onClick = { onAction(action) }, modifier = Modifier.size(72.dp).testTag(tag)) {
-        Icon(icon, description, tint = Palette.Accent, modifier = Modifier.size(36.dp))
+        Icon(icon, description, tint = Palette.PanelAccent, modifier = Modifier.size(36.dp))
     }
 }

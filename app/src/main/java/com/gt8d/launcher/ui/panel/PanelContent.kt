@@ -109,7 +109,7 @@ fun PanelContent(
                             ) {
                                 OneLineText(
                                     text = "許可が必要",
-                                    color = Palette.Accent,
+                                    color = Palette.PanelAccent,
                                 )
                             }
                         }

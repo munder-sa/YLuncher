@@ -161,7 +161,7 @@ private fun AddCell(
                 text = "＋",
                 fontSize = Dims.BodyText,
                 fontWeight = FontWeight.Bold,
-                color = Palette.Accent,
+                color = Palette.PanelAccent,
             )
         }
     }

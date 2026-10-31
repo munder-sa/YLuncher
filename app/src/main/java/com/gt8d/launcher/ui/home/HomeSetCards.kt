@@ -43,6 +43,8 @@ fun HomeSetCards(
     BoxWithConstraints(modifier.testTag("home_sets")) {
         val columns = PanelLayout.homeSetColumns(maxWidth.value)
         val areaHeight = maxHeight
+        val rows = (sets.size + 1 + columns - 1) / columns
+        val cardHeight = ((areaHeight - 24.dp * (rows - 1)) / rows).coerceIn(136.dp, 160.dp)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Column(Modifier.fillMaxWidth().heightIn(min = areaHeight),
                 verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically)) {
@@ -51,23 +53,23 @@ fun HomeSetCards(
                         for (index in row) {
                             val shape = RoundedCornerShape(28.dp)
                             if (index == sets.size) {
-                                Box(Modifier.weight(1f).height(160.dp).clip(shape).drawBehind {
+                                Box(Modifier.weight(1f).height(cardHeight).clip(shape).drawBehind {
                                     val stroke = 2.dp.toPx()
-                                    drawRoundRect(Palette.Accent,
+                                    drawRoundRect(Palette.PanelAccent,
                                         topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
                                         size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
                                         cornerRadius = CornerRadius(28.dp.toPx()),
                                         style = Stroke(stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))))
                                 }.clickable(onClick = onAdd).testTag("home_set_add"), contentAlignment = Alignment.Center) {
-                                    OneLineText("＋ セットを追加", color = Palette.Accent)
+                                    OneLineText("＋ セットを追加", color = Palette.PanelAccent)
                                 }
                             } else {
                                 val set = sets[index]
                                 val left = appInfo(set.left.pkg)
                                 val right = (set.right as? Slot.App)?.let { appInfo(it.pkg) }
                                 val highlight = currentIndex == index + 1
-                                Column(Modifier.weight(1f).height(160.dp).clip(shape).background(Palette.Background1)
-                                    .then(if (highlight) Modifier.border(4.dp, Palette.Accent, shape) else Modifier)
+                                Column(Modifier.weight(1f).height(cardHeight).clip(shape).background(Palette.Background1)
+                                    .then(if (highlight) Modifier.border(4.dp, Palette.PanelAccent, shape) else Modifier)
                                     .clickable { onOpen(index + 1) }
                                     .semantics { selected = highlight; this[HomeSetHighlight] = highlight }
                                     .testTag("home_set_${set.id}").padding(16.dp),
@@ -93,10 +95,10 @@ fun HomeSetCards(
 private fun SetBlock(app: AppInfo?, modifier: Modifier) {
     val shape = RoundedCornerShape(12.dp)
     Box(modifier.clip(shape).background(Palette.Background0)
-        .then(if (app == null) Modifier.border(2.dp, Palette.Accent, shape) else Modifier),
+        .then(if (app == null) Modifier.border(2.dp, Palette.PanelAccent, shape) else Modifier),
         contentAlignment = Alignment.Center) {
         if (app == null) {
-            OneLineText("パネル", color = Palette.Accent)
+            OneLineText("パネル", color = Palette.PanelAccent)
         } else {
             val description = app.label + if (app.installed) "" else "(アプリが見つかりません)"
             Box(Modifier.size(56.dp).semantics { contentDescription = description }, contentAlignment = Alignment.Center) {

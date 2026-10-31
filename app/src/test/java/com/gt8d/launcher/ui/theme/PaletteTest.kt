@@ -12,5 +12,6 @@ class PaletteTest {
         assertEquals(Color(0xFF17171D), Palette.Background1)
         assertEquals(Color(0xFF2E2E38), Palette.Panel)
         assertEquals(Color(0xFF8FE63B), Palette.Accent)
+        assertEquals(Color(0xFFFFFFFF), Palette.PanelAccent)
     }
 }

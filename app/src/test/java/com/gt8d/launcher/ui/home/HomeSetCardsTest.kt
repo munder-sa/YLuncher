@@ -71,6 +71,14 @@ class HomeSetCardsTest {
         val last = rule.onNodeWithTag("home_set_add").fetchSemanticsNode().boundsInRoot
         assertEquals(first.top - area.top, area.bottom - last.bottom, 2f * area.height / 800f)
     }
+    @Test fun threeRows_fitWithoutClipping() {
+        host(height = 480, count = 5)
+        val area = rule.onNodeWithTag("area").fetchSemanticsNode().boundsInRoot
+        val first = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
+        val last = rule.onNodeWithTag("home_set_add").fetchSemanticsNode().boundsInRoot
+        assertTrue(first.top >= area.top - 1f)
+        assertTrue(last.bottom <= area.bottom + 1f)
+    }
     @Test fun manyCards_scrollFromTop() {
         host(height = 500, count = 8)
         val area = rule.onNodeWithTag("area").fetchSemanticsNode().boundsInRoot

@@ -19,6 +19,8 @@ object Palette {
     val Background1 = Color(0xFF17171D)
     val Panel = Color(0xFF2E2E38)
     val Accent = Color(0xFF8FE63B)
+    // ホームとパネルの強調色。白
+    val PanelAccent = Color(0xFFFFFFFF)
     val Danger = Color(0xFFFF6B6B)
     val Muted = Color(0xFFB0B0BB)
     val Control = Color(0xFF454550)

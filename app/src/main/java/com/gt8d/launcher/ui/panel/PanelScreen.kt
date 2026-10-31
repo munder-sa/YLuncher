@@ -181,7 +181,7 @@ internal fun HomeWideContent(
                             .fillMaxWidth().heightIn(min = 72.dp).clickable(onClick = actions.onOpenPermissions)
                             .testTag("permission_banner")) {
                             Box(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 12.dp),
-                                contentAlignment = Alignment.Center) { OneLineText("許可が必要", color = Palette.Accent) }
+                                contentAlignment = Alignment.Center) { OneLineText("許可が必要", color = Palette.PanelAccent) }
                         }
                     }
                     HomeClockHeader(clockHeight)
