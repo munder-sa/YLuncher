@@ -39,6 +39,26 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelActivityTest {
+    @Test fun placement_reportedAndClearedOnStop() {
+        controller = Robolectric.buildActivity(PanelActivity::class.java)
+        val activity = controller!!.get()
+        shadowOf(activity).setInMultiWindowMode(true)
+        var bounds = Triple(0, 768, 1920)
+        activity.placementBounds = { bounds }
+        controller!!.create().start().resume().visible()
+        assertEquals(com.gt8d.launcher.split.PanelPlacement.Left, AppGraph.panelPlacement.value)
+        bounds = Triple(1167, 1920, 1920)
+        activity.window.decorView.viewTreeObserver.dispatchOnGlobalLayout()
+        assertEquals(com.gt8d.launcher.split.PanelPlacement.Right, AppGraph.panelPlacement.value)
+        controller!!.pause().stop()
+        assertNull(AppGraph.panelPlacement.value)
+        bounds = Triple(0, 768, 1920)
+        activity.window.decorView.viewTreeObserver.dispatchOnGlobalLayout()
+        assertNull(AppGraph.panelPlacement.value)
+        controller!!.start().resume()
+        assertEquals(com.gt8d.launcher.split.PanelPlacement.Left, AppGraph.panelPlacement.value)
+    }
+
     @Test fun appList_survivesRecreate() {
         splitPanel()
         rule.onNodeWithTag("dock_applist").performScrollTo().performClick()

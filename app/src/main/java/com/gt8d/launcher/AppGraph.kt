@@ -16,6 +16,7 @@ import com.gt8d.launcher.curtain.CurtainTarget
 import com.gt8d.launcher.curtain.CurtainView
 import com.gt8d.launcher.curtain.HideReason
 import com.gt8d.launcher.diag.DiagLog
+import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.foreground.ForegroundWatcher
@@ -50,6 +51,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 object AppGraph {
+    private val _panelPlacement = MutableStateFlow<PanelPlacement?>(null)
+    val panelPlacement: StateFlow<PanelPlacement?> = _panelPlacement.asStateFlow()
+
+    fun reportPanelPlacement(p: PanelPlacement?) {
+        if (_panelPlacement.value == p) return
+        _panelPlacement.value = p
+        DiagLog.d("Panel", "placement=$p")
+    }
+
     @Volatile var homeResumed: Boolean = false
     @Volatile var panelInSplit: Boolean = false
     @Volatile var panelAlive: Boolean = false

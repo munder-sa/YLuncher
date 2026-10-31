@@ -4,12 +4,14 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -26,6 +28,7 @@ import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.split.AndroidActivityLauncher
+import com.gt8d.launcher.split.placementOf
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.theme.LauncherTheme
@@ -33,6 +36,21 @@ import com.gt8d.launcher.ui.layout.launcherBackground
 import com.gt8d.launcher.ui.layout.stripSafePadding
 
 class PanelActivity : ComponentActivity() {
+    private var watchingPlacement = false
+    private val placementListener = ViewTreeObserver.OnGlobalLayoutListener { reportPlacement() }
+    internal var placementBounds: () -> Triple<Int, Int, Int> = {
+        val decor = window.decorView
+        val origin = IntArray(2)
+        decor.getLocationOnScreen(origin)
+        Triple(origin[0], origin[0] + decor.width, windowManager.maximumWindowMetrics.bounds.width())
+    }
+
+    private fun reportPlacement() {
+        if (!watchingPlacement) return
+        val (left, right, screenWidth) = placementBounds()
+        AppGraph.reportPanelPlacement(placementOf(left, right, screenWidth, isInMultiWindowMode))
+    }
+
     private val forwarder by lazy { AppGraph.forwarderFactory() }
     private val activityLauncher by lazy { AndroidActivityLauncher(this) }
     internal var launchApp: (String, Boolean) -> Boolean =
@@ -55,6 +73,7 @@ class PanelActivity : ComponentActivity() {
         inSplitState = isInMultiWindowMode
         onBackPressedDispatcher.addCallback(this) { DiagLog.d("Panel", "back ignored") }
         setContent {
+            val placement by AppGraph.panelPlacement.collectAsState()
             LauncherTheme {
                 if (safetyMode) {
                     SafetyRecoveryScreen(
@@ -83,6 +102,7 @@ class PanelActivity : ComponentActivity() {
                             onOpenSet = { settingsOpen = false; AppGraph.runner.open(it) })
                     } else PanelScreen(
                         inSplit = inSplitState,
+                        placement = placement,
                         onNewSet = {
                             if (isInMultiWindowMode) {
                                 settingsInitialRoute = SettingsRoute.SetEdit(null, true)
@@ -121,8 +141,23 @@ class PanelActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        watchingPlacement = true
+        window.decorView.viewTreeObserver.addOnGlobalLayoutListener(placementListener)
+        reportPlacement()
+    }
+
+    override fun onStop() {
+        watchingPlacement = false
+        window.decorView.viewTreeObserver.removeOnGlobalLayoutListener(placementListener)
+        AppGraph.reportPanelPlacement(null)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
+        reportPlacement()
         AppGraph.runner.ownScreenResumed()
         AppGraph.panelInSplit = isInMultiWindowMode
         AppGraph.panelSplitPausedAtMs = null
@@ -137,6 +172,7 @@ class PanelActivity : ComponentActivity() {
 
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        reportPlacement()
         if (!isInMultiWindowMode) AppGraph.panelSplitPausedAtMs = null
         inSplitState = isInMultiWindowMode
         AppGraph.panelInSplit = isInMultiWindowMode

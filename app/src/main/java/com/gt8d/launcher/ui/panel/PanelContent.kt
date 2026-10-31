@@ -33,6 +33,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.gt8d.launcher.split.PanelPlacement
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +73,7 @@ data class PanelState(
     val sets: List<ScreenSet> = emptyList(),
     val currentSetIndex: Int = 0,
     val setAppInfo: (String) -> AppInfo = { AppInfo(it, it, null, false) },
+    val placement: PanelPlacement? = null,
 )
 
 data class PanelActions(
@@ -99,70 +104,73 @@ fun PanelContent(
             delay(10_000L)
         }
     }
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    CompositionLocalProvider(
+        LocalLayoutDirection provides
+            if (state.placement == PanelPlacement.Left) LayoutDirection.Rtl else LayoutDirection.Ltr,
     ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
+        Row(
+            modifier = Modifier.fillMaxSize().padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val clockHeight = maxHeight * 0.3f
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FitClock(clockText, clockHeight)
-                PanelViewSegment(state, actions)
-                if (state.view == PanelView.Sets) {
-                    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-                        val cardsHeight = (maxHeight - if (state.needsPermission) 80.dp else 0.dp)
-                            .coerceAtLeast(136.dp)
-                        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (state.needsPermission) PermissionBanner(actions.onOpenPermissions)
-                            HomeSetCards(state.sets, state.setAppInfo, state.currentSetIndex,
-                                actions.onOpenSet, actions.onNewSet,
-                                Modifier.fillMaxWidth().height(cardsHeight))
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                    val clockHeight = maxHeight * 0.3f
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FitClock(clockText, clockHeight)
+                        PanelViewSegment(state, actions)
+                        if (state.view == PanelView.Sets) {
+                            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                                val cardsHeight = (maxHeight - if (state.needsPermission) 80.dp else 0.dp)
+                                    .coerceAtLeast(136.dp)
+                                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (state.needsPermission) PermissionBanner(actions.onOpenPermissions)
+                                    HomeSetCards(state.sets, state.setAppInfo, state.currentSetIndex,
+                                        actions.onOpenSet, actions.onNewSet,
+                                        Modifier.fillMaxWidth().height(cardsHeight))
+                                }
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (state.needsPermission) PermissionBanner(actions.onOpenPermissions)
+
+                                MediaCard(
+                                    now = state.now,
+                                    idleApp = state.idleApp,
+                                    positionMs = state.positionMs,
+                                    onAction = actions.onMediaAction,
+                                    onSeek = actions.onSeek,
+                                    onLaunch = actions.onLaunch,
+                                )
+
+                                IconGrid(
+                                    apps = state.panelApps.take(MAX_PANEL_APPS),
+                                    onLaunch = actions.onLaunch,
+                                    onAdd = actions.onAdd,
+                                )
+                            }
                         }
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        if (state.needsPermission) PermissionBanner(actions.onOpenPermissions)
-
-                        MediaCard(
-                            now = state.now,
-                            idleApp = state.idleApp,
-                            positionMs = state.positionMs,
-                            onAction = actions.onMediaAction,
-                            onSeek = actions.onSeek,
-                            onLaunch = actions.onLaunch,
-                        )
-
-                        IconGrid(
-                            apps = state.panelApps.take(MAX_PANEL_APPS),
-                            onLaunch = actions.onLaunch,
-                            onAdd = actions.onAdd,
-                        )
                     }
                 }
             }
-        }
 
-        Dock(
-            status = state.dockStatus,
-            dockApps = state.dockApps,
-            showCar = state.showCar,
-            onHome = actions.onHome,
-            onSplit = actions.onSplit,
-            onCar = actions.onCar,
-            onAppList = actions.onAppList,
-            onAppListLongPress = actions.onAppListLongPress,
-            onLaunch = actions.onLaunch,
-        )
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Dock(
+                    status = state.dockStatus,
+                    dockApps = state.dockApps,
+                    showCar = state.showCar,
+                    onHome = actions.onHome,
+                    onSplit = actions.onSplit,
+                    onCar = actions.onCar,
+                    onAppList = actions.onAppList,
+                    onAppListLongPress = actions.onAppListLongPress,
+                    onLaunch = actions.onLaunch,
+                )
+            }
+        }
     }
 }
 

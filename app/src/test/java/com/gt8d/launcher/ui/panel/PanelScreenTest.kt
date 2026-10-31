@@ -48,6 +48,18 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun home_ignoresPlacement() {
+        AppGraph.reportPanelPlacement(com.gt8d.launcher.split.PanelPlacement.Left)
+        try {
+            rule.setContent {
+                LauncherTheme { PanelScreen(inSplit = false, onLaunchApp = {}) }
+            }
+            val dock = rule.onNodeWithTag("dock").getBoundsInRoot()
+            val content = rule.onNodeWithTag("panel_view_segment").getBoundsInRoot()
+            assertTrue(dock.left >= content.right)
+        } finally { AppGraph.reportPanelPlacement(null) }
+    }
+
     @Test fun panelScreen_viewSegment_savesAndSurvivesActivityRecreation() {
         runBlocking { AppGraph.config.update { Defaults.build(emptySet()) } }
         rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelView == PanelView.Apps }

@@ -38,6 +38,7 @@ import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.media.positionAt
 import com.gt8d.launcher.split.AndroidActivityLauncher
+import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.ui.apps.AppListScreen
 import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
 import kotlinx.coroutines.delay
@@ -57,6 +58,7 @@ fun PanelScreen(
     onEditLists: () -> Unit = {},
     homeWide: Boolean = false,
     homeConfig: LauncherConfig? = null,
+    placement: PanelPlacement? = null,
     onLaunchApp: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -123,6 +125,7 @@ fun PanelScreen(
     val dockApps = config.dockApps.map { catalog.info(it, installedPkgs) }
 
     val state = PanelState(
+        placement = placement,
         now = now,
         idleApp = idleApp,
         positionMs = positionMs,
