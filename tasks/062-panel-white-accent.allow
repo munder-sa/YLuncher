@@ -7,3 +7,4 @@ write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
 write app/src/main/java/com/gt8d/launcher/ui/home/HomeSetCards.kt
 write app/src/test/java/com/gt8d/launcher/ui/theme/PaletteTest.kt
 command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.theme.* --tests com.gt8d.launcher.ui.home.* --tests com.gt8d.launcher.ui.panel.*
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeSetCardsTest.kt
