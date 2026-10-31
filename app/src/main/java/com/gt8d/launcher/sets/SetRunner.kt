@@ -3,6 +3,9 @@ package com.gt8d.launcher.sets
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
+import com.gt8d.launcher.config.Side
+import com.gt8d.launcher.config.panelSide
+import com.gt8d.launcher.config.slotAt
 import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.curtain.CurtainController
@@ -100,6 +103,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var pending: PendingOpen? = null
     private var waitKind: WaitKind = WaitKind.None
     private var panelResumed: Boolean = false
+    private var panelSessionReady = false
     private var ownScreenSeen: Boolean = false
     private var openingForBoot = false
     private var monitoringAvailable: Boolean = true
@@ -146,6 +150,8 @@ class SetRunner(private val d: SetRunnerDeps) {
             d.curtain.update(targetFor(SetNavigator.HOME, cfg))
             return
         }
+        panelSessionReady = false
+        onSetEnded("home")
         currentIndex = SetNavigator.HOME
         d.lastIndex.lastSetIndex = SetNavigator.HOME
         lastOpenedPair = null
@@ -185,6 +191,8 @@ class SetRunner(private val d: SetRunnerDeps) {
             return
         }
         if (index == SetNavigator.HOME) {
+            panelSessionReady = false
+            onSetEnded("boot home")
             currentIndex = SetNavigator.HOME
             d.lastIndex.lastSetIndex = SetNavigator.HOME
             lastOpenedPair = null
@@ -197,6 +205,8 @@ class SetRunner(private val d: SetRunnerDeps) {
 
     fun abortBootToHome() {
         if (_opening.value != null && !openingForBoot) return
+        panelSessionReady = false
+        onSetEnded("abort boot")
         cancelTimers()
         pending = null
         linkFallback = null
@@ -218,6 +228,25 @@ class SetRunner(private val d: SetRunnerDeps) {
     fun panelResumedInSplit() {
         DiagLog.d("SetRunner", "panelResumedInSplit")
         panelResumed = true
+    }
+
+    fun panelLaunched(pkg: String) {
+        if (!panelSessionReady) return
+        val pair = lastOpenedPair ?: return
+        lastOpenedPair = when (d.panelHostPkg) {
+            pair.first -> pair.first to pkg
+            pair.second -> pkg to pair.second
+            else -> return
+        }
+        DiagLog.d("SetRunner", "panelLaunched pkg=$pkg pair=$lastOpenedPair")
+    }
+
+    private fun onSetReady(set: ScreenSet) {
+        DiagLog.d("SetRunner", "session ready id=${set.id}")
+    }
+
+    private fun onSetEnded(reason: String) {
+        DiagLog.d("SetRunner", "session ended reason=$reason")
     }
 
     fun openForLink(left: String, right: String, onReady: () -> Unit, onNotSplit: () -> Unit): Boolean {
@@ -254,6 +283,8 @@ class SetRunner(private val d: SetRunnerDeps) {
             if (useCurtain) {
                 home(cfg)
             } else {
+                panelSessionReady = false
+                onSetEnded("boot home")
                 currentIndex = SetNavigator.HOME
                 d.lastIndex.lastSetIndex = SetNavigator.HOME
                 lastOpenedPair = null
@@ -270,19 +301,19 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun openSet(set: ScreenSet, target: CurtainTarget, useCurtain: Boolean) {
+        panelSessionReady = false
+        onSetEnded("open ${set.id}")
         val forLink = linkFallback != null
+        val panelSide = set.panelSide
         val left = when (val l = set.left) {
             is Slot.App -> l.pkg
-            Slot.Panel -> {
-                d.startHome()
-                return
-            }
+            Slot.Panel -> d.panelHostPkg
         }
-        val isPanelRight = set.right is Slot.Panel
         val right = when (val r = set.right) {
             is Slot.App -> r.pkg
             is Slot.Panel -> d.panelHostPkg
         }
+        val appPkg = if (panelSide == Side.Left) right else left
 
         val startMs = d.clock.nowMs()
         d.watcher.foregroundPkgsSince(startMs)
@@ -300,9 +331,23 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
 
         val installedPkgs = d.installed()
+        if (panelSide == Side.Left) {
+            if (appPkg !in installedPkgs) {
+                DiagLog.d("SetRunner", "right uninstalled: $appPkg")
+                d.startHome()
+                waitSingle(d.ownPkg, startMs, useCurtain)
+                return
+            }
+            if (d.panelHostPkg !in installedPkgs) {
+                DiagLog.d("SetRunner", "panel host missing")
+                d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
+                waitSingle(appPkg, startMs, useCurtain)
+                return
+            }
+        }
         if (left !in installedPkgs) {
             DiagLog.d("SetRunner", "left uninstalled: $left")
-            if (!isPanelRight && (forLink || right in installedPkgs)) {
+            if (panelSide == null && (forLink || right in installedPkgs)) {
                 d.warm.recordAppLaunch(right, d.apps.startApp(right, false))
                 waitSingle(right, startMs, useCurtain)
             } else {
@@ -314,20 +359,20 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
 
         if (!forLink && right !in installedPkgs) {
-            DiagLog.d("SetRunner", if (isPanelRight) "panel host missing" else "right uninstalled: $right")
+            DiagLog.d("SetRunner", if (panelSide != null) "panel host missing" else "right uninstalled: $right")
             d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
             waitSingle(left, startMs, useCurtain)
             notifyLinkNotSplit()
             return
         }
 
-        val leftResizeable = d.apps.isResizeable(left)
-        val rightResizeable = if (isPanelRight) true else d.apps.isResizeable(right)
+        val leftResizeable = panelSide == Side.Left || d.apps.isResizeable(left)
+        val rightResizeable = panelSide == Side.Right || d.apps.isResizeable(right)
         if (!leftResizeable || !rightResizeable) {
             DiagLog.d("SetRunner", "unresizeable left=$leftResizeable right=$rightResizeable")
-            d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
+            d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
             d.messenger.showSplitUnavailable()
-            waitSingle(left, startMs, useCurtain)
+            waitSingle(appPkg, startMs, useCurtain)
             notifyLinkNotSplit()
             return
         }
@@ -341,9 +386,9 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         if (launcher == null) {
             DiagLog.d("SetRunner", "leftOnly mode=$mode")
-            d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
+            d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
             d.messenger.showSplitUnavailable()
-            waitSingle(left, startMs, useCurtain)
+            waitSingle(appPkg, startMs, useCurtain)
             notifyLinkNotSplit()
             return
         }
@@ -353,13 +398,14 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         when (result) {
             is LaunchResult.Failed -> {
-                handleLaunchFailure(result.reason, left, useCurtain)
+                handleLaunchFailure(result.reason, appPkg, useCurtain)
             }
             is LaunchResult.Started -> {
                 waitBoth(
                     left = left,
                     right = right,
-                    isPanelRight = isPanelRight,
+                    panelSide = panelSide,
+                    set = set,
                     ratio = set.ratio,
                     launcher = launcher,
                     startMs = startMs,
@@ -370,6 +416,8 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun handleLaunchFailure(reason: FailReason, left: String, useCurtain: Boolean) {
+        panelSessionReady = false
+        onSetEnded("launch failure")
         waitKind = WaitKind.None
         cancelTimers()
         d.selector.onFailure(reason, countable = true)
@@ -386,7 +434,8 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun waitBoth(
         left: String,
         right: String,
-        isPanelRight: Boolean,
+        panelSide: Side?,
+        set: ScreenSet,
         ratio: SplitRatio,
         launcher: SplitLauncher,
         startMs: Long,
@@ -394,11 +443,13 @@ class SetRunner(private val d: SetRunnerDeps) {
     ) {
         waitKind = WaitKind.Both
         linkWaitBoth = linkReady != null
+        val appPkg = if (panelSide == Side.Left) right else left
 
         fun isBothReady(): Boolean {
             if (!monitoringAvailable) return false
-            val resumed = d.watcher.bothResumed(left, right.takeUnless { isPanelRight } ?: left, startMs)
-            return if (isPanelRight) {
+            val resumed = if (panelSide != null) d.watcher.bothResumed(appPkg, appPkg, startMs)
+                else d.watcher.bothResumed(left, right, startMs)
+            return if (panelSide != null) {
                 panelResumed && resumed
             } else {
                 resumed
@@ -418,6 +469,10 @@ class SetRunner(private val d: SetRunnerDeps) {
                     d.selector.onSuccess()
                     d.warm.markForeground(left)
                     d.warm.markForeground(right)
+                    if (panelSide != null) {
+                        panelSessionReady = true
+                        onSetReady(set)
+                    }
                     if (useCurtain) {
                         d.curtain.ready()
                     } else {
@@ -440,7 +495,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 val seen = d.watcher.foregroundPkgsSince(startMs)
                 if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
                 val progressed = ownScreenSeen || panelResumed ||
-                    left in seen || (!isPanelRight && right in seen) || STOCK_LAUNCHER_PKG in seen
+                    appPkg in seen || (panelSide == null && right in seen) || STOCK_LAUNCHER_PKG in seen
                 if (progressed) {
                     DiagLog.d("SetRunner", "retry skipped: progress left=$left right=$right")
                     return@schedule
@@ -448,7 +503,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 DiagLog.d("SetRunner", "retry at $RETRY_AT_MS left=$left right=$right")
                 val result = launcher.open(left, right, ratio)
                 if (result is LaunchResult.Failed) {
-                    handleLaunchFailure(result.reason, left, useCurtain)
+                    handleLaunchFailure(result.reason, appPkg, useCurtain)
                 }
             }
         }
@@ -458,6 +513,8 @@ class SetRunner(private val d: SetRunnerDeps) {
             val bootTimer = d.scheduler.schedule(BOOT_CLEAR_MS) {
                 if (_opening.value != null) {
                     DiagLog.d("SetRunner", "boot clear at $BOOT_CLEAR_MS")
+                    panelSessionReady = false
+                    onSetEnded("boot timeout")
                     waitKind = WaitKind.None
                     cancelTimers()
                     finishWithoutCurtain()
@@ -468,6 +525,8 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun waitSingle(pkg: String, startMs: Long, useCurtain: Boolean) {
+        panelSessionReady = false
+        onSetEnded("single fallback")
         waitKind = WaitKind.Single
 
         fun schedulePoll() {
@@ -512,6 +571,8 @@ class SetRunner(private val d: SetRunnerDeps) {
         if (!monitoringAvailable) return true
         if (d.watcher.available()) return false
         monitoringAvailable = false
+        panelSessionReady = false
+        onSetEnded("monitoring unavailable")
         waitKind = WaitKind.None
         if (useCurtain) {
             val remainingMs = startMs + expectedDelayMs - d.clock.nowMs()
@@ -530,6 +591,10 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun onCurtainHidden(reason: HideReason) {
+        if (reason != HideReason.Ready) {
+            panelSessionReady = false
+            onSetEnded("curtain $reason")
+        }
         DiagLog.d("SetRunner", "onCurtainHidden reason=$reason waitKind=$waitKind")
         val kind = waitKind
         val fallback = linkFallback
@@ -596,11 +661,11 @@ class SetRunner(private val d: SetRunnerDeps) {
             position = 0,
             count = count,
         )
-        val leftPreview = when (val l = set.left) {
+        val leftPreview = when (val l = set.slotAt(Side.Left)) {
             is Slot.App -> SlotPreview.App(l.pkg, d.labelFor(l.pkg))
             Slot.Panel -> SlotPreview.Panel
         }
-        val rightPreview = when (val r = set.right) {
+        val rightPreview = when (val r = set.slotAt(Side.Right)) {
             is Slot.Panel -> SlotPreview.Panel
             is Slot.App -> SlotPreview.App(r.pkg, d.labelFor(r.pkg))
         }
