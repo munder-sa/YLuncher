@@ -9,8 +9,10 @@ import androidx.lifecycle.lifecycleScope
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LinkConfig
+import com.gt8d.launcher.config.Side
 import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.split.SplitMode
+import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.time.ElapsedClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filterNotNull
@@ -48,6 +50,11 @@ class LinkEntryActivity : ComponentActivity() {
                 lastPair = pair,
                 otherForegroundAfterLastPair = other,
                 referrer = ref,
+                panelSide = when (AppGraph.panelPlacement.value) {
+                    PanelPlacement.Left -> Side.Left
+                    PanelPlacement.Right -> Side.Right
+                    PanelPlacement.Full, null -> null
+                },
             )
             val flow = AppGraph.configForHome
             val config = flow.value
@@ -77,12 +84,12 @@ class LinkEntryActivity : ComponentActivity() {
 
     private fun routeAndOpen(incoming: String, config: LinkConfig, clues: FrontClues) {
         try {
-            val front = LinkRouter.detectFront(clues, packageName)
             val browser = BrowserChooser.choose(config.browserPkg, BrowserChooser.installedBrowsers(packageManager))
             if (browser == null) {
                 DiagLog.d("Link", "no browser")
                 return
             }
+            val front = LinkRouter.detectFront(clues, packageName, browser)
             val route = LinkRouter.route(incoming, config.copy(browserPkg = browser),
                 front, AppGraph.selector.current() == SplitMode.Vendor)
             DiagLog.d("Link", "front=$front route=$route ref=${clues.referrer}")
@@ -91,7 +98,9 @@ class LinkEntryActivity : ComponentActivity() {
             when (route) {
                 LinkRoute.FullscreenBrowser -> sendView()
                 is LinkRoute.SplitWithBrowser -> {
-                    if (!AppGraph.runner.openForLink(route.left, browser, onReady = sendView, onNotSplit = sendView)) {
+                    val left = if (route.browserSide == Side.Left) browser else route.app
+                    val right = if (route.browserSide == Side.Left) route.app else browser
+                    if (!AppGraph.runner.openForLink(left, right, onReady = sendView, onNotSplit = sendView)) {
                         sendView()
                     }
                 }

@@ -21,6 +21,7 @@ import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.sets.SetRunnerDeps
 import com.gt8d.launcher.split.SplitModeState
+import com.gt8d.launcher.split.PanelPlacement
 import java.time.Duration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +47,9 @@ class LinkEntryActivityTest {
     private var savedPanel = false
     private var savedHomeAt: Long? = null
     private var savedPanelAt: Long? = null
+    private var savedPlacement: PanelPlacement? = null
+    private var savedPair: Pair<String, String>? = null
+    private val pairField get() = AppGraph.runner.javaClass.getDeclaredField("lastOpenedPair").apply { isAccessible = true }
     private lateinit var savedDeps: SetRunnerDeps
     private lateinit var savedMode: SplitModeState
     private var openForLinkCalls = 0
@@ -59,6 +63,10 @@ class LinkEntryActivityTest {
         savedPanel = AppGraph.panelInSplit
         savedHomeAt = AppGraph.homePausedAtMs
         savedPanelAt = AppGraph.panelSplitPausedAtMs
+        savedPlacement = AppGraph.panelPlacement.value
+        savedPair = AppGraph.runner.lastOpenedPair
+        AppGraph.reportPanelPlacement(null)
+        pairField.set(AppGraph.runner, null)
         AppGraph.configFlowForHomeTest = flow
         AppGraph.homeResumed = false
         AppGraph.panelInSplit = false
@@ -82,6 +90,8 @@ class LinkEntryActivityTest {
         AppGraph.panelInSplit = savedPanel
         AppGraph.homePausedAtMs = savedHomeAt
         AppGraph.panelSplitPausedAtMs = savedPanelAt
+        AppGraph.reportPanelPlacement(savedPlacement)
+        pairField.set(AppGraph.runner, savedPair)
     }
 
     private fun open(url: String): LinkEntryActivity {
@@ -214,7 +224,7 @@ class LinkEntryActivityTest {
             override fun resumedSince(sinceMs: Long) = events.filter { it.timeMs in sinceMs..scheduler.nowMs() }
         })
         depsField.set(AppGraph.runner, savedDeps.copy(
-            config = { flow.value }, installed = { setOf("com.example.mail") },
+            config = { flow.value }, installed = { setOf("com.example.mail", "y", "com.android.chrome") },
             watcher = watcher, scheduler = scheduler, clock = scheduler, curtain = curtain,
             warm = WarmTracker(app.packageName) { true }, labelFor = { it }, startHome = {},
             vendor = object : SplitLauncher {
@@ -294,6 +304,42 @@ class LinkEntryActivityTest {
         fixture.scheduler.advanceBy(200)
         assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
     }
+    @Test fun leftPanel_opensBrowserLeft() {
+        flow.value = Defaults.build(emptySet())
+        val fixture = splitFixture()
+        pairField.set(AppGraph.runner, "com.gt8d.launcher.panel" to "y")
+        AppGraph.panelInSplit = true
+        AppGraph.reportPanelPlacement(PanelPlacement.Left)
+        val activity = open("https://example.com")
+        assertEquals(listOf("com.android.chrome" to "y"), fixture.calls)
+        assertNull(shadowOf(app).nextStartedActivity)
+        assertTrue(activity.isFinishing)
+        fixture.events.add(ResumeEvent("com.android.chrome", 100))
+        fixture.events.add(ResumeEvent("y", 120))
+        fixture.scheduler.advanceBy(200)
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
+        fixture.scheduler.advanceBy(10000)
+        assertNull(shadowOf(app).nextStartedActivity)
+    }
+
+    @Test fun missingPreferredBrowser_secondLink_keepsChosenBrowserOrder() {
+        flow.value = Defaults.build(emptySet()).let {
+            it.copy(link = it.link.copy(browserPkg = "missing.browser"))
+        }
+        val fixture = splitFixture()
+        pairField.set(AppGraph.runner, "com.android.chrome" to "com.example.mail")
+        val activity = open("https://example.com")
+        assertEquals(listOf("com.android.chrome" to "com.example.mail"), fixture.calls)
+        assertNull(shadowOf(app).nextStartedActivity)
+        assertTrue(activity.isFinishing)
+        fixture.events.add(ResumeEvent("com.android.chrome", 100))
+        fixture.events.add(ResumeEvent("com.example.mail", 120))
+        fixture.scheduler.advanceBy(200)
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
+        fixture.scheduler.advanceBy(10000)
+        assertNull(shadowOf(app).nextStartedActivity)
+    }
+
     @Test fun noBrowser_doesNothing() {
         shadowOf(app.packageManager).removePackage("com.android.chrome")
         flow.value = Defaults.build(emptySet())

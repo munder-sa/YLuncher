@@ -3,10 +3,12 @@ package com.gt8d.launcher.link
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LinkConfig
 import com.gt8d.launcher.config.LinkMode
+import com.gt8d.launcher.config.Side
 
 sealed interface FrontState {
     data object Home : FrontState
-    data class AppPanel(val left: String?) : FrontState
+    data class AppPanel(val app: String?, val panelSide: Side) : FrontState
+    data class AppBrowser(val app: String, val browserSide: Side) : FrontState
     data class AppApp(val left: String, val right: String) : FrontState
     data class Fullscreen(val pkg: String) : FrontState
     data object Unknown : FrontState
@@ -18,11 +20,12 @@ data class FrontClues(
     val lastPair: Pair<String, String>?,
     val otherForegroundAfterLastPair: Boolean,
     val referrer: String?,
+    val panelSide: Side? = null,
 )
 
 sealed interface LinkRoute {
     data object FullscreenBrowser : LinkRoute
-    data class SplitWithBrowser(val left: String) : LinkRoute
+    data class SplitWithBrowser(val app: String, val browserSide: Side) : LinkRoute
 }
 
 object LinkRouter {
@@ -35,10 +38,20 @@ object LinkRouter {
         return pkg.ifEmpty { null }
     }
 
-    fun detectFront(clues: FrontClues, ownPkg: String): FrontState {
+    fun detectFront(clues: FrontClues, ownPkg: String, browserPkg: String): FrontState {
         if (clues.homeResumed) return FrontState.Home
-        if (clues.panelInSplit) return FrontState.AppPanel(clues.lastPair?.first)
         val pair = clues.lastPair
+        if (clues.panelInSplit) {
+            val pairSide = when (OwnPackages.PANEL_HOST) {
+                pair?.first -> Side.Left
+                pair?.second -> Side.Right
+                else -> null
+            }
+            val app = pair?.let {
+                if (it.first == OwnPackages.PANEL_HOST) it.second else it.first
+            }
+            return FrontState.AppPanel(app, clues.panelSide ?: pairSide ?: Side.Right)
+        }
         val ref = clues.referrer?.takeIf { it.isNotEmpty() }
         if (
             pair != null &&
@@ -48,6 +61,8 @@ object LinkRouter {
             ref != null &&
             (ref == pair.first || ref == pair.second)
         ) {
+            if (pair.first == browserPkg) return FrontState.AppBrowser(pair.second, Side.Left)
+            if (pair.second == browserPkg) return FrontState.AppBrowser(pair.first, Side.Right)
             return FrontState.AppApp(pair.first, pair.second)
         }
         if (ref != null && !OwnPackages.isOwn(ref)) {
@@ -58,13 +73,19 @@ object LinkRouter {
 
     fun route(url: String, cfg: LinkConfig, front: FrontState, vendorUsable: Boolean): LinkRoute {
         if (cfg.mode == LinkMode.Chrome || !vendorUsable) return LinkRoute.FullscreenBrowser
-        val left = when (front) {
-            is FrontState.AppPanel -> front.left
+        val app = when (front) {
+            is FrontState.AppPanel -> front.app
+            is FrontState.AppBrowser -> front.app
             is FrontState.AppApp -> front.left
             is FrontState.Fullscreen -> front.pkg
             FrontState.Home, FrontState.Unknown -> null
         }
-        return if (left == null || left == cfg.browserPkg) LinkRoute.FullscreenBrowser
-            else LinkRoute.SplitWithBrowser(left)
+        val side = when (front) {
+            is FrontState.AppPanel -> front.panelSide
+            is FrontState.AppBrowser -> front.browserSide
+            else -> Side.Right
+        }
+        return if (app == null || app == cfg.browserPkg) LinkRoute.FullscreenBrowser
+            else LinkRoute.SplitWithBrowser(app, side)
     }
 }
