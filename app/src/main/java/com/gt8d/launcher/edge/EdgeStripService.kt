@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -18,12 +19,13 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.gt8d.launcher.R
 import com.gt8d.launcher.config.GestureConfig
 import com.gt8d.launcher.curtain.CurtainView
 import com.gt8d.launcher.safety.SafetyGuard
-import com.gt8d.launcher.ui.theme.Palette
 import kotlin.math.hypot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -232,9 +234,24 @@ class EdgeStripService : Service() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createStripView(side: Side): View {
-        val view = View(this).apply {
-            setBackgroundColor(Palette.Accent.copy(alpha = 0.3f).toArgb())
+        val glow = View(this).apply {
+            setBackgroundColor(Color.White.copy(alpha = 0.3f).toArgb())
             alpha = 0f
+        }
+        val view = FrameLayout(this).apply {
+            addView(glow, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT,
+            ))
+            addView(View(this@EdgeStripService).apply {
+                alpha = 0.25f
+                background = GradientDrawable().apply {
+                    setColor(Color.White.toArgb())
+                    cornerRadius = 2f
+                }
+            }, FrameLayout.LayoutParams(4, 96).apply {
+                gravity = Gravity.CENTER_VERTICAL or if (side == Side.Left) Gravity.RIGHT else Gravity.LEFT
+                if (side == Side.Left) rightMargin = 8 else leftMargin = 8
+            })
         }
         var downX = 0f
         var downY = 0f
@@ -243,13 +260,13 @@ class EdgeStripService : Service() {
         var longPressRunnable: Runnable? = null
 
         fun startGlow(show: Boolean) {
-            view.animate().cancel()
+            glow.animate().cancel()
             if (!gestureConfig.glow && show) {
-                view.alpha = 0f
+                glow.alpha = 0f
                 return
             }
             val targetAlpha = if (show) 1f else 0f
-            view.animate()
+            glow.animate()
                 .alpha(targetAlpha)
                 .setDuration(GLOW_FADE_MS)
                 .start()
