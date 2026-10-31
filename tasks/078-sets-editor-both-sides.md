@@ -44,3 +44,9 @@ v1.5(設計書 `docs/superpowers/specs/2026-10-31-v1.5-left-panel-design.md` §3
 
 ## 報告
 変更点、テストの結果(件数)、置き換えた既存テスト、**決めたこと**。
+
+## 補足(点検の反映)
+1. 「パネル」ボタンは、反対側がパネルでも**押せる**ようにする(押すと A.2 のとおり反対側をアプリ未選択に変える)。`enabled = false` にはしない。テスト: 新規(右 Panel)で `set_left_panel` → 左 Panel・右 未選択 → 右のアプリを選ぶ → 保存で `ScreenSet(Panel, App(..), ..)`。
+2. 旧 testTag `set_left` を使うテストがある(`PanelActivityTest.splitButton_inSplit_opensNewSetInPanel`、PanelActivityTest:200 付近)。`PanelActivityTest.kt` も変更してよい(allow に追加)。新しいタグへ移す(意味は変えない)。
+3. `SetsEditTest` の文字列の `left`(`SetDraft(..., "a", ...)`・`copy(left = "…")`)は `Slot.App("a")` へ機械的に移す。旧 UI テストが持つ独立した検証(自アプリ・中継の除外、重複の排除、並び順)は残す。
+4. テストのコマンドに `com.gt8d.launcher.ui.panel.*` も含める(allow を更新済み)。

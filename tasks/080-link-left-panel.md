@@ -52,3 +52,8 @@ v1.5(設計書 `docs/superpowers/specs/2026-10-31-v1.5-left-panel-design.md` §6
 
 ## 報告
 変更点、テストの結果(件数)、合わせた既存の期待値、**決めたこと**。
+
+## 補足(点検の反映)
+1. 依存: パネルからアプリを替えたときの相手の更新(`panelLaunched` の呼び出し)は Task 079 が入れる。080 の単体テストは `lastPair` を直接与えて確かめればよい(結合の確認は実機の場面テストで行う)。
+2. **実際に開くブラウザで判断する**: `LinkEntryActivity` で `BrowserChooser.choose(...)` を先に行い、その `browser`(設定の値ではなく、実際に選ばれたもの)を `detectFront` と `route` に渡す。テスト: 設定のブラウザが入っておらず代わりのブラウザが選ばれる場合、その代わりのブラウザを含む組から2回目のリンクで同じ並び。
+3. `LinkEntryActivityTest` の左ブラウザのテストでは、偽の installed にブラウザも含め、`openForLink` の左右の順と、ready の後の VIEW の送信まで確かめる。

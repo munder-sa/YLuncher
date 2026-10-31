@@ -67,3 +67,11 @@ fun placementChanged(p: PanelPlacement?)     // 位置の変化
 
 ## 報告
 変更点、テストの結果(件数)、**決めたこと**。
+
+## 補足(点検の反映)
+1. **区間の世代**: `begin` のたびに世代番号を1つ進める。保存の判断・`updateConfig` の変換の中・保存の完了後の `onSaved` の前で、世代が同じか確かめ、違えば(保存中に `end`・次の `begin`・相手の変更があった)何もしない(設定の変換は元の設定をそのまま返す)。テスト: 保存を遅らせている間に `end`/`begin`(別のセット)/`partnerChanged` をして、古い保存が新しい区間に影響しない。
+2. **Full と null を分ける**: `Full` → `end("full")`(区間を終える)。`null` → 待っている判断を取り消すだけ(区間は続ける)。テスト: Full → Left で保存しない。null → Left(500ms)で保存する。
+3. **位置は区間の外でも最後の値を持つ**。`begin` のとき、最後の位置が Left/Right なら、そこから判断の待ち(settle)を始める。テスト: `placementChanged(Left)` → `begin(右パネルのセット)` → 500ms で保存。
+4. **settle は保存の後も守る**: 最後に位置が変わった時刻を持ち、保存の完了後の再判断は「その時刻から settleMs 経っていなければ残りを待つ」。テスト: 保存の完了の直前(100ms 前)に位置が戻った場合も、戻った時刻から 500ms 後に判断される。
+5. `CancellationException` は error として扱わず、そのまま投げる(キャンセル後は判断も `onSaved` もしない)。
+6. Task 080 の `LinkEntryActivityTest` が SetRunner の deps を差し替えるので、`scope` の既定値 null(保存しない)を守り、既存のテストの作り方を壊さない。

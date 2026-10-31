@@ -2,4 +2,5 @@ write app/src/main/java/com/gt8d/launcher/settings/SetsEdit.kt
 write app/src/main/java/com/gt8d/launcher/settings/SetsScreen.kt
 write app/src/test/java/com/gt8d/launcher/settings/SetsEditTest.kt
 write app/src/test/java/com/gt8d/launcher/settings/SetsScreenTest.kt
-command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.settings.*'
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.ui.panel.*'
