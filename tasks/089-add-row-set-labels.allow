@@ -1,0 +1,9 @@
+create app/src/main/java/com/gt8d/launcher/ui/home/SetLabel.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeSetCards.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/BootScreen.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/SetLabelTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeSetCardsTest.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/BootScreenTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.boot.*' --tests 'com.gt8d.launcher.ui.layout.*' --tests 'com.gt8d.launcher.curtain.*'
