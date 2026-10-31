@@ -12,3 +12,4 @@ write app/src/test/java/com/gt8d/launcher/link/LinkEntryActivityTest.kt
 write app/src/test/java/com/gt8d/launcher/ui/home/HomeSetCardsTest.kt
 write app/src/test/java/com/gt8d/launcher/settings/SettingsActivityTest.kt
 command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.notice.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.link.*' --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.boot.*'
+write app/src/test/java/com/gt8d/launcher/boot/BootRunnerIntegrationTest.kt

@@ -14,14 +14,17 @@ v1.6 設計書 `docs/superpowers/specs/2026-10-31-v1.6-ux-design.md` §4 B4。�
 - `/home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.safety.*' --tests 'com.gt8d.launcher.settings.*'`
 
 ## 仕様
-1. 安全モードのときの画面(onCreate の分岐)を: 中央に「安全のため純正ランチャーを使っています」(今の文言、`Dims.BodyText`)、その下に2つのボタン(どちらも 72dp 以上、幅 360dp 程度、縦に 16dp 空けて): 「純正ランチャーを開く」(testTag `safety_open_stock`、今の `stockLauncherIntent()` を開く)、「安全モードを解除」(testTag `safety_unlock`、`safetyRecover(this)` → 今の「解除してホームへ」と同じ後の動き。HomeActivity は onResume の既存の分岐で `recreate()` される)。ボタンは既存の設定の部品(`SettingsButton` など)か、同じ見た目の Compose で。この画面は軽いまま(重い初期化・帯・セットの起動をしない。今と同じ)。
+1. 安全モードのときの画面(onCreate の分岐)を: 中央に「安全のため純正ランチャーを使っています」(今の文言、`Dims.BodyText`)、その下に2つのボタン(どちらも 72dp 以上、幅 360dp 程度、縦に 16dp 空けて): 「純正ランチャーを開く」(testTag `safety_open_stock`、今の `stockLauncherIntent()` を開く)、「安全モードを解除」(testTag `safety_unlock`、`safetyRecover(this)` の後に**明示的に `recreate()`** する。`safetyRecover` は安全状態を消して `bootHandled = true` にするだけで、画面は作り直さないため)。2つのボタンの間隔は、見えている面同士で 16dp(`SettingsButton` の内側の上下 4dp の余白を含めて数える)。ボタンは既存の設定の部品(`SettingsButton` など)か、同じ見た目の Compose で。この画面は軽いまま(重い初期化・帯・セットの起動をしない。今と同じ)。
 2. onResume の安全モードの分岐で、純正ランチャーを**自動で開くのをやめる**(`startActivity(stockLauncherIntent())` を消す)。帯の起動・セットの起動をしないのは今のまま。
 3. 安全モードでないときの動きは変えない。
 
 ## テスト(足す。既存は弱めない。自動で純正へ行くことを確かめていた既存のテストは、この仕様に合わせて置き換え、報告する)
 - 安全モードで HomeActivity を開くと `safety_open_stock`・`safety_unlock` が表示され(72dp 以上)、純正ランチャーは自動で開かれない(Robolectric の `shadowOf(activity).nextStartedActivity` が null)。
 - `safety_open_stock` を押すと純正ランチャーの Intent が開かれる。
-- `safety_unlock` を押すと安全モードが解除され(`SafetyGuard.isFallbackActive == false`)、作り直して通常のホームになる。
+- `safety_unlock` を押すと安全モードが解除され(`SafetyGuard.isFallbackActive == false`)、作り直して通常のホームになる。**テストではクリックと通常のイベント処理(`idle` など)だけで確かめ、pause/resume を手で補わない**(ボタンだけで画面が切り替わることを確かめるため)。安全の画面が消え、通常のホームの部品が出ること。
+- 安全の画面の初回の表示と、もう一度の resume(純正から戻った想定)で、帯(EdgeStripService)とセットの起動をしない・純正へ自動で行かない。
+- 解除の後、セットの自動起動(起動時の復元)は再開しない(`bootHandled == true`)。
+- 2つのボタンの文言・高さ 72dp 以上・見えている面の間隔 16dp。
 
 ## この Task でしないこと
 - 安全モードに入る条件の変更。他の画面の変更。git のコミット等。
