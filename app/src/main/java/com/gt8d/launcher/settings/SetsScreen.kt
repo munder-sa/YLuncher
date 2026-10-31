@@ -129,10 +129,11 @@ fun SetsScreen(
                         .background(Palette.Panel), verticalAlignment = Alignment.CenterVertically) {
                         Row(Modifier.weight(1f).heightIn(min = Dims.MinTouch)
                             .testTag("set_row_${set.id}").clickable(enabled = !busy) { onEdit(set.id) }
-                            .padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // 左端の帯(取っ手)と重ならないよう、番号の前を 24dp 空ける。
+                            .padding(start = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                             OneLineText("${index + 1}", color = Palette.Muted, fontSize = Dims.BodyText)
                             listOf(set.left, set.right).forEachIndexed { side, slot ->
-                                val modifier = Modifier.padding(start = 4.dp).testTag("set_icon_${set.id}_$side")
+                                val modifier = Modifier.padding(start = if (side == 0) 16.dp else 4.dp).testTag("set_icon_${set.id}_$side")
                                 if (slot == Slot.Panel) PanelIcon(modifier.size(48.dp), mirrored = side == 0)
                                 else SettingsAppIcon(name(slot), iconFor((slot as Slot.App).pkg), modifier)
                             }
