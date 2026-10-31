@@ -39,6 +39,14 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelActivityTest {
+    @Test fun launchRequest_usesPanelLaunchPath() {
+        splitPanel()
+        controller!!.get().launchApp = { pkg, adjacent -> appCalls.add(pkg to adjacent); false }
+        rule.runOnIdle { assertTrue(AppGraph.panelLaunchRequests.tryEmit("maps")) }
+        rule.waitUntil(5000L) { appCalls.isNotEmpty() }
+        assertEquals(listOf("maps" to true), appCalls)
+    }
+
     @Test fun placement_reportedAndClearedOnStop() {
         controller = Robolectric.buildActivity(PanelActivity::class.java)
         val activity = controller!!.get()

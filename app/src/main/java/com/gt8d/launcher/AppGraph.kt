@@ -46,11 +46,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 object AppGraph {
+    // 場面テストの受け口からパネルに起動を頼む
+    val panelLaunchRequests = MutableSharedFlow<String>(extraBufferCapacity = 4)
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _panelPlacement = MutableStateFlow<PanelPlacement?>(null)
     val panelPlacement: StateFlow<PanelPlacement?> = _panelPlacement.asStateFlow()

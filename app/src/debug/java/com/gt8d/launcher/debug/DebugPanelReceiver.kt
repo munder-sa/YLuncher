@@ -10,10 +10,11 @@ import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.diag.DiagLog
-import com.gt8d.launcher.split.AndroidActivityLauncher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 class DebugPanelReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -21,12 +22,12 @@ class DebugPanelReceiver : BroadcastReceiver() {
         when {
             intent.hasExtra("launch") -> {
                 val pkg = intent.getStringExtra("launch") ?: return
-                val succeeded = AndroidActivityLauncher(context.applicationContext)
-                    .startApp(pkg, adjacent = true)
-                AppGraph.warm.recordAppLaunch(pkg, succeeded)
-                if (succeeded) AppGraph.runner.panelLaunched(pkg)
-                DiagLog.d("DebugPanel", "launch $pkg ${if (succeeded) "ok" else "failed"}")
+                AppGraph.panelLaunchRequests.tryEmit(pkg)
             }
+            intent.hasExtra("status") -> DiagLog.d(
+                "DebugPanel",
+                "status placement=${AppGraph.panelPlacement.value} view=${AppGraph.latestConfig.value?.panelView}",
+            )
             intent.hasExtra("addLeftPanelSet") || intent.hasExtra("removeSet") -> {
                 val pkg = intent.getStringExtra("addLeftPanelSet")
                 val id = intent.getStringExtra("removeSet")
@@ -72,11 +73,20 @@ class DebugPanelReceiver : BroadcastReceiver() {
             }
             intent.hasExtra("open") -> {
                 val index = intent.getIntExtra("open", 0)
-                if (AppGraph.runner.opening.value != null) {
-                    DiagLog.d("DebugPanel", "open ignored while opening")
-                } else {
-                    DiagLog.d("DebugPanel", "open index=$index")
-                    AppGraph.runner.open(index)
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.Main.immediate).launch {
+                    try {
+                        if (withTimeoutOrNull(5_000L) { AppGraph.latestConfig.first { it != null } } == null) {
+                            DiagLog.d("DebugPanel", "open failed: config not loaded")
+                        } else if (AppGraph.runner.opening.value != null) {
+                            DiagLog.d("DebugPanel", "open ignored while opening")
+                        } else {
+                            DiagLog.d("DebugPanel", "open index=$index")
+                            AppGraph.runner.open(index)
+                        }
+                    } finally {
+                        pending.finish()
+                    }
                 }
             }
             else -> DiagLog.d("DebugPanel", "unknown")

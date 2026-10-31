@@ -15,6 +15,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.stockLauncherIntent
 import com.gt8d.launcher.safety.SafetyGuard
@@ -71,6 +75,14 @@ class PanelActivity : ComponentActivity() {
         settingsInitialRoute = if (savedInstanceState?.getBoolean("settings_new_set") == true) SettingsRoute.SetEdit(null, true) else null
         if (savedInstanceState?.getString("settings_route") == "lists") settingsInitialRoute = SettingsRoute.Lists
         inSplitState = isInMultiWindowMode
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                AppGraph.panelLaunchRequests.collect { pkg ->
+                    val succeeded = onLaunchApp(pkg)
+                    DiagLog.d("Panel", "launchRequest $pkg ${if (succeeded) "ok" else "failed"}")
+                }
+            }
+        }
         onBackPressedDispatcher.addCallback(this) { DiagLog.d("Panel", "back ignored") }
         setContent {
             val placement by AppGraph.panelPlacement.collectAsState()
@@ -130,18 +142,18 @@ class PanelActivity : ComponentActivity() {
                             AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
                             if (succeeded && isInMultiWindowMode) AppGraph.runner.panelLaunched(component.packageName)
                         },
-                        onLaunchApp = { pkg ->
-                            val succeeded = launchApp(pkg, isInMultiWindowMode)
-                            AppGraph.warm.recordAppLaunch(
-                                pkg,
-                                succeeded,
-                            )
-                            if (succeeded && isInMultiWindowMode) AppGraph.runner.panelLaunched(pkg)
-                        },
+                        onLaunchApp = { pkg -> onLaunchApp(pkg) },
                     )
                 }
             }
         }
+    }
+
+    private fun onLaunchApp(pkg: String): Boolean {
+        val succeeded = launchApp(pkg, isInMultiWindowMode)
+        AppGraph.warm.recordAppLaunch(pkg, succeeded)
+        if (succeeded && isInMultiWindowMode) AppGraph.runner.panelLaunched(pkg)
+        return succeeded
     }
 
     override fun onStart() {

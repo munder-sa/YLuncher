@@ -149,7 +149,11 @@ link() {
 parse_slots() {
     awk '
     function indent(s) {match(s,/[^ ]/); return RSTART-1}
-    function emit() {if (slot) print side " " (top!="" ? top : hist!="" ? hist : "EMPTY")}
+    function emit( line) {
+        if (!slot) return
+        line=side " " (top!="" ? top : hist!="" ? hist : "EMPTY")
+        if (line!="UNKNOWN EMPTY" && !seen[line]++) print line
+    }
     function component(s, a,n,i) {
         n=split(s,a,/[[:space:]]+/)
         for(i=1;i<=n;i++) if(a[i] ~ /^[A-Za-z0-9_.]+\/[A-Za-z0-9_.$]+$/) return a[i]
@@ -175,15 +179,6 @@ parse_slots() {
 }
 reasons=()
 restore_panel_apps() {
-    # 途中失敗でも現在の番号に依存しない、既存のセット1起動手順を使う。
-    prepare_and_run set_strip_coldPanel || return 1
-    adb logcat -d -v time GT8D:D '*:S' > "$active/restore-logcat.txt" || return 1
-    grep -Eq '\[SetRunner\] open index=1([^0-9]|$)' "$active/restore-logcat.txt" || return 1
-    grep -Fq '[SetRunner] waitBoth ready' "$active/restore-logcat.txt" || return 1
-    adb shell dumpsys activity activities > "$active/restore-activities.txt" || return 1
-    parse_slots "$active/restore-activities.txt" > "$active/restore-slots.txt"
-    grep -Eq '^LEFT com\.google\.android\.youtube/' "$active/restore-slots.txt" || return 1
-    grep -Eq '^RIGHT com\.gt8d\.launcher/(\.ui\.panel\.PanelActivity|com\.gt8d\.launcher\.ui\.panel\.PanelActivity)$' "$active/restore-slots.txt" || return 1
     adb shell am broadcast -n com.gt8d.launcher/.debug.DebugPanelReceiver -a com.gt8d.launcher.debug.PANEL --es view apps || return 1
     sleep 3
     adb logcat -d -v time GT8D:D '*:S' > "$active/restore-logcat.txt" || return 1
@@ -297,9 +292,10 @@ double_tap() {
 swap_round() {
     local side=$1 label=$2
     double_tap "$label" || return 1
+    panel --es status 1 || return 1
     adb logcat -d -v time GT8D:D '*:S' > "$active/$label-logcat.txt" || return 1
     grep -Fq "[SetRunner] swapSaved id=scenario-left panel=$side" "$active/$label-logcat.txt" || reasons+=("swapSaved panel=$side がない")
-    grep -Fq "[Panel] placement=$side" "$active/$label-logcat.txt" || reasons+=("placement=$side がない")
+    grep -Fq "[DebugPanel] status placement=$side " "$active/$label-logcat.txt" || reasons+=("placement=$side がない")
     adb exec-out run-as com.gt8d.launcher cat files/config.json > "$active/$label-config.json" || return 1
     check_swap_config "$side" "$active/$label-config.json" || reasons+=("入れ替え後の設定が不一致: panel=$side")
 }
@@ -312,11 +308,11 @@ judge() {
             no_safety; split_shown
             if [[ $name == set_leftToRightPanel ]]; then
                 expect_log 'openSplit left=com\.google\.android\.youtube right=com\.gt8d\.launcher\.panel([[:space:]]|$)'
-                expect_log '\[Panel\] placement=Right'
+                expect_log '\[DebugPanel\] status placement=Right '
                 left_is com.google.android.youtube; right_is com.gt8d.launcher.panel
             else
                 expect_log 'openSplit left=com\.gt8d\.launcher\.panel right=com\.google\.android\.youtube([[:space:]]|$)'
-                expect_log '\[Panel\] placement=Left'
+                expect_log '\[DebugPanel\] status placement=Left '
                 left_is com.gt8d.launcher.panel; right_is com.google.android.youtube
             fi
             ;;
@@ -488,8 +484,12 @@ prepare_and_run() {
 last_name=''
 last_suffix=''
 last_pass=0
+declare -A prerequisite_rebuilt=()
+declare -A scenario_failed=()
+declare -A scenario_runs=()
 run() {
-    local name=$1 suffix=$2 version=${3-$2} prerequisite=''
+    local name=$1 suffix=$2 version=${3-$2} prerequisite='' key prerequisite_key
+    key="$name$version"
     case "$name" in
         link_browserTaskPresent) prerequisite=link_cold_noTasks ;;
         set_panelCard_switch) prerequisite=set_strip_coldPanel ;;
@@ -498,22 +498,34 @@ run() {
         leftPanel_launchApp|leftPanel_dividerSwap|leftPanel_link|set_leftToRightPanel) prerequisite=set_leftPanel_warm ;;
         leftPanel_link_twice) prerequisite=leftPanel_link ;;
     esac
+    prerequisite_key="$prerequisite$version"
     # 左パネルの前提は状態を変更する場面の後にも開き直す。--only も同じ経路。
     if [[ $name == set_leftPanel_warm || $name == leftPanel_* || $name == set_leftToRightPanel ]]; then
         if [[ -n $prerequisite ]] && [[ $last_name != "$prerequisite" || $last_suffix != "$version" || $last_pass != 1 ]]; then
-            run "$prerequisite" "@prerequisite$suffix" "$version"
+            if [[ ${scenario_failed[$prerequisite_key]:-0} != 1 && ${prerequisite_rebuilt[$prerequisite_key]:-0} != 1 ]]; then
+                prerequisite_rebuilt[$prerequisite_key]=1
+                run "$prerequisite" "@prerequisite$version" "$version"
+            fi
         fi
     fi
     if [[ -n $prerequisite ]] && [[ $last_name != "$prerequisite" || $last_suffix != "$version" || $last_pass != 1 ]]; then
         row "$name$suffix" SKIP "前提の $prerequisite が不合格"
         failed=1
+        scenario_failed[$key]=1
         last_name=$name; last_suffix=$version; last_pass=0
         return
     fi
+    scenario_runs[$key]=$(( ${scenario_runs[$key]:-0} + 1 ))
+    if [[ ${scenario_runs[$key]} -gt 1 ]]; then suffix+="@run${scenario_runs[$key]}"; fi
     active="$out/$name$suffix"
     mkdir -p "$active" || exit 1
     reasons=()
     prepare_and_run "$name" > "$active/commands.txt" 2>&1 || reasons+=('準備または操作コマンドが失敗')
+    case "$name" in
+        set_leftPanel_cold|set_leftPanel_warm|set_leftToRightPanel)
+            panel --es status 1 >> "$active/commands.txt" 2>&1 || reasons+=('status の取得に失敗')
+            ;;
+    esac
     capture "$active" || reasons+=('ログ・画面の保存に失敗')
     judge "$name"
     last_name=$name; last_suffix=$version; last_pass=0
@@ -539,10 +551,11 @@ run() {
     fi
     if [[ $name == set_panelCard_switch ]]; then
         if ! restore_panel_apps > "$active/restore-commands.txt" 2>&1; then
-            row "$name$suffix" WARN 'セット1とパネルの「アプリ」表示を復元できない。次の場面の前提を無効化'
+            row "$name$suffix" WARN 'パネルの「アプリ」表示を復元できない。次の場面の前提を無効化'
             last_pass=0
         fi
     fi
+    if ((last_pass == 0)); then scenario_failed[$key]=1; fi
     active=''
 }
 switch_home() {
