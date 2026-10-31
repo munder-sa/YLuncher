@@ -40,16 +40,18 @@ class LayoutMatrixTest(
     private val width: Int, private val height: Int, private val scale: Float,
     private val home: Boolean, private val playing: Boolean,
     private val view: PanelView,
+    private val leftPlacement: Boolean,
 ) {
     companion object {
-        @JvmStatic @ParameterizedRobolectricTestRunner.Parameters(name = "{0}x{1} scale={2} home={3} playing={4} view={5}")
+        @JvmStatic @ParameterizedRobolectricTestRunner.Parameters(name = "{0}x{1} scale={2} home={3} playing={4} view={5} left={6}")
         fun cases(): List<Array<Any>> = buildList {
             for (w in listOf(360, 387, 516, 645, 774))
                 for (h in listOf(400, 600, 726)) for (s in listOf(1f, 1.3f))
-                    for (p in listOf(false, true)) for (m in PanelView.entries) add(arrayOf(w, h, s, false, p, m))
+                    for (p in listOf(false, true)) for (m in PanelView.entries)
+                        for (left in listOf(false, true)) add(arrayOf(w, h, s, false, p, m, left))
             for (w in listOf(387, 516, 645, 774, 839, 840, 903, 1291))
                 for (h in listOf(600, 726)) for (view in PanelView.entries)
-                    add(arrayOf(w, h, 1f, true, false, view))
+                    add(arrayOf(w, h, 1f, true, false, view, false))
         }
     }
     @get:Rule val rule = createEmptyComposeRule()
@@ -63,6 +65,7 @@ class LayoutMatrixTest(
             if (playing) NowPlaying("music", "長い曲名のテスト", "長いアーティスト名", null, 180000L, true, true) else null,
             AppInfo("idle", "Apple Music", null, true), 10000L, apps, apps.take(4),
             DockStatus(true, true), true, true, view = view, sets = Defaults.build(emptySet()).screenSets,
+            placement = if (leftPlacement) com.gt8d.launcher.split.PanelPlacement.Left else null,
         )
         val actions = PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
         var pixelsPerDp = 0f
@@ -133,6 +136,13 @@ class LayoutMatrixTest(
                 }
             }
             checkDisjoint()
+            val dock = rule.onNodeWithTag("dock").fetchSemanticsNode().boundsInRoot
+            assertTrue(dock.width >= 72 * pixelsPerDp)
+            assertTrue(dock.left >= root.left && dock.right <= root.right && dock.top >= root.top && dock.bottom <= root.bottom)
+            if (leftPlacement) {
+                val segment = rule.onNodeWithTag("panel_view_segment").fetchSemanticsNode().boundsInRoot
+                assertTrue(dock.right <= segment.left)
+            }
             for (tag in if (home && width >= 840) emptyList() else if (view == PanelView.Apps) listOf("media_card", "icon_grid") else emptyList()) {
                 rule.onNodeWithTag(tag).performScrollTo()
                 checkDisjoint()

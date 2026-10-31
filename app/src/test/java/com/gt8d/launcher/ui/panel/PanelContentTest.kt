@@ -13,6 +13,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.runtime.snapshots.Snapshot
+import com.gt8d.launcher.split.PanelPlacement
+import com.gt8d.launcher.config.PanelView
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -46,6 +51,65 @@ import org.robolectric.annotation.TextLayoutMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
 class PanelContentTest {
+    private fun assertDockSide(left: Boolean) {
+        val dock = rule.onNodeWithTag("dock").getBoundsInRoot()
+        val content = rule.onNodeWithTag("panel_view_segment").getBoundsInRoot()
+        if (left) assertTrue(dock.right <= content.left)
+        else assertTrue(dock.left >= content.right)
+    }
+
+    @Test fun leftPlacement_dockOnLeft() {
+        var placement by mutableStateOf<PanelPlacement?>(PanelPlacement.Left)
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.size(516.dp, 400.dp)) {
+                    PanelContent(PanelState(null, null, 0L, emptyList(), emptyList(),
+                        DockStatus(true, null), false, false, placement = placement), emptyActions())
+                }
+            }
+        }
+        assertDockSide(true)
+        for (p in listOf(PanelPlacement.Right, null)) {
+            rule.runOnIdle { placement = p; Snapshot.sendApplyNotifications() }
+            assertDockSide(false)
+        }
+    }
+
+    @Test fun placementChange_keepsState() = checkPlacementState(PanelView.Sets)
+    @Test fun placementChange_keepsAppsState() = checkPlacementState(PanelView.Apps)
+
+    private fun checkPlacementState(view: PanelView) {
+        var state by mutableStateOf(PanelState(null, null, 0L,
+            (1..5).map { AppInfo("a$it", "App $it", null, true) }, emptyList(),
+            DockStatus(true, null), false, true, placement = PanelPlacement.Left,
+            sets = (1..20).map { com.gt8d.launcher.config.ScreenSet("s$it",
+                com.gt8d.launcher.config.Slot.App("a$it"), com.gt8d.launcher.config.Slot.Panel) }))
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.size(516.dp, 400.dp)) {
+                    PanelContent(state, emptyActions().copy(onSelectView = {
+                        state = state.copy(view = it)
+                        Snapshot.sendApplyNotifications()
+                    }))
+                }
+            }
+        }
+        val segment = if (view == PanelView.Sets) "panel_view_sets" else "panel_view_apps"
+        rule.onNodeWithTag(segment).performClick().assertIsSelected()
+        if (view == PanelView.Sets) rule.onNodeWithTag("home_set_s10").performScrollTo()
+        else rule.onNodeWithTag("icon_add").performScrollTo()
+        fun positions() = rule.onAllNodes(hasScrollAction()).fetchSemanticsNodes().map {
+            it.config[SemanticsProperties.VerticalScrollAxisRange].value()
+        }
+        val before = positions()
+        assertTrue(before.any { it > 0f })
+        assertDockSide(true)
+        rule.runOnIdle { state = state.copy(placement = PanelPlacement.Right); Snapshot.sendApplyNotifications() }
+        assertDockSide(false)
+        rule.onNodeWithTag(segment).assertIsSelected()
+        assertEquals(before, positions())
+    }
+
     @Test fun panel_viewSegment_defaultsAndSelection() {
         val selections = mutableListOf<com.gt8d.launcher.config.PanelView>()
         rule.setContent {
