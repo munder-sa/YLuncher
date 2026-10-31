@@ -179,10 +179,10 @@ class SetRunnerTest {
     fun abortBootToHome_duringLinkOpening_doesNothing() {
         val e = TestEnv()
         var fallback = 0
-        assertTrue(e.runner.openForLink("youtube") { fallback++ })
+        assertTrue(e.runner.openForLink("youtube", "com.android.chrome", onReady = {}) { fallback++ })
         e.runner.abortBootToHome()
         e.events.events.add(ResumeEvent("youtube", 100))
-        e.runner.panelResumedInSplit()
+        e.events.events.add(ResumeEvent("com.android.chrome", 120))
         e.scheduler.advanceBy(200)
         assertEquals(1, e.runner.readyCount)
         assertEquals(0, fallback)
@@ -289,7 +289,7 @@ class SetRunnerTest {
     }
     @Test fun loadingConfig_openForLink_returnsFalseWithoutCallback() = assertLoadingRejected {
         var fallback = 0
-        assertFalse(it.runner.openForLink("youtube") { fallback++ })
+        assertFalse(it.runner.openForLink("youtube", "com.android.chrome", onReady = {}) { fallback++ })
         assertEquals(0, fallback)
     }
     @Test fun loadingConfig_construction_preservesSavedIndex() = assertLoadingRejected {}
@@ -299,7 +299,7 @@ class SetRunnerTest {
         it.runner.prev()
         it.runner.home()
         it.runner.openForBoot(2)
-        assertFalse(it.runner.openForLink("youtube") { throw AssertionError("fallback") })
+        assertFalse(it.runner.openForLink("youtube", "com.android.chrome", onReady = {}) { throw AssertionError("fallback") })
     }
     @Test fun loadingConfig_doesNotReplacePendingRequest() {
         val e = TestEnv()
@@ -311,7 +311,7 @@ class SetRunnerTest {
         e.runner.prev()
         e.runner.home()
         e.runner.openForBoot(0)
-        assertFalse(e.runner.openForLink("youtube") { throw AssertionError("fallback") })
+        assertFalse(e.runner.openForLink("youtube", "com.android.chrome", onReady = {}) { throw AssertionError("fallback") })
         assertEquals(1, e.curtainView.updatedTargets.size)
         e.loading = false
         completeBootSetTwo(e)
@@ -493,7 +493,7 @@ class SetRunnerTest {
     fun linkRetryFailure_callsFallbackOnce() {
         val env = TestEnv()
         var calls = 0
-        env.runner.openForLink("youtube") { calls++ }
+        env.runner.openForLink("youtube", "com.android.chrome", onReady = {}) { calls++ }
         env.scheduler.advanceBy(2999)
         env.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
         env.scheduler.advanceBy(1)
@@ -547,7 +547,7 @@ class SetRunnerTest {
     fun linkQueryFailureDuringWait_callsFallbackOnce() {
         val env = TestEnv()
         var calls = 0
-        env.runner.openForLink("youtube") { calls++ }
+        env.runner.openForLink("youtube", "com.android.chrome", onReady = {}) { calls++ }
         env.scheduler.advanceBy(1000)
         env.events.queryFails = true
         env.scheduler.advanceBy(2499)
@@ -576,18 +576,18 @@ class SetRunnerTest {
     }
 
     @Test
-    fun openForLink_opensVendorWithPanelRight_keepsLastIndex() {
+    fun openForLink_opensVendorWithBrowserRight_keepsLastIndex() {
         val env = TestEnv(initialLastSetIndex = 2)
         env.installed.add("org.videolan.vlc")
         env.scheduler.advanceBy(123)
         val index = env.runner.currentIndex
         val last = env.lastIndex.lastSetIndex
-        assertTrue(env.runner.openForLink("org.videolan.vlc") {})
-        assertEquals(listOf(SplitCall("org.videolan.vlc", "com.gt8d.launcher.panel", SplitRatio.R5_5)), env.vendor.calls)
+        assertTrue(env.runner.openForLink("org.videolan.vlc", "com.android.chrome", onReady = {}) {})
+        assertEquals(listOf(SplitCall("org.videolan.vlc", "com.android.chrome", SplitRatio.R5_5)), env.vendor.calls)
         assertTrue(env.curtain.isShowing)
         assertEquals(index, env.runner.currentIndex)
         assertEquals(last, env.lastIndex.lastSetIndex)
-        assertEquals("org.videolan.vlc" to "com.gt8d.launcher.panel", env.runner.lastOpenedPair)
+        assertEquals("org.videolan.vlc" to "com.android.chrome", env.runner.lastOpenedPair)
         assertEquals(123L, env.runner.lastOpenedAtMs)
     }
 
@@ -597,7 +597,7 @@ class SetRunnerTest {
         env.installed.add("org.videolan.vlc")
         var calls = 0
         env.runner.open(1)
-        assertFalse(env.runner.openForLink("org.videolan.vlc") { calls++ })
+        assertFalse(env.runner.openForLink("org.videolan.vlc", "com.android.chrome", onReady = {}) { calls++ })
         assertEquals(1, env.vendor.calls.size)
         assertEquals(0, calls)
     }
@@ -608,7 +608,7 @@ class SetRunnerTest {
         env.installed.add("org.videolan.vlc")
         env.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
         var calls = 0
-        assertTrue(env.runner.openForLink("org.videolan.vlc") { calls++ })
+        assertTrue(env.runner.openForLink("org.videolan.vlc", "com.android.chrome", onReady = {}) { calls++ })
         env.scheduler.advanceBy(10000)
         assertEquals(1, calls)
     }
@@ -618,7 +618,7 @@ class SetRunnerTest {
         val env = TestEnv()
         env.installed.add("org.videolan.vlc")
         var calls = 0
-        env.runner.openForLink("org.videolan.vlc") { calls++ }
+        env.runner.openForLink("org.videolan.vlc", "com.android.chrome", onReady = {}) { calls++ }
         env.scheduler.advanceBy(4000)
         assertEquals(listOf(HideReason.Safety), env.curtainView.hiddenReasons)
         assertEquals(1, calls)
@@ -631,9 +631,9 @@ class SetRunnerTest {
         val env = TestEnv()
         env.installed.add("org.videolan.vlc")
         var calls = 0
-        env.runner.openForLink("org.videolan.vlc") { calls++ }
+        env.runner.openForLink("org.videolan.vlc", "com.android.chrome", onReady = {}) { calls++ }
         env.events.events.add(ResumeEvent("org.videolan.vlc", 100))
-        env.runner.panelResumedInSplit()
+        env.events.events.add(ResumeEvent("com.android.chrome", 120))
         env.scheduler.advanceBy(200)
         assertFalse(env.curtain.isShowing)
         assertEquals(listOf(HideReason.Ready), env.curtainView.hiddenReasons)
@@ -646,9 +646,9 @@ class SetRunnerTest {
         val env = TestEnv()
         env.installed.add("org.videolan.vlc")
         var calls = 0
-        env.runner.openForLink("org.videolan.vlc") { calls++ }
+        env.runner.openForLink("org.videolan.vlc", "com.android.chrome", onReady = {}) { calls++ }
         env.events.events.add(ResumeEvent("org.videolan.vlc", 100))
-        env.runner.panelResumedInSplit()
+        env.events.events.add(ResumeEvent("com.android.chrome", 120))
         env.scheduler.advanceBy(200)
         assertFalse(env.curtain.isShowing)
         env.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
@@ -669,6 +669,92 @@ class SetRunnerTest {
         assertNull(env.runner.opening.value)
         env.runner.home()
         assertNull(env.runner.lastOpenedAtMs)
+    }
+
+
+    @Test fun link_ready_callsOnReadyOnce() {
+        val e = TestEnv()
+        var ready = 0; var failed = 0
+        assertTrue(e.runner.openForLink("youtube", "com.android.chrome", { ready++ }, { failed++ }))
+        assertEquals(0, ready)
+        e.events.events.add(ResumeEvent("youtube", 100))
+        e.events.events.add(ResumeEvent("com.android.chrome", 120))
+        e.scheduler.advanceBy(200)
+        assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        assertEquals(1, ready); assertEquals(0, failed)
+        e.scheduler.advanceBy(10000)
+        assertEquals(1, ready); assertEquals(0, failed)
+    }
+    @Test fun link_timed_callsOnReadyOnce() {
+        val e = TestEnv(watcherAvailable = false)
+        var ready = 0; var failed = 0
+        e.runner.openForLink("youtube", "com.android.chrome", { ready++ }, { failed++ })
+        e.scheduler.advanceBy(3499)
+        assertEquals(0, ready)
+        e.scheduler.advanceBy(1)
+        assertEquals(listOf(HideReason.Timed), e.curtainView.hiddenReasons)
+        assertEquals(1, ready); assertEquals(0, failed)
+        e.scheduler.advanceBy(10000)
+        assertEquals(1, ready); assertEquals(0, failed)
+    }
+    @Test fun link_safety_callsNotSplitOnce() {
+        val e = TestEnv()
+        var ready = 0; var failed = 0
+        e.runner.openForLink("youtube", "com.android.chrome", { ready++ }, { failed++ })
+        e.scheduler.advanceBy(4000)
+        assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+        assertEquals(0, ready); assertEquals(1, failed)
+        e.scheduler.advanceBy(10000)
+        assertEquals(0, ready); assertEquals(1, failed)
+    }
+    @Test fun link_overridden_callsNeither() {
+        listOf<(SetRunner) -> Unit>({ it.next() }, { it.prev() }, { it.home() },
+            { it.open(0) }, { it.openForBoot(0) }).forEach { override ->
+            val e = TestEnv()
+            var ready = 0; var failed = 0
+            e.runner.openForLink("youtube", "com.android.chrome", { ready++ }, { failed++ })
+            override(e.runner)
+            e.scheduler.advanceBy(10000)
+            assertEquals(0, ready); assertEquals(0, failed)
+        }
+    }
+    @Test fun link_secondLink_cancelsFirstCallbacks() {
+        val e = TestEnv()
+        var calls = 0
+        e.runner.openForLink("youtube", "com.android.chrome", { calls++ }, { calls++ })
+        assertFalse(e.runner.openForLink("maps", "com.android.chrome", { calls++ }, { calls++ }))
+        e.events.events.add(ResumeEvent("youtube", 100))
+        e.events.events.add(ResumeEvent("com.android.chrome", 120))
+        e.scheduler.advanceBy(10000)
+        assertEquals(0, calls)
+        assertEquals(1, e.vendor.calls.size)
+    }
+    @Test fun link_singleLaunchFallback_callsNotSplitOnly() {
+        val e = TestEnv()
+        var ready = 0; var failed = 0
+        e.runner.openForLink("missing", "com.android.chrome", { ready++ }, { failed++ })
+        assertEquals(0, ready); assertEquals(1, failed)
+        assertEquals(listOf(StartAppCall("com.android.chrome", false)), e.apps.startAppCalls)
+        e.scheduler.advanceBy(10000)
+        assertEquals(0, ready); assertEquals(1, failed)
+    }
+    @Test fun link_monitoringUnavailableFromStart_timed_callsOnReady() {
+        val e = TestEnv()
+        e.events.queryFails = true
+        var ready = 0; var failed = 0
+        e.runner.openForLink("youtube", "com.android.chrome", { ready++ }, { failed++ })
+        e.scheduler.advanceBy(3500)
+        assertEquals(listOf(HideReason.Timed), e.curtainView.hiddenReasons)
+        assertEquals(1, ready); assertEquals(0, failed)
+    }
+    @Test fun link_rightIsBrowserInVendorCall() {
+        val e = TestEnv()
+        e.runner.openForLink("youtube", "com.brave.browser", {}, {})
+        assertEquals(listOf(SplitCall("youtube", "com.brave.browser", SplitRatio.R5_5)), e.vendor.calls)
+        assertEquals(com.gt8d.launcher.curtain.SlotPreview.App("com.brave.browser", "com.brave.browser"),
+            e.curtainView.shownTargets.single().right)
+        assertEquals(0, e.runner.currentIndex)
+        assertEquals(0, e.runner.currentIndexFlow.value)
     }
 
     private data class SplitCall(

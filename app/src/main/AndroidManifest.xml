@@ -28,6 +28,10 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="http" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 
     <application
@@ -77,12 +81,6 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".link.FullscreenBrowserActivity"
-            android:exported="false"
-            android:resizeableActivity="true"
-            android:taskAffinity="com.gt8d.launcher.browser"
-            android:launchMode="singleTask" />
 
         <service
             android:name=".media.MediaListenerService"

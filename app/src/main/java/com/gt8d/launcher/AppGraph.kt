@@ -55,9 +55,6 @@ object AppGraph {
     @Volatile var panelAlive: Boolean = false
     @Volatile var homePausedAtMs: Long? = null
     @Volatile var panelSplitPausedAtMs: Long? = null
-    val pendingUrl: com.gt8d.launcher.link.PendingUrl by lazy {
-        com.gt8d.launcher.link.PendingUrl(ElapsedClock)
-    }
 
     private lateinit var app: Application
 

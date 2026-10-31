@@ -63,7 +63,7 @@ class LinkRouterTest {
     @Test
     fun detect_panelInSplit_isAppPanel() {
         assertEquals(
-            FrontState.AppPanel,
+            FrontState.AppPanel(null),
             LinkRouter.detectFront(clues(panelInSplit = true), own),
         )
     }
@@ -132,39 +132,47 @@ class LinkRouterTest {
         )
     }
 
-    @Test
-    fun route_chromeMode_alwaysChrome() {
-        assertEquals(
-            LinkRoute.Chrome,
-            LinkRouter.route(url, cfg.copy(mode = LinkMode.Chrome), FrontState.Home, vendorUsable = true),
-        )
-    }
 
-    @Test
-    fun route_googleLogin_goesChrome() {
-        assertEquals(
-            LinkRoute.Chrome,
-            LinkRouter.route("https://accounts.google.com/signin", cfg, FrontState.Home, vendorUsable = true),
-        )
-        assertEquals(
-            LinkRoute.Chrome,
-            LinkRouter.route("https://ACCOUNTS.google.com/x", cfg, FrontState.Home, vendorUsable = true),
-        )
-        assertEquals(
-            LinkRoute.Chrome,
-            LinkRouter.route("https://a.accounts.google.com/x", cfg, FrontState.Home, vendorUsable = true),
-        )
-        assertEquals(
-            LinkRoute.FullscreenBrowser,
-            LinkRouter.route(
-                "https://accounts.google.com.evil.example/x",
-                cfg,
-                FrontState.Home,
-                vendorUsable = true,
-            ),
-        )
+    @Test fun home_fullscreen() {
+        assertEquals(LinkRoute.FullscreenBrowser, LinkRouter.route(url, cfg, FrontState.Home, true))
     }
-
+    @Test fun fullscreenApp_splitWithSender() {
+        assertEquals(LinkRoute.SplitWithBrowser("x"), LinkRouter.route(url, cfg, FrontState.Fullscreen("x"), true))
+    }
+    @Test fun appPanel_splitWithLastLeft() {
+        val front = LinkRouter.detectFront(clues(panelInSplit = true, lastPair = "a" to own), own)
+        assertEquals(FrontState.AppPanel("a"), front)
+        assertEquals(LinkRoute.SplitWithBrowser("a"), LinkRouter.route(url, cfg, front, true))
+    }
+    @Test fun appPanel_unknownLeft_fullscreen() {
+        assertEquals(LinkRoute.FullscreenBrowser, LinkRouter.route(url, cfg, FrontState.AppPanel(null), true))
+    }
+    @Test fun appApp_splitWithLeft() {
+        assertEquals(LinkRoute.SplitWithBrowser("a"), LinkRouter.route(url, cfg, FrontState.AppApp("a", "b"), true))
+    }
+    @Test fun modeFull_alwaysFullscreen() {
+        listOf(FrontState.Home, FrontState.Unknown, FrontState.Fullscreen("x"), FrontState.AppPanel("a"),
+            FrontState.AppApp("a", "b")).forEach {
+            assertEquals(LinkRoute.FullscreenBrowser, LinkRouter.route(url, cfg.copy(mode = LinkMode.Chrome), it, true))
+        }
+    }
+    @Test fun vendorUnusable_fullscreen() {
+        listOf(FrontState.Fullscreen("x"), FrontState.AppApp("a", "b"), FrontState.AppPanel("a")).forEach {
+            assertEquals(LinkRoute.FullscreenBrowser, LinkRouter.route(url, cfg, it, false))
+        }
+    }
+    @Test fun googleLogin_noLongerSpecial() {
+        listOf("accounts.google.com", "ACCOUNTS.google.com", "a.accounts.google.com", "accounts.google.com.evil.example").forEach {
+            assertEquals(LinkRoute.SplitWithBrowser("x"),
+                LinkRouter.route("https://$it/signin", cfg, FrontState.Fullscreen("x"), true))
+        }
+    }
+    @Test fun leftIsBrowser_fullscreen() {
+        listOf(FrontState.Fullscreen(cfg.browserPkg), FrontState.AppPanel(cfg.browserPkg),
+            FrontState.AppApp(cfg.browserPkg, "b")).forEach {
+            assertEquals(LinkRoute.FullscreenBrowser, LinkRouter.route(url, cfg, it, true))
+        }
+    }
     @Test
     fun route_badUrl_notChrome() {
         assertEquals(
@@ -174,58 +182,10 @@ class LinkRouterTest {
     }
 
     @Test
-    fun route_home_fullscreenBrowser() {
-        assertEquals(
-            LinkRoute.FullscreenBrowser,
-            LinkRouter.route(url, cfg, FrontState.Home, vendorUsable = true),
-        )
-    }
-
-    @Test
-    fun route_appPanel_panelTaskBrowser() {
-        assertEquals(
-            LinkRoute.PanelTaskBrowser,
-            LinkRouter.route(url, cfg, FrontState.AppPanel, vendorUsable = true),
-        )
-    }
-
-    @Test
-    fun route_appApp_vendorSplitWithLeft() {
-        assertEquals(
-            LinkRoute.VendorSplitThenBrowser("a"),
-            LinkRouter.route(url, cfg, FrontState.AppApp("a", "b"), vendorUsable = true),
-        )
-    }
-
-    @Test
-    fun route_fullscreen_vendorSplitWithThatApp() {
-        assertEquals(
-            LinkRoute.VendorSplitThenBrowser("x"),
-            LinkRouter.route(url, cfg, FrontState.Fullscreen("x"), vendorUsable = true),
-        )
-    }
-
-    @Test
     fun route_unknown_fullscreenBrowser() {
         assertEquals(
             LinkRoute.FullscreenBrowser,
             LinkRouter.route(url, cfg, FrontState.Unknown, vendorUsable = true),
-        )
-    }
-
-    @Test
-    fun route_vendorUnusable_fullscreenBrowser() {
-        assertEquals(
-            LinkRoute.FullscreenBrowser,
-            LinkRouter.route(url, cfg, FrontState.AppApp("a", "b"), vendorUsable = false),
-        )
-        assertEquals(
-            LinkRoute.FullscreenBrowser,
-            LinkRouter.route(url, cfg, FrontState.Fullscreen("x"), vendorUsable = false),
-        )
-        assertEquals(
-            LinkRoute.PanelTaskBrowser,
-            LinkRouter.route(url, cfg, FrontState.AppPanel, vendorUsable = false),
         )
     }
 }

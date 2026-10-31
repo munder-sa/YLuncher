@@ -3,7 +3,6 @@ package com.gt8d.launcher.ui
 import android.app.Application
 import android.content.ComponentName
 import androidx.test.core.app.ApplicationProvider
-import com.gt8d.launcher.link.FullscreenBrowserActivity
 import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.panel.PanelActivity
 import org.junit.Assert.assertEquals
@@ -34,9 +33,6 @@ class TaskAffinityTest {
         assertNotEquals(affinity(HomeActivity::class.java), affinity(PanelActivity::class.java))
     }
 
-    @Test fun fullscreenBrowser_keepsOwnAffinity() {
-        assertEquals("com.gt8d.launcher.browser", affinity(FullscreenBrowserActivity::class.java))
-    }
 
     @Test fun main_hasNoLauncherEntry() {
         org.junit.Assert.assertNull(app.packageManager.getLaunchIntentForPackage(app.packageName))

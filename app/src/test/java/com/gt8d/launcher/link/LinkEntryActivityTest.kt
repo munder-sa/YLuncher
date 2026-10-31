@@ -3,6 +3,15 @@ package com.gt8d.launcher.link
 import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ActivityInfo
+import com.gt8d.launcher.curtain.*
+import com.gt8d.launcher.foreground.*
+import com.gt8d.launcher.time.FakeScheduler
+import com.gt8d.launcher.split.SplitLauncher
+import com.gt8d.launcher.split.LaunchResult
+import com.gt8d.launcher.split.FailReason
+import com.gt8d.launcher.config.SplitRatio
 import android.net.Uri
 import android.os.Looper
 import android.os.SystemClock
@@ -29,16 +38,6 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [35])
 @LooperMode(LooperMode.Mode.PAUSED)
 class LinkEntryActivityTest {
-    @Test fun appPanelFront_setsPendingUrl_withoutStartingActivity() {
-        flow.value = Defaults.build(emptySet())
-        AppGraph.panelInSplit = true
-        val activity = open("https://example.com")
-        assertNull(shadowOf(activity).nextStartedActivity)
-        assertEquals("https://example.com", AppGraph.pendingUrl.take())
-        assertEquals(0, openForLinkCalls)
-        assertTrue(activity.isFinishing)
-    }
-
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val flow = MutableStateFlow<LauncherConfig?>(null)
     private var controller: ActivityController<LinkEntryActivity>? = null
@@ -65,6 +64,7 @@ class LinkEntryActivityTest {
         AppGraph.panelInSplit = false
         AppGraph.homePausedAtMs = null
         AppGraph.panelSplitPausedAtMs = null
+        registerBrowser("com.android.chrome")
         savedDeps = depsField.get(AppGraph.runner) as SetRunnerDeps
         // openForLink の最初の設定参照を数え、分割の実行前に断る。
         depsField.set(AppGraph.runner, savedDeps.copy(config = { openForLinkCalls++; null }))
@@ -74,6 +74,7 @@ class LinkEntryActivityTest {
 
     @After fun cleanup() {
         controller?.destroy()
+        testCurtain?.fail()
         depsField.set(AppGraph.runner, savedDeps)
         modeField.set(AppGraph.selector, savedMode)
         AppGraph.configFlowForHomeTest = savedFlow
@@ -81,7 +82,6 @@ class LinkEntryActivityTest {
         AppGraph.panelInSplit = savedPanel
         AppGraph.homePausedAtMs = savedHomeAt
         AppGraph.panelSplitPausedAtMs = savedPanelAt
-        AppGraph.pendingUrl.take()
     }
 
     private fun open(url: String): LinkEntryActivity {
@@ -95,7 +95,7 @@ class LinkEntryActivityTest {
         flow.value = Defaults.build(emptySet())
         AppGraph.homePausedAtMs = SystemClock.elapsedRealtime() - 500L
         val activity = open("https://example.com")
-        assertEquals(ComponentName(app, FullscreenBrowserActivity::class.java), shadowOf(activity).nextStartedActivity.component)
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
         assertEquals(0, openForLinkCalls)
         assertTrue(activity.isFinishing)
     }
@@ -108,12 +108,12 @@ class LinkEntryActivityTest {
     }
 
     private fun assertChrome(activity: LinkEntryActivity) {
-        val started = shadowOf(activity).nextStartedActivity
+        val started = shadowOf(app).nextStartedActivity
         assertEquals(Intent.ACTION_VIEW, started.action)
         assertEquals(LinkRouter.CHROME_PKG, started.`package`)
         assertEquals("https://accounts.google.com/", started.dataString)
         assertTrue(activity.isFinishing)
-        assertNull(shadowOf(activity).nextStartedActivity)
+        assertNull(shadowOf(app).nextStartedActivity)
     }
 
     @Test fun coldStart_waitsForConfig_thenRoutes() {
@@ -139,7 +139,7 @@ class LinkEntryActivityTest {
         AppGraph.homePausedAtMs = null
         flow.value = Defaults.build(emptySet())
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(ComponentName(app, FullscreenBrowserActivity::class.java), shadowOf(activity).nextStartedActivity.component)
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
         assertEquals(0, openForLinkCalls)
         assertTrue(activity.isFinishing)
     }
@@ -173,5 +173,133 @@ class LinkEntryActivityTest {
         assertNull(shadowOf(activity).nextStartedActivity)
         assertFalse(activity.isFinishing)
         assertEquals(0, openForLinkCalls)
+    }
+
+    private var testCurtain: CurtainController? = null
+    private fun registerBrowser(pkg: String) {
+        val component = ComponentName(pkg, "$pkg.Main")
+        shadowOf(app.packageManager).addOrUpdateActivity(ActivityInfo().apply {
+            name = component.className; packageName = pkg
+        })
+        shadowOf(app.packageManager).addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_VIEW).apply {
+            addDataScheme("https"); addDataScheme("http")
+        })
+    }
+    private fun assertView(intent: Intent?, url: String, pkg: String) {
+        assertNotNull(intent)
+        assertEquals(Intent.ACTION_VIEW, intent!!.action)
+        assertEquals(url, intent.dataString)
+        assertEquals(pkg, intent.`package`)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    private data class SplitFixture(
+        val scheduler: FakeScheduler,
+        val events: MutableList<ResumeEvent>,
+        val calls: MutableList<Pair<String, String>>,
+    )
+    private fun splitFixture(fail: Boolean = false): SplitFixture {
+        val scheduler = FakeScheduler()
+        val events = mutableListOf<ResumeEvent>()
+        val calls = mutableListOf<Pair<String, String>>()
+        val curtain = CurtainController(scheduler, object : CurtainView {
+            override fun show(target: CurtainTarget) {}
+            override fun update(target: CurtainTarget) {}
+            override fun showProgress() {}
+            override fun hide(reason: HideReason) {}
+        })
+        curtain.onHidden = savedDeps.curtain.onHidden
+        testCurtain = curtain
+        val watcher = ForegroundWatcher(object : ForegroundEvents {
+            override fun available() = true
+            override fun resumedSince(sinceMs: Long) = events.filter { it.timeMs in sinceMs..scheduler.nowMs() }
+        })
+        depsField.set(AppGraph.runner, savedDeps.copy(
+            config = { flow.value }, installed = { setOf("com.example.mail") },
+            watcher = watcher, scheduler = scheduler, clock = scheduler, curtain = curtain,
+            warm = WarmTracker(app.packageName) { true }, labelFor = { it }, startHome = {},
+            vendor = object : SplitLauncher {
+                override fun open(left: String, right: String, ratio: SplitRatio): LaunchResult {
+                    assertEquals(SplitRatio.R5_5, ratio)
+                    calls.add(left to right)
+                    return if (fail) LaunchResult.Failed(FailReason.Exception) else LaunchResult.Started
+                }
+            },
+            apps = object : com.gt8d.launcher.split.ActivityLauncher {
+                override fun canResolve(pkg: String, cls: String) = true
+                override fun start(spec: com.gt8d.launcher.split.LaunchSpec) {}
+                override fun startApp(pkg: String, adjacent: Boolean) = true
+                override fun isResizeable(pkg: String) = true
+            },
+        ))
+        return SplitFixture(scheduler, events, calls)
+    }
+    @Test fun fullscreen_sendsViewToChosenBrowser() {
+        registerBrowser("com.brave.browser")
+        flow.value = Defaults.build(emptySet()).let { it.copy(link = it.link.copy(browserPkg = "com.brave.browser")) }
+        AppGraph.homeResumed = true
+        val activity = open("https://example.com")
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.brave.browser")
+        assertNull(shadowOf(app).nextStartedActivity)
+        assertEquals(0, openForLinkCalls)
+        assertTrue(activity.isFinishing)
+    }
+    @Test fun split_callsOpenForLinkWithBrowser() {
+        flow.value = Defaults.build(emptySet())
+        val fixture = splitFixture()
+        val activity = open("https://example.com")
+        assertEquals(listOf("com.example.mail" to "com.android.chrome"), fixture.calls)
+        assertNull(shadowOf(app).nextStartedActivity)
+        assertTrue(activity.isFinishing)
+        controller!!.destroy(); controller = null
+        fixture.events.add(ResumeEvent("com.example.mail", 100))
+        fixture.events.add(ResumeEvent("com.android.chrome", 120))
+        fixture.scheduler.advanceBy(200)
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
+        fixture.scheduler.advanceBy(10000)
+        assertNull(shadowOf(app).nextStartedActivity)
+    }
+    @Test fun split_failed_sendsViewOnce() {
+        flow.value = Defaults.build(emptySet())
+        val fixture = splitFixture(fail = true)
+        open("https://example.com")
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
+        fixture.scheduler.advanceBy(10000)
+        assertNull(shadowOf(app).nextStartedActivity)
+    }
+    @Test fun split_safety_sendsViewOnceAfterActivityDestroyed() {
+        flow.value = Defaults.build(emptySet())
+        val fixture = splitFixture()
+        open("https://example.com")
+        assertNull(shadowOf(app).nextStartedActivity)
+        controller!!.destroy(); controller = null
+        fixture.scheduler.advanceBy(3999)
+        assertNull(shadowOf(app).nextStartedActivity)
+        fixture.scheduler.advanceBy(1)
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
+        fixture.scheduler.advanceBy(10000)
+        assertNull(shadowOf(app).nextStartedActivity)
+    }
+    @Test fun appPanelFront_splitWithLastLeft() {
+        flow.value = Defaults.build(emptySet())
+        val fixture = splitFixture()
+        AppGraph.runner.javaClass.getDeclaredField("lastOpenedPair").apply {
+            isAccessible = true; set(AppGraph.runner, "com.example.mail" to "com.gt8d.launcher.panel")
+        }
+        AppGraph.panelInSplit = true
+        open("https://example.com")
+        assertEquals(listOf("com.example.mail" to "com.android.chrome"), fixture.calls)
+        assertNull(shadowOf(app).nextStartedActivity)
+        fixture.events.add(ResumeEvent("com.example.mail", 100))
+        fixture.events.add(ResumeEvent("com.android.chrome", 120))
+        fixture.scheduler.advanceBy(200)
+        assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
+    }
+    @Test fun noBrowser_doesNothing() {
+        shadowOf(app.packageManager).removePackage("com.android.chrome")
+        flow.value = Defaults.build(emptySet())
+        val activity = open("https://example.com")
+        assertNull(shadowOf(app).nextStartedActivity)
+        assertEquals(0, openForLinkCalls)
+        assertTrue(activity.isFinishing)
     }
 }

@@ -69,6 +69,7 @@ class DefaultsTest {
             cfg.dockApps,
         )
         assertEquals(Defaults.PKG_APPLE_MUSIC, cfg.idleApp)
+        assertEquals("com.android.chrome", cfg.link.browserPkg)
         assertEquals(LinkMode.InAppSplit, cfg.link.mode)
         assertEquals(listOf("accounts.google.com"), cfg.link.chromeDomains)
         assertEquals(GestureConfig(stripWidthPx = 48, glow = true, longPressMs = 1000), cfg.gesture)

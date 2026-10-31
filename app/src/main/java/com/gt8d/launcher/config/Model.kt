@@ -63,13 +63,15 @@ sealed interface Slot {
 @Serializable
 data class LinkConfig(
     val mode: LinkMode = LinkMode.InAppSplit,
+    // 保存データとの互換のため残す。振り分けには使わない。
     val chromeDomains: List<String> = listOf("accounts.google.com"),
+    val browserPkg: String = "com.android.chrome",
 )
 
 @Serializable
 enum class LinkMode {
-    InAppSplit,
-    Chrome,
+    InAppSplit, // ブラウザで分割(保存名は維持)
+    Chrome, // 全画面で開く(保存名は維持)
 }
 
 @Serializable

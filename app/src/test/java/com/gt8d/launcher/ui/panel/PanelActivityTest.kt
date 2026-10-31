@@ -113,7 +113,6 @@ class PanelActivityTest {
         safetyContents?.let { safetyFile.writeText(it) } ?: safetyFile.delete()
         AppGraph.bootHandled = savedHandled
         savedSettingsIndex?.let { settingsIndexFile.writeText(it) } ?: settingsIndexFile.delete()
-        AppGraph.pendingUrl.take()
         AppGraph.panelSplitPausedAtMs = savedSplitPausedAt
         shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
             AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName, usageMode,
@@ -248,98 +247,6 @@ class PanelActivityTest {
         shadowOf(android.os.Looper.getMainLooper()).runToEndOfTasks()
     }
 
-    private fun assertBrowserOnce() {
-        val activity = controller!!.get()
-        assertNull(shadowOf(activity).nextStartedActivity)
-        assertEquals("https://example.com", activity.shownBrowserUrl)
-        assertNull(AppGraph.pendingUrl.take())
-    }
-
-    @Test fun browser_close_returnsToPanel() {
-        AppGraph.pendingUrl.set("https://example.com")
-        splitPanel()
-        rule.onNodeWithTag("browser_close").performClick()
-        rule.runOnIdle { assertNull(controller!!.get().shownBrowserUrl) }
-        rule.onNodeWithTag("dock_applist").assertIsDisplayed()
-        assertFalse(controller!!.get().isFinishing)
-    }
-
-    @Test fun browser_systemBack_returnsToPanel_thenBackIgnored() {
-        AppGraph.pendingUrl.set("https://example.com")
-        splitPanel()
-        rule.runOnIdle { controller!!.get().onBackPressedDispatcher.onBackPressed() }
-        rule.runOnIdle { assertNull(controller!!.get().shownBrowserUrl) }
-        rule.runOnIdle { controller!!.get().onBackPressedDispatcher.onBackPressed() }
-        assertFalse(controller!!.get().isFinishing)
-    }
-
-    @Test fun pendingUrl_whileBrowserShown_replacesUrl() {
-        AppGraph.pendingUrl.set("https://example.com/a")
-        splitPanel()
-        assertEquals("https://example.com/a", controller!!.get().shownBrowserUrl)
-        AppGraph.pendingUrl.set("https://example.com/b")
-        controller!!.pause().resume()
-        // Robolectric ではテスト間で Compose のグローバルな変更通知が止まることがあるため、Activity の中で書いた状態の通知を明示的に送る
-        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
-        rule.waitForIdle()
-        assertEquals("https://example.com/b", controller!!.get().shownBrowserUrl)
-        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
-        assertNull(AppGraph.pendingUrl.take())
-    }
-
-    @Test fun browserUrl_survivesRecreate() {
-        AppGraph.pendingUrl.set("https://example.com")
-        splitPanel()
-        controller!!.recreate()
-        rule.waitForIdle()
-        assertEquals("https://example.com", controller!!.get().shownBrowserUrl)
-    }
-
-    @Test fun pendingUrl_whileOpening_isNotConsumedUntilOpeningEnds() {
-        val runner = AppGraph.runner
-        val field = runner.javaClass.getDeclaredField("d").apply { isAccessible = true }
-        val original = field.get(runner) as SetRunnerDeps
-        val scheduler = FakeScheduler()
-        val curtain = CurtainController(scheduler, object : CurtainView {
-            override fun show(target: CurtainTarget) {}
-            override fun update(target: CurtainTarget) {}
-            override fun showProgress() {}
-            override fun hide(reason: HideReason) {}
-        })
-        val deps = original.copy(scheduler = scheduler, clock = scheduler, curtain = curtain, startHome = {})
-        field.set(runner, deps)
-        try {
-            // 同じ AppGraph.runner を実際の openForBoot と安全タイマーで操作する。
-            runner.openForBoot(1)
-            assertNotNull(runner.opening.value)
-            AppGraph.pendingUrl.set("https://example.com")
-            splitPanel()
-            assertNull(shadowOf(controller!!.get()).nextStartedActivity)
-            val url = AppGraph.pendingUrl.take()
-            assertEquals("https://example.com", url)
-            AppGraph.pendingUrl.set(url!!)
-            scheduler.advanceBy(10_000L)
-            assertNull(runner.opening.value)
-            shadowOf(Looper.getMainLooper()).idle()
-            assertBrowserOnce()
-        } finally {
-            runner.abortBootToHome()
-            field.set(runner, original)
-            AppGraph.pendingUrl.take()
-        }
-    }
-
-    @Test fun pendingUrl_notOpening_consumedOnResume() {
-        assertNull(AppGraph.runner.opening.value)
-        AppGraph.pendingUrl.set("https://example.com")
-        try {
-            splitPanel()
-            assertBrowserOnce()
-        } finally {
-            AppGraph.pendingUrl.take()
-        }
-    }
-
     @Test fun back_doesNotFinishPanel() {
         host("back", true)
         rule.runOnIdle { controller!!.get().onBackPressedDispatcher.onBackPressed() }
@@ -425,21 +332,6 @@ class PanelActivityTest {
         assertEquals(com.gt8d.launcher.apps.stockLauncherIntent().component,
             shadowOf(controller!!.get()).nextStartedActivity?.component)
         assertTrue(controller!!.get().isFinishing)
-    }
-    @Test fun safetyMode_doesNotConsumePendingUrl() = whileOpening { scheduler ->
-        activateSafety(); AppGraph.pendingUrl.set("https://example.com"); splitPanel()
-        scheduler.advanceBy(10_000); shadowOf(Looper.getMainLooper()).idle()
-        assertNull(AppGraph.runner.opening.value)
-        assertEquals("https://example.com", AppGraph.pendingUrl.take())
-        assertNull(controller!!.get().shownBrowserUrl)
-    }
-    @Test fun settings_browserOpenedThenClosed_returnsToSettingsRoot() {
-        splitPanel(); settingsLongPress(); rule.onNodeWithTag("settings_item_sets").performClick()
-        AppGraph.pendingUrl.set("https://example.com"); controller!!.pause().resume()
-        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
-        rule.onNodeWithTag("browser_close").performClick()
-        rule.onNodeWithTag("settings_item_sets").assertIsDisplayed()
-        rule.onNodeWithTag("settings_placeholder").assertDoesNotExist()
     }
     @Test fun settings_leaveSplit_forwardsToHomeAfterWait() {
         splitPanel(); settingsLongPress()

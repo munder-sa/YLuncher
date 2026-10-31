@@ -3,12 +3,10 @@ package com.gt8d.launcher.link
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LinkConfig
 import com.gt8d.launcher.config.LinkMode
-import java.net.URI
-import java.util.Locale
 
 sealed interface FrontState {
     data object Home : FrontState
-    data object AppPanel : FrontState
+    data class AppPanel(val left: String?) : FrontState
     data class AppApp(val left: String, val right: String) : FrontState
     data class Fullscreen(val pkg: String) : FrontState
     data object Unknown : FrontState
@@ -23,10 +21,8 @@ data class FrontClues(
 )
 
 sealed interface LinkRoute {
-    data object Chrome : LinkRoute
     data object FullscreenBrowser : LinkRoute
-    data object PanelTaskBrowser : LinkRoute
-    data class VendorSplitThenBrowser(val left: String) : LinkRoute
+    data class SplitWithBrowser(val left: String) : LinkRoute
 }
 
 object LinkRouter {
@@ -41,7 +37,7 @@ object LinkRouter {
 
     fun detectFront(clues: FrontClues, ownPkg: String): FrontState {
         if (clues.homeResumed) return FrontState.Home
-        if (clues.panelInSplit) return FrontState.AppPanel
+        if (clues.panelInSplit) return FrontState.AppPanel(clues.lastPair?.first)
         val pair = clues.lastPair
         val ref = clues.referrer?.takeIf { it.isNotEmpty() }
         if (
@@ -61,31 +57,14 @@ object LinkRouter {
     }
 
     fun route(url: String, cfg: LinkConfig, front: FrontState, vendorUsable: Boolean): LinkRoute {
-        if (cfg.mode == LinkMode.Chrome) return LinkRoute.Chrome
-
-        val host = try {
-            URI(url).host?.lowercase(Locale.ROOT)
-        } catch (_: Exception) {
-            null
+        if (cfg.mode == LinkMode.Chrome || !vendorUsable) return LinkRoute.FullscreenBrowser
+        val left = when (front) {
+            is FrontState.AppPanel -> front.left
+            is FrontState.AppApp -> front.left
+            is FrontState.Fullscreen -> front.pkg
+            FrontState.Home, FrontState.Unknown -> null
         }
-        if (host != null && cfg.chromeDomains.any { domain ->
-                val d = domain.lowercase(Locale.ROOT)
-                d.isNotEmpty() && (host == d || host.endsWith(".$d"))
-            }
-        ) {
-            return LinkRoute.Chrome
-        }
-
-        return when (front) {
-            FrontState.Home -> LinkRoute.FullscreenBrowser
-            FrontState.AppPanel -> LinkRoute.PanelTaskBrowser
-            is FrontState.AppApp ->
-                if (vendorUsable) LinkRoute.VendorSplitThenBrowser(front.left)
-                else LinkRoute.FullscreenBrowser
-            is FrontState.Fullscreen ->
-                if (vendorUsable) LinkRoute.VendorSplitThenBrowser(front.pkg)
-                else LinkRoute.FullscreenBrowser
-            FrontState.Unknown -> LinkRoute.FullscreenBrowser
-        }
+        return if (left == null || left == cfg.browserPkg) LinkRoute.FullscreenBrowser
+            else LinkRoute.SplitWithBrowser(left)
     }
 }

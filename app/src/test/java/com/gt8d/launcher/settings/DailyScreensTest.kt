@@ -92,21 +92,46 @@ class DailyScreensTest {
         click("lists_panel_pick_c"); assertEquals(listOf("a", "b", "c"), config.panelApps)
         assertEquals(listOf("a", "b"), config.homeApps)
     }
-    @Test fun link_switchToChrome_saves() {
-        host(SettingsRoute.Link); click("link_mode_chrome")
+    @Test fun link_switchToFull_saves() {
+        host(SettingsRoute.Link); click("link_mode_full")
         assertEquals(LinkMode.Chrome, config.link.mode); assertEquals(1, writes)
-        rule.onNodeWithTag("link_mode_chrome").assertIsSelected()
+        rule.onNodeWithTag("link_mode_full").assertIsSelected()
     }
-    @Test fun link_addDomain_normalizes() {
-        host(SettingsRoute.Link)
-        rule.onNodeWithTag("link_domain_input").performScrollTo().performTextInput(" HTTPS://Example.com/foo ")
-        click("link_domain_add"); assertEquals(listOf("accounts.google.com", "example.com"), config.link.chromeDomains)
-        click("link_domain_remove_example.com"); assertEquals(listOf("accounts.google.com"), config.link.chromeDomains)
+    private fun registerBrowser(pkg: String, label: String) {
+        val pm = shadowOf(ApplicationProvider.getApplicationContext<Application>().packageManager)
+        val component = ComponentName(pkg, "$pkg.Main")
+        pm.addOrUpdateActivity(ActivityInfo().apply {
+            name = component.className; packageName = pkg; nonLocalizedLabel = label
+        })
+        pm.addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_VIEW).apply {
+            addDataScheme("https"); addDataScheme("http")
+        })
     }
-    @Test fun link_addInvalid_showsError() {
+    @Test fun link_chooseBrowser_saves() {
+        registerBrowser("com.brave.browser", "Brave")
         host(SettingsRoute.Link)
-        rule.onNodeWithTag("link_domain_input").performScrollTo().performTextInput("bad domain")
-        click("link_domain_add"); rule.onNodeWithText("正しいドメインを入力してください").assertExists()
+        click("link_browser_com.brave.browser")
+        assertEquals("com.brave.browser", config.link.browserPkg)
+        assertEquals(1, writes)
+        rule.onNodeWithTag("link_browser_com.brave.browser").assertIsSelected()
+    }
+    @Test fun link_missingBrowser_showsActual() {
+        registerBrowser("com.android.chrome", "Chrome")
+        config = config.copy(link = config.link.copy(browserPkg = "missing"))
+        host(SettingsRoute.Link)
+        rule.onNodeWithText("missing (入っていません)").assertExists()
+        rule.onNodeWithText("実際に使うブラウザ: Chrome").assertExists()
+        rule.onNodeWithTag("link_browser_com.android.chrome").assertIsNotSelected()
+        assertEquals("missing", config.link.browserPkg)
+        assertEquals(0, writes)
+    }
+    @Test fun link_noDomainSection() {
+        host(SettingsRoute.Link)
+        rule.onNodeWithText("Chrome に回すドメイン").assertDoesNotExist()
+        rule.onNodeWithTag("link_domain_input").assertDoesNotExist()
+        rule.onNodeWithTag("link_domain_add").assertDoesNotExist()
+        rule.onNodeWithText("ブラウザが入っていません").assertExists()
+        rule.onNodeWithTag("link_mode_split").assertIsSelected()
         assertEquals(0, writes)
     }
     @Test fun gesture_chooseWidth_saves() {

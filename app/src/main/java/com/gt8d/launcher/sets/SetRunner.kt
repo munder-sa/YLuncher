@@ -84,6 +84,14 @@ class SetRunner(private val d: SetRunnerDeps) {
         private set
 
     private var linkFallback: (() -> Unit)? = null
+    private var linkReady: (() -> Unit)? = null
+    private var linkWaitBoth = false
+
+    private fun cancelLinkCallbacks() {
+        linkFallback = null
+        linkReady = null
+        linkWaitBoth = false
+    }
 
     var readyCount: Int = 0
         private set
@@ -131,6 +139,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun home(cfg: LauncherConfig) {
+        cancelLinkCallbacks()
         DiagLog.d("SetRunner", "home")
         if (_opening.value != null) {
             pending = PendingOpen(SetNavigator.HOME, false)
@@ -152,6 +161,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun open(index: Int, cfg: LauncherConfig) {
+        cancelLinkCallbacks()
         DiagLog.d("SetRunner", "open index=$index")
         if (_opening.value != null) {
             pending = PendingOpen(index, false)
@@ -168,6 +178,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
     fun openForBoot(index: Int) {
         val cfg = configForOperation() ?: return
+        cancelLinkCallbacks()
         DiagLog.d("SetRunner", "openForBoot index=$index")
         if (_opening.value != null) {
             pending = PendingOpen(index, true)
@@ -209,16 +220,18 @@ class SetRunner(private val d: SetRunnerDeps) {
         panelResumed = true
     }
 
-    fun openForLink(left: String, onNotSplit: () -> Unit): Boolean {
+    fun openForLink(left: String, right: String, onReady: () -> Unit, onNotSplit: () -> Unit): Boolean {
+        cancelLinkCallbacks()
         val cfg = configForOperation() ?: return false
         if (_opening.value != null) return false
         linkFallback = onNotSplit
+        linkReady = onReady
         openSet(
-            ScreenSet("link", Slot.App(left), Slot.Panel, SplitRatio.R5_5),
+            ScreenSet("link", Slot.App(left), Slot.App(right), SplitRatio.R5_5),
             CurtainTarget(
                 setName = "リンクを開く",
                 left = SlotPreview.App(left, d.labelFor(left)),
-                right = SlotPreview.Panel,
+                right = SlotPreview.App(right, d.labelFor(right)),
                 ratio = SplitRatio.R5_5,
                 position = currentIndex,
                 count = cfg.screenSets.size + 1,
@@ -230,7 +243,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
     private fun notifyLinkNotSplit() {
         val fallback = linkFallback
-        linkFallback = null
+        cancelLinkCallbacks()
         fallback?.invoke()
     }
 
@@ -257,6 +270,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun openSet(set: ScreenSet, target: CurtainTarget, useCurtain: Boolean) {
+        val forLink = linkFallback != null
         val left = set.left.pkg
         val isPanelRight = set.right is Slot.Panel
         val right = when (val r = set.right) {
@@ -282,7 +296,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         val installedPkgs = d.installed()
         if (left !in installedPkgs) {
             DiagLog.d("SetRunner", "left uninstalled: $left")
-            if (!isPanelRight && right in installedPkgs) {
+            if (!isPanelRight && (forLink || right in installedPkgs)) {
                 d.warm.recordAppLaunch(right, d.apps.startApp(right, false))
                 waitSingle(right, startMs, useCurtain)
             } else {
@@ -293,7 +307,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             return
         }
 
-        if (right !in installedPkgs) {
+        if (!forLink && right !in installedPkgs) {
             DiagLog.d("SetRunner", if (isPanelRight) "panel host missing" else "right uninstalled: $right")
             d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
             waitSingle(left, startMs, useCurtain)
@@ -373,6 +387,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         useCurtain: Boolean,
     ) {
         waitKind = WaitKind.Both
+        linkWaitBoth = linkReady != null
 
         fun isBothReady(): Boolean {
             if (!monitoringAvailable) return false
@@ -390,7 +405,6 @@ class SetRunner(private val d: SetRunnerDeps) {
                 val ready = isBothReady()
                 if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
                 if (ready) {
-                    linkFallback = null
                     DiagLog.d("SetRunner", "waitBoth ready left=$left right=$right")
                     waitKind = WaitKind.None
                     cancelTimers()
@@ -513,15 +527,17 @@ class SetRunner(private val d: SetRunnerDeps) {
         DiagLog.d("SetRunner", "onCurtainHidden reason=$reason waitKind=$waitKind")
         val kind = waitKind
         val fallback = linkFallback
-        linkFallback = null
+        val ready = linkReady.takeIf { linkWaitBoth }
+        cancelLinkCallbacks()
         waitKind = WaitKind.None
         cancelTimers()
         openingForBoot = false
         _opening.value = null
-        if (!monitoringAvailable) {
-            fallback?.invoke()
-        } else if (reason == HideReason.Safety && kind == WaitKind.Both) {
-            fallback?.invoke()
+        when (reason) {
+            HideReason.Ready, HideReason.Timed -> ready?.invoke()
+            HideReason.Failed, HideReason.Safety -> fallback?.invoke()
+        }
+        if (monitoringAvailable && reason == HideReason.Safety && kind == WaitKind.Both) {
             d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
             d.messenger.showSwitchFailed()
         }

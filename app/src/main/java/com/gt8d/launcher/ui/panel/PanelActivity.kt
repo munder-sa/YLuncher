@@ -13,9 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.stockLauncherIntent
 import com.gt8d.launcher.safety.SafetyGuard
@@ -26,7 +23,6 @@ import com.gt8d.launcher.settings.SettingsRoute
 import com.gt8d.launcher.settings.SafetyRecoveryScreen
 import com.gt8d.launcher.settings.safetyRecover
 import com.gt8d.launcher.diag.DiagLog
-import com.gt8d.launcher.link.BrowserPane
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.split.AndroidActivityLauncher
@@ -35,7 +31,6 @@ import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import com.gt8d.launcher.ui.layout.launcherBackground
 import com.gt8d.launcher.ui.layout.stripSafePadding
-import kotlinx.coroutines.launch
 
 class PanelActivity : ComponentActivity() {
     private val forwarder by lazy { AppGraph.forwarderFactory() }
@@ -45,12 +40,10 @@ class PanelActivity : ComponentActivity() {
     internal var launchComponent: (ComponentName, Boolean) -> Boolean =
         { component, adjacent -> activityLauncher.startComponent(component, adjacent) }
     private var inSplitState by mutableStateOf(false)
-    private var browserUrl: String? by mutableStateOf(null)
     private var settingsOpen by mutableStateOf(false)
     private var settingsInitialRoute: SettingsRoute? = null
     internal val settingsShown: Boolean get() = settingsOpen
     private var safetyMode = false
-    internal val shownBrowserUrl: String? get() = browserUrl
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,14 +52,8 @@ class PanelActivity : ComponentActivity() {
         settingsOpen = savedInstanceState?.getBoolean("settings_open") ?: false
         settingsInitialRoute = if (savedInstanceState?.getBoolean("settings_new_set") == true) SettingsRoute.SetEdit(null, true) else null
         if (savedInstanceState?.getString("settings_route") == "lists") settingsInitialRoute = SettingsRoute.Lists
-        browserUrl = savedInstanceState?.getString("browser_url")
         inSplitState = isInMultiWindowMode
         onBackPressedDispatcher.addCallback(this) { DiagLog.d("Panel", "back ignored") }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                AppGraph.runner.opening.collect { if (it == null) consumePendingUrl() }
-            }
-        }
         setContent {
             LauncherTheme {
                 if (safetyMode) {
@@ -89,10 +76,7 @@ class PanelActivity : ComponentActivity() {
                             }
                         },
                 ) {
-                    val url = browserUrl
-                    if (url != null) {
-                        BrowserPane(url, onClose = { browserUrl = null }, modifier = Modifier.fillMaxSize())
-                    } else if (settingsOpen) {
+                    if (settingsOpen) {
                         SettingsHost(SettingsActions.forApp(this@PanelActivity),
                             onExit = { settingsOpen = false }, onSafetyCleared = ::goHome,
                             initialRoute = settingsInitialRoute,
@@ -147,7 +131,6 @@ class PanelActivity : ComponentActivity() {
         EdgeStripService.ensureRunning(this)
         if (isInMultiWindowMode) {
             AppGraph.runner.panelResumedInSplit()
-            consumePendingUrl()
         }
         forwarder.onShown(isInMultiWindowMode, ::goHome)
     }
@@ -161,7 +144,6 @@ class PanelActivity : ComponentActivity() {
         forwarder.onMultiWindowChanged(isInMultiWindowMode)
         if (isInMultiWindowMode) {
             AppGraph.runner.panelResumedInSplit()
-            consumePendingUrl()
         }
     }
 
@@ -182,19 +164,10 @@ class PanelActivity : ComponentActivity() {
         setIntent(intent)
     }
 
-    private fun consumePendingUrl() {
-        if (safetyMode) return
-        if (AppGraph.runner.opening.value != null) return
-        if (!isInMultiWindowMode) return
-        val url = AppGraph.pendingUrl.take() ?: return
-        browserUrl = url
-    }
-
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("settings_open", settingsOpen)
         outState.putBoolean("settings_new_set", (settingsInitialRoute as? SettingsRoute.SetEdit)?.fromSplitButton == true)
         if (settingsInitialRoute == SettingsRoute.Lists) outState.putString("settings_route", "lists")
-        outState.putString("browser_url", browserUrl)
         super.onSaveInstanceState(outState)
     }
 

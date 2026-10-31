@@ -70,8 +70,7 @@ class LinkEntryActivity : ComponentActivity() {
             }
         } catch (e: Exception) {
             DiagLog.d("Link", "entry failed: $e")
-            AppGraph.pendingUrl.take()
-            url?.let { openFullscreen(applicationContext, it) }
+            url?.let { incoming -> openWithConfig(incoming, LinkConfig()) }
             finish()
         }
     }
@@ -79,44 +78,47 @@ class LinkEntryActivity : ComponentActivity() {
     private fun routeAndOpen(incoming: String, config: LinkConfig, clues: FrontClues) {
         try {
             val front = LinkRouter.detectFront(clues, packageName)
-            val route = LinkRouter.route(incoming, config,
+            val browser = BrowserChooser.choose(config.browserPkg, BrowserChooser.installedBrowsers(packageManager))
+            if (browser == null) {
+                DiagLog.d("Link", "no browser")
+                return
+            }
+            val route = LinkRouter.route(incoming, config.copy(browserPkg = browser),
                 front, AppGraph.selector.current() == SplitMode.Vendor)
             DiagLog.d("Link", "front=$front route=$route ref=${clues.referrer}")
+            val context = applicationContext
+            val sendView = { openBrowser(context, incoming, browser) }
             when (route) {
-                LinkRoute.Chrome -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(incoming))
-                    .setPackage(LinkRouter.CHROME_PKG).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                LinkRoute.FullscreenBrowser -> openFullscreen(applicationContext, incoming)
-                LinkRoute.PanelTaskBrowser -> {
-                    AppGraph.pendingUrl.set(incoming)
-                }
-                is LinkRoute.VendorSplitThenBrowser -> {
-                    val context = applicationContext
-                    AppGraph.pendingUrl.set(incoming)
-                    val accepted = AppGraph.runner.openForLink(route.left) {
-                        AppGraph.pendingUrl.take()?.let { openFullscreen(context, it) }
-                    }
-                    if (!accepted) {
-                        AppGraph.pendingUrl.take()
-                        openFullscreen(context, incoming)
+                LinkRoute.FullscreenBrowser -> sendView()
+                is LinkRoute.SplitWithBrowser -> {
+                    if (!AppGraph.runner.openForLink(route.left, browser, onReady = sendView, onNotSplit = sendView)) {
+                        sendView()
                     }
                 }
             }
         } catch (e: Exception) {
             DiagLog.d("Link", "entry failed: $e")
-            AppGraph.pendingUrl.take()
-            openFullscreen(applicationContext, incoming)
+            openWithConfig(incoming, config)
         } finally {
             finish()
         }
     }
 
+    private fun openWithConfig(url: String, config: LinkConfig) {
+        runCatching {
+            val browser = BrowserChooser.choose(config.browserPkg, BrowserChooser.installedBrowsers(packageManager))
+            if (browser == null) DiagLog.d("Link", "no browser")
+            else openBrowser(applicationContext, url, browser)
+        }.onFailure { DiagLog.d("Link", "browser lookup failed: $it") }
+    }
+
     companion object {
         const val CONFIG_WAIT_MS = 1_500L
-        private fun openFullscreen(context: Context, url: String) {
+        private fun openBrowser(context: Context, url: String, browser: String) {
             runCatching {
-                context.startActivity(Intent(context, FullscreenBrowserActivity::class.java)
-                    .putExtra(EXTRA_URL, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }.onFailure { DiagLog.d("Link", "fullscreen failed: $it") }
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .setPackage(browser).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.onFailure { DiagLog.d("Link", "browser VIEW failed: $it") }
         }
     }
 }

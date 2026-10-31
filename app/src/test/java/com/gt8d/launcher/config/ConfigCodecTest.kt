@@ -6,6 +6,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ConfigCodecTest {
+    @Test fun browserPkg_oldDataDefaultsAndNonDefaultRoundTrip() {
+        val base = Defaults.build(emptySet())
+        val legacy = ConfigCodec.encode(base).replace(Regex(",?\\\"browserPkg\\\":\\\"[^\\\"]*\\\""), "")
+        assertEquals("com.android.chrome", ConfigCodec.decode(legacy)!!.link.browserPkg)
+        val brave = base.copy(link = base.link.copy(browserPkg = "com.brave.browser"))
+        assertEquals(brave, ConfigCodec.decode(ConfigCodec.encode(brave)))
+    }
+
 
     @Test
     fun migrate_v1_nonDefaultSettings_preservesWholeConfig() {

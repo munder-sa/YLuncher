@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
 import com.gt8d.launcher.config.*
 import com.gt8d.launcher.curtain.*
-import com.gt8d.launcher.link.BrowserPane
 import com.gt8d.launcher.settings.*
 import com.gt8d.launcher.split.SplitMode
 import com.gt8d.launcher.ui.apps.*
@@ -49,7 +48,7 @@ class OtherScreensLayoutTest(private val width: Int, private val height: Int, pr
         RuntimeEnvironment.setQualifiers("w${width}dp-h${height}dp")
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         WindowCompat.setDecorFitsSystemWindows(controller.get().window, false)
-        var screen by mutableStateOf("browser")
+        var screen by mutableStateOf("boot")
         var density = 0f
         val config = LauncherConfig(screenSets = listOf(ScreenSet("sample", Slot.App("a"), Slot.Panel)), homeApps = listOf("a", "b"), panelApps = listOf("a"), dockApps = listOf("a"), idleApp = "a")
         val sets = MutableStateFlow(config.screenSets)
@@ -66,7 +65,6 @@ class OtherScreensLayoutTest(private val width: Int, private val height: Int, pr
                         Box(Modifier.fillMaxSize().testTag("other_root")) {
                             key(screen) {
                                 when (screen) {
-                                    "browser" -> BrowserPane("about:blank", {}, Modifier.fillMaxSize())
                                     "boot" -> BootScreen(CurtainTarget("セット", SlotPreview.App("a", "長いアプリ名"), SlotPreview.Panel, SplitRatio.R6_4, 1, 4), 3, false, {}, {})
                                     "safety" -> SafetyRecoveryScreen({}, {})
                                     "apps" -> AppListScreen((1..12).map { AppListEntry("app$it", "Main", "長いアプリケーション名 $it") }, { null }, {}, {})
@@ -88,7 +86,7 @@ class OtherScreensLayoutTest(private val width: Int, private val height: Int, pr
                 }
             }
             controller.visible()
-            for (name in listOf("browser", "boot", "root", "sets", "edit", "lists", "link", "gesture", "bootSettings", "permissions", "prep", "safety", "apps")) {
+            for (name in listOf("boot", "root", "sets", "edit", "lists", "link", "gesture", "bootSettings", "permissions", "prep", "safety", "apps")) {
                 rule.runOnIdle { screen = name; androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications() }
                 val root = rule.onNodeWithTag("other_root").fetchSemanticsNode().boundsInRoot
                 assertEquals(width * density, root.width, 0.5f)
@@ -115,13 +113,6 @@ class OtherScreensLayoutTest(private val width: Int, private val height: Int, pr
                 }
                 val texts = rule.onAllNodes(SemanticsMatcher.expectValue(OneLineKey, true), useUnmergedTree = true)
                 for (i in texts.fetchSemanticsNodes().indices) assertEquals(1, texts[i].textLayout().lineCount)
-                if (name == "browser") {
-                    val chrome = rule.onNodeWithTag("browser_chrome")
-                    if (width < 600) {
-                        chrome.assertContentDescriptionEquals("Chromeで開き直す")
-                        assertFalse(SemanticsProperties.Text in chrome.fetchSemanticsNode().config)
-                    } else chrome.assertTextEquals("Chromeで開き直す")
-                }
                 if (name == "boot") {
                     val a = rule.onNodeWithTag("boot_open_now").fetchSemanticsNode().boundsInRoot
                     val b = rule.onNodeWithTag("boot_stay_home").fetchSemanticsNode().boundsInRoot
