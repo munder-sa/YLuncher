@@ -5,6 +5,7 @@
         <package android:name="com.gt8d.launcher" />
     </queries>
     <application
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.PanelHost">
         <activity
