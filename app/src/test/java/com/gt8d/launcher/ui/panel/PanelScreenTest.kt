@@ -50,45 +50,13 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
-    @Test fun panelScreen_wideHome_hintAtZero_isDisplayedAndCountedOnce() {
-        val preferences = app.getSharedPreferences("home_hint", Application.MODE_PRIVATE)
-        preferences.edit().putInt("shown_count", 0).commit()
-        var revision by androidx.compose.runtime.mutableStateOf(0)
-        rule.setContent {
-            LauncherTheme {
-                PanelScreen(false, homeWide = true,
-                    homeConfig = Defaults.build(emptySet()).copy(idleApp = "missing$revision"),
-                    onLaunchApp = {})
-            }
-        }
-        rule.onNodeWithTag("home_hint").assertIsDisplayed()
-            .assertTextEquals("端からスワイプでセットを切り替え・長押しでホーム")
-        rule.runOnIdle {
-            assertEquals(1, preferences.getInt("shown_count", 0))
-            revision++
-        }
-        rule.onNodeWithTag("home_hint").assertIsDisplayed()
-        rule.runOnIdle { assertEquals(1, preferences.getInt("shown_count", 0)) }
-    }
-
-    @Test fun panelScreen_wideHome_hintAtFive_isHidden() {
-        val preferences = app.getSharedPreferences("home_hint", Application.MODE_PRIVATE)
-        preferences.edit().putInt("shown_count", 5).commit()
+    // ホームの操作の案内はユーザーの判断で出さない(2026-10-31、シンプルに)。
+    @Test fun panelScreen_wideHome_showsNoHint() {
         rule.setContent {
             LauncherTheme { PanelScreen(false, homeWide = true, onLaunchApp = {}) }
         }
+        rule.onNodeWithText("端からスワイプでセットを切り替え・長押しでホーム").assertDoesNotExist()
         rule.onNodeWithTag("home_hint").assertDoesNotExist()
-        rule.runOnIdle { assertEquals(5, preferences.getInt("shown_count", 0)) }
-    }
-
-    @Test fun panelScreen_wideHome_fifthHint_remainsVisibleUntilLeaving() {
-        val preferences = app.getSharedPreferences("home_hint", Application.MODE_PRIVATE)
-        preferences.edit().putInt("shown_count", 4).commit()
-        rule.setContent {
-            LauncherTheme { PanelScreen(false, homeWide = true, onLaunchApp = {}) }
-        }
-        rule.onNodeWithTag("home_hint").assertIsDisplayed()
-        rule.runOnIdle { assertEquals(5, preferences.getInt("shown_count", 0)) }
     }
 
     @Test fun panelScreen_appListSettings_closesListAndOpensSettingsOnce() {
