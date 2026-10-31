@@ -6,7 +6,7 @@ adb() { "${adb_cmd[@]}" "$@"; }
 with_home=0
 only=''
 browser=com.android.chrome
-names=(link_cold_noTasks link_browserTaskPresent link_warm_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel link_appPanelFront)
+names=(link_cold_noTasks link_browserTaskPresent link_warm_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel set_panelCard_switch link_appPanelFront)
 while (($#)); do
     case "$1" in
         --with-ylauncher-home) with_home=1; shift ;;
@@ -153,6 +153,56 @@ parse_slots() {
     END {emit()}' "$1"
 }
 reasons=()
+# UI XML をタグ単位に分け、ラベル自身または親の選択状態と bounds を読む。
+panel_element() {
+    local label=$1 file=$2 selected=${3:-0}
+    sed 's/></>\n</g' "$file" | awk -v label="$label" -v selected="$selected" '
+        /<\/node>/ {delete chosen[depth]; depth--; next}
+        /<node / {
+            depth++
+            chosen[depth]=($0 ~ /selected="true"/) || chosen[depth-1]
+            if (index($0, "text=\"" label "\"") || index($0, "content-desc=\"" label "\"")) {
+                if (!selected || chosen[depth]) {
+                    s=$0
+                    if (s ~ /bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"/) {
+                        sub(/^.*bounds="\[/,"",s); sub(/".*/,"",s)
+                        gsub(/\]\[/,",",s); gsub(/\]/,"",s)
+                        split(s,a,",")
+                        if (a[3]>a[1] && a[4]>a[2]) {
+                            print int((a[1]+a[3])/2), int((a[2]+a[4])/2); exit
+                        }
+                    }
+                }
+            }
+            if (/\/>$/) {delete chosen[depth]; depth--}
+        }'
+}
+dump_panel() {
+    adb shell uiautomator dump /sdcard/ui.xml && adb exec-out cat /sdcard/ui.xml > "$1"
+}
+tap_panel_label() {
+    local label=$1 file=$2 point x y
+    dump_panel "$file" || { reasons+=("UI dump に失敗: $label"); return 1; }
+    point=$(panel_element "$label" "$file")
+    [[ -n $point ]] || { reasons+=("UI 要素または有効な bounds がない: $label"); return 1; }
+    read -r x y <<< "$point"
+    adb shell input tap "$x" "$y"
+}
+restore_panel_apps() {
+    # 途中失敗でも現在の番号に依存しない、既存のセット1起動手順を使う。
+    prepare_and_run set_strip_coldPanel || return 1
+    adb logcat -d -v time GT8D:D '*:S' > "$active/restore-logcat.txt" || return 1
+    grep -Eq '\[SetRunner\] open index=1([^0-9]|$)' "$active/restore-logcat.txt" || return 1
+    grep -Fq '[SetRunner] waitBoth ready' "$active/restore-logcat.txt" || return 1
+    adb shell dumpsys activity activities > "$active/restore-activities.txt" || return 1
+    parse_slots "$active/restore-activities.txt" > "$active/restore-slots.txt"
+    grep -Eq '^LEFT com\.google\.android\.youtube/' "$active/restore-slots.txt" || return 1
+    grep -Eq '^RIGHT com\.gt8d\.launcher/(\.ui\.panel\.PanelActivity|com\.gt8d\.launcher\.ui\.panel\.PanelActivity)$' "$active/restore-slots.txt" || return 1
+    tap_panel_label アプリ "$active/restore-ui.xml" || return 1
+    sleep 2
+    dump_panel "$active/restore-ui-after.xml" || return 1
+    [[ -n $(panel_element アプリ "$active/restore-ui-after.xml" 1) ]]
+}
 expect_log() { if ! grep -Eq "$1" "$active/logcat.txt"; then reasons+=("ログ不足: $1"); fi; }
 no_safety() { if grep -Fq 'reason=Safety' "$active/logcat.txt"; then reasons+=('reason=Safety が発生'); fi; }
 left_is() {
@@ -200,6 +250,18 @@ judge() {
     local name=$1 right left id top
     parse_slots "$active/activities.txt" > "$active/slots.txt"
     case "$name" in
+        set_panelCard_switch)
+            expect_log '\[SetRunner\] open index=2([^0-9]|$)'
+            expect_log '\[SetRunner\] waitBoth ready'
+            no_safety
+            split_shown
+            left_is com.google.android.youtube
+            right_is com.apple.android.music
+            left=$(sed -n 's/.*openSplit left=\([^ ]*\) right=.*/\1/p' "$active/logcat.txt" | tail -n 1)
+            right=$(sed -n 's/.*openSplit left=[^ ]* right=\([^ ]*\).*/\1/p' "$active/logcat.txt" | tail -n 1)
+            [[ $left == com.google.android.youtube ]] || reasons+=("openSplit の左が YouTube でない: ${left:-取得できない}")
+            [[ $right == com.apple.android.music ]] || reasons+=("openSplit の右が Apple Music でない: ${right:-取得できない}")
+            ;;
         link_appPanelFront)
             expect_log '\[Link\] front=AppPanel\(left=com\.google\.android\.youtube\)'
             expect_log 'route=SplitWithBrowser\(left=com\.google\.android\.youtube\)'
@@ -261,6 +323,7 @@ prepare_and_run() {
     local name=$1
     case "$name" in
         link_cold_noTasks) reset cold || return 1 ;;
+        set_panelCard_switch) adb logcat -c && adb logcat -b events -c || return 1 ;;
         link_appPanelFront)
             adb shell dumpsys activity activities > "$active/activities-before.txt" || return 1
             home_task_ids "$active/activities-before.txt" > "$active/home-tasks-before.txt"
@@ -292,6 +355,12 @@ prepare_and_run() {
             ;;
     esac
     case "$name" in
+        set_panelCard_switch)
+            tap_panel_label セット "$active/sets-ui.xml" || return 1
+            sleep 2
+            tap_panel_label 'YouTube | Apple Music' "$active/card-ui.xml" || return 1
+            sleep 10
+            ;;
         link_fromYlHome) link com.google.android.gm && sleep 6 ;;
         link_appPanelFront) link com.google.android.youtube && sleep 10 ;;
         set_strip_coldPanel) adb shell input swipe 20 540 500 540 300 && sleep 10 ;;
@@ -305,7 +374,8 @@ run() {
     local name=$1 suffix=$2 version=${3:-$2} prerequisite=''
     case "$name" in
         link_browserTaskPresent) prerequisite=link_cold_noTasks ;;
-        link_appPanelFront) prerequisite=set_strip_coldPanel ;;
+        set_panelCard_switch) prerequisite=set_strip_coldPanel ;;
+        link_appPanelFront) prerequisite=set_panelCard_switch ;;
     esac
     if [[ -n $prerequisite ]] && [[ $last_name != "$prerequisite" || $last_suffix != "$version" || $last_pass != 1 ]]; then
         row "$name$suffix" SKIP "前提の $prerequisite が不合格"
@@ -326,12 +396,19 @@ run() {
     else
         last_pass=1
         case "$name" in
+            set_panelCard_switch) row "$name$suffix" PASS 'open index=2、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Apple Music、openSplit の左右も一致' ;;
             link_appPanelFront) row "$name$suffix" PASS 'front=AppPanel(left=com.google.android.youtube)、route=SplitWithBrowser(left=com.google.android.youtube)、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Chrome、VIEW は分割成立後、ホーム affinity のタスク増加なし' ;;
             link_fromYlHome) row "$name$suffix" PASS 'front=Home、route=FullscreenBrowser、ブラウザへの VIEW あり、分割枠なし、最前面 Chrome' ;;
             set_strip_coldPanel) row "$name$suffix" PASS 'next base=0 -> 1、waitBoth ready、openSplit の左 YouTube、右 com.gt8d.launcher.panel、右最前面 PanelActivity、Safety なし' ;;
             link_browserTaskPresent) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt) または AppApp(left=com.openai.chatgpt, …)、route=SplitWithBrowser(left=com.openai.chatgpt)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
             *) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt)、route=SplitWithBrowser(left=com.openai.chatgpt)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
         esac
+    fi
+    if [[ $name == set_panelCard_switch ]]; then
+        if ! restore_panel_apps > "$active/restore-commands.txt" 2>&1; then
+            row "$name$suffix" WARN 'セット1とパネルの「アプリ」表示を復元できない。次の場面の前提を無効化'
+            last_pass=0
+        fi
     fi
     active=''
 }
@@ -351,16 +428,28 @@ for name in "${names[@]}"; do
     if [[ -n $only ]]; then
         case "$name" in
             link_browserTaskPresent) run link_cold_noTasks '@prerequisite' '' ;;
-            link_appPanelFront) run set_strip_coldPanel '@prerequisite' '' ;;
+            set_panelCard_switch) run set_strip_coldPanel '@prerequisite' '' ;;
+            link_appPanelFront)
+                run set_strip_coldPanel '@prerequisite' ''
+                run set_panelCard_switch '@prerequisite' ''
+                ;;
         esac
     fi
     run "$name" ''
 done
 if ((with_home)); then
     switch_home com.gt8d.launcher || { row setup FAIL 'YLuncher ホームへの切り替えに失敗'; exit 1; }
-    for name in link_cold_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel link_appPanelFront; do
+    for name in link_cold_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel set_panelCard_switch link_appPanelFront; do
         [[ -z $only || $only == "$name" ]] || continue
-        if [[ $name == link_appPanelFront && -n $only ]]; then run set_strip_coldPanel '@prerequisite@ylhome' '@ylhome'; fi
+        if [[ -n $only ]]; then
+            case "$name" in
+                set_panelCard_switch) run set_strip_coldPanel '@prerequisite@ylhome' '@ylhome' ;;
+                link_appPanelFront)
+                    run set_strip_coldPanel '@prerequisite@ylhome' '@ylhome'
+                    run set_panelCard_switch '@prerequisite@ylhome' '@ylhome'
+                    ;;
+            esac
+        fi
         run "$name" '@ylhome'
     done
 fi
