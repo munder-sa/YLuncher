@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
@@ -61,7 +62,7 @@ class BootScreenTest {
     val rule = createComposeRule()
 
     private fun sampleTarget() = CurtainTarget(
-        setName = "セット1",
+        setName = "1  YouTube | パネル",
         left = SlotPreview.App("com.google.android.youtube", "YouTube"),
         right = SlotPreview.Panel,
         ratio = SplitRatio.R6_4,
@@ -91,6 +92,7 @@ class BootScreenTest {
             .assertTextEquals("3 秒後に前回のセットを開きます")
 
         val openNowNode = rule.onNodeWithTag("boot_open_now")
+        rule.onNodeWithText("1  YouTube | パネル").assertIsDisplayed()
         val stayHomeNode = rule.onNodeWithTag("boot_stay_home")
         openNowNode.assertIsDisplayed()
         stayHomeNode.assertIsDisplayed()

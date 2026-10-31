@@ -1,6 +1,7 @@
 package com.gt8d.launcher.sets
 
 import com.gt8d.launcher.apps.OwnPackages
+import com.gt8d.launcher.ui.home.numberedSetLabel
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Side
@@ -698,7 +699,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             is Slot.App -> SlotPreview.App(r.pkg, d.labelFor(r.pkg))
         }
         return CurtainTarget(
-            setName = "セット$index",
+            setName = numberedSetLabel(index, set, d.labelFor),
             left = leftPreview,
             right = rightPreview,
             ratio = set.ratio,
