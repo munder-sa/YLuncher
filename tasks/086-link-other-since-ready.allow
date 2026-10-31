@@ -1,0 +1,5 @@
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/link/LinkEntryActivity.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/test/java/com/gt8d/launcher/link/LinkEntryActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.link.*'
