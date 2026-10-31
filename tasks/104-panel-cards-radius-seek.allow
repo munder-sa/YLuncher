@@ -1,0 +1,14 @@
+create app/src/main/java/com/gt8d/launcher/ui/panel/PanelSetCards.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeSetCards.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeMiniPlayer.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/MediaCard.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/SeekBar.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/PanelSetCardsTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/MediaCardTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeMiniPlayerTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeSetCardsTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.layout.*'
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
