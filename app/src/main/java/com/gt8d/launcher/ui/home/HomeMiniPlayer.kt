@@ -70,10 +70,12 @@ fun HomeMiniPlayer(
                 val artistHeight = now.artist?.let { lineHeight(it, 20) } ?: 0.dp
                 val timeHeight = lineHeight("0:00", 20)
                 val seekHeight = if ((now.durationMs ?: 0L) > 0L) 72.dp else 0.dp
-                val wrapFavorite = now.hasFavorite && maxWidth < 336.dp
-                val controlsHeight = if (wrapFavorite) 176.dp else 96.dp
-                val required = titleHeight + artistHeight + seekHeight + controlsHeight
+                val controlsHeight = 96.dp
                 fun layout(spacing: PlayerSpacing): PlayerLayout {
+                    val textHeight = titleHeight + artistHeight +
+                        (if (now.artist != null) spacing.titleToArtist else 0.dp)
+                    val titleRowHeight = maxOf(textHeight, if (now.hasFavorite) 72.dp else 0.dp)
+                    val required = titleRowHeight + seekHeight + controlsHeight
                     fun gaps(details: Boolean, art: Boolean) = playerGaps(
                         spacing, details, art, now.artist != null, seekHeight > 0.dp)
                     fun fixed(details: Boolean, art: Boolean) = required +
@@ -111,26 +113,30 @@ fun HomeMiniPlayer(
                         else Image(artwork.asImageBitmap(), null, artModifier)
                     }
                     Spacer(Modifier.height(gaps.beforeTitle))
-                    MarqueeText(now.title, Modifier.fillMaxWidth(), tag = "player_title",
-                        fontSize = 28.sp, fontWeight = FontWeight.SemiBold, restartKey = restartKey)
-                    now.artist?.let {
-                        Spacer(Modifier.height(gaps.beforeArtist))
-                        MarqueeText(it, Modifier.fillMaxWidth(), tag = "player_artist", color = Palette.Muted, restartKey = restartKey)
+                    Row(Modifier.fillMaxWidth().testTag("player_title_row"),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).testTag("player_text")) {
+                            MarqueeText(now.title, Modifier.fillMaxWidth(), tag = "player_title",
+                                fontSize = 28.sp, fontWeight = FontWeight.SemiBold, restartKey = restartKey)
+                            now.artist?.let {
+                                Spacer(Modifier.height(gaps.beforeArtist))
+                                MarqueeText(it, Modifier.fillMaxWidth(), tag = "player_artist", color = Palette.Muted, restartKey = restartKey)
+                            }
+                        }
+                        if (now.hasFavorite) {
+                            Spacer(Modifier.width(8.dp))
+                            PlayerControl(MediaAction.Favorite, onAction)
+                        }
                     }
                     Spacer(Modifier.height(gaps.beforeSeek))
                     SeekBar(now.durationMs, positionMs, onSeek, tag = "player_seek", showTimes = showDetails, timesTag = "player_times")
                     Spacer(Modifier.height(gaps.beforeControls))
                     Spacer(Modifier.weight(1f))
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (wrapFavorite) PlayerControl(MediaAction.Favorite, onAction)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            if (now.hasFavorite && !wrapFavorite) PlayerControl(MediaAction.Favorite, onAction)
-                            PlayerControl(MediaAction.Prev, onAction)
-                            PlayerControl(if (now.playing) MediaAction.Pause else MediaAction.Play, onAction)
-                            PlayerControl(MediaAction.Next, onAction)
-                        }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        PlayerControl(MediaAction.Prev, onAction)
+                        PlayerControl(if (now.playing) MediaAction.Pause else MediaAction.Play, onAction)
+                        PlayerControl(MediaAction.Next, onAction)
                     }
                 }
             }
@@ -142,7 +148,7 @@ private data class PlayerGaps(
     val beforeArt: Dp, val beforeTitle: Dp, val beforeArtist: Dp,
     val beforeSeek: Dp, val beforeControls: Dp,
 ) {
-    val total get() = beforeArt + beforeTitle + beforeArtist + beforeSeek + beforeControls
+    val total get() = beforeArt + beforeTitle + beforeSeek + beforeControls
 }
 
 private data class PlayerLayout(val showDetails: Boolean, val artSize: Dp, val gaps: PlayerGaps, val fixedHeight: Dp)

@@ -28,3 +28,9 @@ Apple Music の再生画面にならい、☆を**曲名・アーティスト名
 
 ## 報告
 変更点、テストの結果、**決めたこと**。
+
+## 補足(点検の反映・司令塔が実機で測った値)
+- 実機の値: `wm density` = 238(1dp = 1.4875px)、画面 1920x1080px、両端の帯の分を除いたホームの幅は 1824px ≒ 1226dp、ミニプレイヤーの外幅は実測 608px ≒ **409dp**(`PanelLayout.homePlayerWidthDp(1226f)`)、内幅 ≒ 329dp。テストの「実機相当」はこの幅(409dp)を使う。336dp のケースは狭い場合の回帰として残してよい。
+- 高さの計算: 曲名とアーティスト名の間の余白(`beforeArtist`)は、曲名の行(Row)の中の高さに含め、`gaps.total` からは除く(二重に足さない)。
+- 曲名の行の `Row` に testTag `player_title_row`、文字の `Column` に `player_text` を付ける。既存の余白テスト(ジャケットの下端と曲名の上端 24dp)は、**ジャケットの下端と `player_title_row` の上端** の差 24dp に合わせる(中央そろえで曲名の上端がずれうるため)。アーティスト名とシークバーの 16dp 以上も `player_title_row` の下端で測る。
+- `favorite_isBesideTitle` に、`player_text` の右端と `player_fav` の左端の差が 8dp(±1dp)であることを足す(文字と☆が重ならない)。

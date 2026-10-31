@@ -29,12 +29,12 @@ class HomeMiniPlayerTest {
     private val song = NowPlaying("music", "長い曲名".repeat(30), "アーティスト", null, 120000L, true, true)
     private val idle = AppInfo("idle", "音楽アプリ", null, true)
     private fun host(now: NowPlaying? = song, height: Int = 800, idleApp: AppInfo = idle,
-                     installed: Boolean = true,
+                     installed: Boolean = true, width: Int = 360,
                      onAction: (MediaAction) -> Unit = {}, onSeek: (Long) -> Unit = {}, onLaunch: (String) -> Unit = {}) {
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
             HomeMiniPlayer(now, idleApp, 30000L, { AppInfo(it, "音楽", null, installed) },
-                onAction, onSeek, onLaunch, Modifier.size(360.dp, height.dp))
+                onAction, onSeek, onLaunch, Modifier.size(width.dp, height.dp))
         } }
         controller.visible()
     }
@@ -140,6 +140,30 @@ class HomeMiniPlayerTest {
     @Test fun noFavorite_hidesFav() {
         host(song.copy(hasFavorite = false))
         rule.onNodeWithTag("player_fav").assertDoesNotExist()
+        rule.onNodeWithTag("player_text").assertWidthIsEqualTo(280.dp)
+    }
+    @Test fun favorite_isBesideTitle() {
+        assertFavoriteBesideTitle(width = 409)
+    }
+    @Test fun favorite_isBesideTitle_narrowWidth() {
+        assertFavoriteBesideTitle(width = 336)
+    }
+    private fun assertFavoriteBesideTitle(width: Int) {
+        host(width = width, height = 800)
+        fun bounds(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        val favorite = bounds("player_fav")
+        val density = rule.density.density
+        assertTrue(favorite.center.y >= bounds("player_title").top)
+        assertTrue(favorite.center.y <= bounds("player_artist").bottom)
+        assertTrue(favorite.right <= bounds("home_player").right - 40f * density + density)
+        assertEquals(8f * density, favorite.left - bounds("player_text").right, density)
+        assertTrue(favorite.bottom < bounds("player_play").top)
+    }
+    @Test fun controls_singleRow() {
+        host(width = 336)
+        fun centerY(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center.y
+        assertEquals(centerY("player_play"), centerY("player_prev"), 1f)
+        assertEquals(centerY("player_play"), centerY("player_next"), 1f)
     }
     @Test fun idle_showsIdleApp_andOpens() {
         var pkg: String? = null
@@ -165,12 +189,11 @@ class HomeMiniPlayerTest {
         host(height = 800)
         fun bounds(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
         val art = bounds("player_art")
-        val title = bounds("player_title")
-        val artist = bounds("player_artist")
+        val titleRow = bounds("player_title_row")
         val seek = bounds("player_seek")
         val density = rule.density.density
-        assertEquals(24f * density, title.top - art.bottom, 1f * density)
-        assertTrue(seek.top - artist.bottom >= 16f * density)
+        assertEquals(24f * density, titleRow.top - art.bottom, 1f * density)
+        assertTrue(seek.top - titleRow.bottom >= 16f * density)
         val player = bounds("home_player")
         listOf("player_art", "player_title", "player_artist", "player_seek", "player_times",
             "player_prev", "player_play", "player_next", "player_fav").forEach {
