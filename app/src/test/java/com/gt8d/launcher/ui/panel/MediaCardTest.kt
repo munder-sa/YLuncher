@@ -138,6 +138,38 @@ class MediaCardTest {
     @Test
     fun mediaCard_pointerSeek_commitsEndOnceOnRelease() = pointerSeek(0L, true, 120000L)
 
+    @Test fun seek_tapAndBelowSlopRestoreDisplay_dragCommitsOnce_andNextTapDoesNotCommit() {
+        val seeks = mutableListOf<Long>()
+        var slop = 0f
+        rule.setContent {
+            slop = androidx.compose.ui.platform.LocalViewConfiguration.current.touchSlop
+            LauncherTheme { androidx.compose.foundation.layout.Column {
+                SeekBar(120000L, 30000L, { seeks.add(it) })
+            } }
+        }
+        val progress = rule.onNodeWithTag("progress")
+        fun assertRestored() {
+            rule.onNodeWithText("0:30").assertExists()
+            rule.onNodeWithText("-1:30").assertExists()
+        }
+        progress.performTouchInput { click(center) }
+        assertEquals(emptyList<Long>(), seeks)
+        assertRestored()
+        progress.performTouchInput { down(center); moveTo(center + Offset(slop * 0.5f, 0f)); up() }
+        assertEquals(emptyList<Long>(), seeks)
+        assertRestored()
+        progress.performTouchInput { down(center); moveTo(center + Offset(slop + 1f, 0f)) }
+        assertEquals(emptyList<Long>(), seeks)
+        rule.onNodeWithText("0:30").assertDoesNotExist()
+        progress.performTouchInput { up() }
+        assertEquals(1, seeks.size)
+        assertTrue(seeks.single() > 30000L)
+        assertRestored()
+        progress.performTouchInput { click(center) }
+        assertEquals(1, seeks.size)
+        assertRestored()
+    }
+
     @Test
     fun mediaCard_pointerSeek_commitsStartOnceOnRelease() = pointerSeek(60000L, false, 0L)
 

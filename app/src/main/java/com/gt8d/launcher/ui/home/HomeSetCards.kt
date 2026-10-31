@@ -59,7 +59,7 @@ fun HomeSetCards(
                 for (row in sets.indices.toList().chunked(columns)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                         for (index in row) {
-                            val shape = RoundedCornerShape(28.dp)
+                            val shape = RoundedCornerShape(24.dp)
                             run {
                                 val set = sets[index]
                                 val left = (set.slotAt(Side.Left) as? Slot.App)?.let { appInfo(it.pkg) }
@@ -102,7 +102,7 @@ fun HomeSetCards(
 
 @Composable
 private fun AddSetCard(onAdd: () -> Unit, modifier: Modifier) {
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(24.dp)
     Box(modifier.clip(shape).border(1.dp, Palette.Control, shape)
         .clickable(role = Role.Button, onClick = onAdd)
         .semantics { contentDescription = "セットを追加" }

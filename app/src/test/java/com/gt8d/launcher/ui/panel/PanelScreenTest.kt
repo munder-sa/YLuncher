@@ -120,15 +120,15 @@ class PanelScreenTest {
             rule.onNodeWithTag("panel_view_sets").performClick()
             rule.onNodeWithTag("media_card").assertDoesNotExist()
             for (set in Defaults.build(emptySet()).screenSets) {
-                rule.onNodeWithTag("home_set_${set.id}").assertExists()
+                rule.onNodeWithTag("panel_set_${set.id}").assertExists()
             }
             rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelView == PanelView.Sets }
             controller.recreate()
             content()
             rule.onNodeWithTag("panel_view_sets").assertIsSelected()
-            rule.onNodeWithTag("home_sets").assertExists()
+            rule.onNodeWithTag("panel_sets").assertExists()
             for (set in Defaults.build(emptySet()).screenSets) {
-                rule.onNodeWithTag("home_set_${set.id}").assertExists()
+                rule.onNodeWithTag("panel_set_${set.id}").assertExists()
             }
             rule.onNodeWithTag("media_card").assertDoesNotExist()
         } finally { controller.pause().stop().destroy() }
@@ -159,15 +159,15 @@ class PanelScreenTest {
             AppGraph.runner.followIndex(0)
             com.gt8d.launcher.diag.DiagLog.clearForTest()
         }
-        rule.onNodeWithTag("home_set_guard2").performScrollTo().performClick()
+        rule.onNodeWithTag("panel_set_guard2").performScrollTo().performClick()
         rule.runOnIdle {
             assertEquals(2, AppGraph.runner.currentIndexFlow.value)
             assertNotNull(AppGraph.runner.opening.value)
         }
         val opening = AppGraph.runner.opening.value
-        rule.onNodeWithTag("home_set_guard2").assertIsSelected()
-        rule.onNodeWithTag("home_set_guard1").performScrollTo().performClick()
-        rule.onNodeWithTag("home_set_add").performScrollTo().performClick()
+        rule.onNodeWithTag("panel_set_guard2").assertIsSelected()
+        rule.onNodeWithTag("panel_set_guard1").performScrollTo().performClick()
+        rule.onNodeWithTag("panel_set_add").performScrollTo().performClick()
         rule.runOnIdle {
             assertEquals(2, AppGraph.runner.currentIndexFlow.value)
             assertEquals(opening, AppGraph.runner.opening.value)
@@ -177,7 +177,7 @@ class PanelScreenTest {
             AppGraph.curtain.ready()
             assertNull(AppGraph.runner.opening.value)
         }
-        rule.onNodeWithTag("home_set_add").performScrollTo().performClick()
+        rule.onNodeWithTag("panel_set_add").performScrollTo().performClick()
         assertEquals(1, added)
     }
 

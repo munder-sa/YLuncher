@@ -122,7 +122,7 @@ class PanelContentTest {
         }
         val segment = if (view == PanelView.Sets) "panel_view_sets" else "panel_view_apps"
         rule.onNodeWithTag(segment).performClick().assertIsSelected()
-        if (view == PanelView.Sets) rule.onNodeWithTag("home_set_s10").performScrollTo()
+        if (view == PanelView.Sets) rule.onNodeWithTag("panel_set_s10").performScrollTo()
         else rule.onNodeWithTag("icon_add").performScrollTo()
         fun positions() = rule.onAllNodes(hasScrollAction()).fetchSemanticsNodes().map {
             it.config[SemanticsProperties.VerticalScrollAxisRange].value()
@@ -183,11 +183,17 @@ class PanelContentTest {
         assertEquals(0, selected)
         rule.onNodeWithTag("media_card").assertDoesNotExist()
         rule.onNodeWithTag("icon_grid").assertDoesNotExist()
-        assertTrue(rule.onNodeWithTag("home_sets").performScrollTo().getBoundsInRoot().height >= 136.dp)
+        rule.onNodeWithTag("panel_sets").assertIsDisplayed()
+        rule.onNodeWithTag("home_sets").assertDoesNotExist()
+        rule.onAllNodes(hasTestTag("home_set_s1")).assertCountEquals(0)
+        rule.onNodeWithTag("permission_banner").assertIsDisplayed()
+        val banner = rule.onNodeWithTag("permission_banner").getBoundsInRoot()
+        for (i in 1..3) rule.onNodeWithTag("panel_set_s$i").performScrollTo().assertIsDisplayed().performClick()
+        assertTrue(rule.onNodeWithTag("permission_banner").getBoundsInRoot().top < banner.top)
         rule.onNodeWithTag("permission_banner").performScrollTo().assertIsDisplayed()
-        for (i in 1..3) rule.onNodeWithTag("home_set_s$i").performScrollTo().assertIsDisplayed().performClick()
+        assertEquals(banner, rule.onNodeWithTag("permission_banner").getBoundsInRoot())
         assertEquals(listOf(1, 2, 3), opened)
-        rule.onNodeWithTag("home_set_add").performScrollTo().assertIsDisplayed().performClick()
+        rule.onNodeWithTag("panel_set_add").performScrollTo().assertIsDisplayed().performClick()
         assertEquals(1, added)
     }
 
