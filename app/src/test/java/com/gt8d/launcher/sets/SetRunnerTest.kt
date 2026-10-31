@@ -31,6 +31,186 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SetRunnerTest {
+    private fun leftPanelEnv() = TestEnv().apply {
+        config = config.copy(screenSets = listOf(ScreenSet("s", Slot.Panel, Slot.App("y"), SplitRatio.R4_6)))
+        installed.add("y")
+    }
+
+    private fun resumePanelApp(e: TestEnv, pkg: String) {
+        e.events.events.add(ResumeEvent(pkg, e.scheduler.nowMs()))
+        e.runner.panelResumedInSplit()
+        e.scheduler.advanceBy(200)
+    }
+
+    @Test fun leftPanel_passesPanelHostOnLeft() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        assertEquals(listOf(SplitCall("com.gt8d.launcher.panel", "y", SplitRatio.R4_6)), e.vendor.calls)
+        assertEquals("com.gt8d.launcher.panel" to "y", e.runner.lastOpenedPair)
+        assertEquals(Opening("com.gt8d.launcher.panel", "y", 0), e.runner.opening.value)
+    }
+
+    @Test fun leftPanel_waitBoth_readyWithPanelSignal() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        resumePanelApp(e, "y")
+        assertEquals(1, e.runner.readyCount)
+        assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        assertFalse(e.curtain.isShowing)
+    }
+
+    @Test fun leftPanel_appResumeAlone_notReady() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        e.events.events.add(ResumeEvent("y", 0))
+        e.scheduler.advanceBy(200)
+        assertEquals(0, e.runner.readyCount)
+        assertTrue(e.curtain.isShowing)
+    }
+
+    @Test fun leftPanel_panelSignalAlone_notReady() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        e.runner.panelResumedInSplit()
+        e.scheduler.advanceBy(200)
+        assertEquals(0, e.runner.readyCount)
+        assertTrue(e.curtain.isShowing)
+    }
+
+    @Test fun leftPanel_retrySkipped_whenProgress() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        e.events.events.add(ResumeEvent("y", 100))
+        e.scheduler.advanceBy(3000)
+        assertEquals(1, e.vendor.calls.size)
+        assertEquals(0, e.runner.readyCount)
+    }
+
+    @Test fun leftPanel_retry_preservesSidesAndRatio() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        e.scheduler.advanceBy(3000)
+        assertEquals(List(2) { SplitCall("com.gt8d.launcher.panel", "y", SplitRatio.R4_6) }, e.vendor.calls)
+    }
+
+    @Test fun leftPanel_appMissing_goesHome() {
+        val e = leftPanelEnv()
+        e.installed.remove("y")
+        e.runner.open(1)
+        assertEquals(1, e.startHomeCount)
+        assertTrue(e.apps.startAppCalls.isEmpty())
+        assertTrue(e.vendor.calls.isEmpty())
+    }
+
+    @Test fun leftPanel_panelHostMissing_opensAppFullscreen() {
+        val e = leftPanelEnv()
+        e.installed.remove("com.gt8d.launcher.panel")
+        e.runner.open(1)
+        assertEquals(listOf(StartAppCall("y", false)), e.apps.startAppCalls)
+        assertTrue(e.vendor.calls.isEmpty())
+    }
+
+    @Test fun leftPanel_splitUnavailable_opensAppFullscreen() {
+        val e = leftPanelEnv()
+        e.selector.onFailure(FailReason.EntryMissing, countable = true)
+        e.runner.open(1)
+        assertEquals(listOf(StartAppCall("y", false)), e.apps.startAppCalls)
+        assertEquals(1, e.messenger.splitUnavailableCount)
+        assertTrue(e.vendor.calls.isEmpty())
+    }
+
+    @Test fun leftPanel_startFailed_opensAppFullscreen() {
+        val e = leftPanelEnv()
+        e.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+        e.runner.open(1)
+        assertEquals(listOf(StartAppCall("y", false)), e.apps.startAppCalls)
+        assertEquals(listOf(HideReason.Failed), e.curtainView.hiddenReasons)
+    }
+
+    @Test fun leftPanel_panelHostResizeExempt() {
+        val e = leftPanelEnv()
+        e.apps.unresizeablePkgs.add("com.gt8d.launcher.panel")
+        e.runner.open(1)
+        assertEquals(1, e.vendor.calls.size)
+        assertTrue(e.apps.startAppCalls.isEmpty())
+    }
+
+    @Test fun leftPanel_unresizeableApp_opensAppFullscreen() {
+        val e = leftPanelEnv()
+        e.apps.unresizeablePkgs.add("y")
+        e.runner.open(1)
+        assertEquals(listOf(StartAppCall("y", false)), e.apps.startAppCalls)
+        assertTrue(e.vendor.calls.isEmpty())
+    }
+
+    @Test fun curtainInput_leftPanel() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        val target = e.curtainView.shownTargets.single()
+        assertEquals(com.gt8d.launcher.curtain.SlotPreview.Panel, target.left)
+        assertEquals(com.gt8d.launcher.curtain.SlotPreview.App("y", "y"), target.right)
+    }
+
+    @Test fun panelLaunched_updatesPartner_leftAndRight() {
+        val left = leftPanelEnv()
+        left.runner.open(1)
+        left.runner.panelLaunched("maps")
+        assertEquals("com.gt8d.launcher.panel" to "y", left.runner.lastOpenedPair)
+        resumePanelApp(left, "y")
+        left.runner.panelLaunched("maps")
+        assertEquals("com.gt8d.launcher.panel" to "maps", left.runner.lastOpenedPair)
+        val right = TestEnv()
+        right.runner.open(1)
+        resumePanelApp(right, "youtube")
+        right.runner.panelLaunched("maps")
+        assertEquals("maps" to "com.gt8d.launcher.panel", right.runner.lastOpenedPair)
+        right.runner.home()
+        right.runner.panelLaunched("y")
+        assertNull(right.runner.lastOpenedPair)
+        val apps = TestEnv()
+        apps.runner.open(2)
+        apps.runner.panelLaunched("maps")
+        assertEquals("youtube" to "applemusic", apps.runner.lastOpenedPair)
+    }
+
+    @Test fun panelLaunched_ignoredAfterFallback() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        resumePanelApp(e, "y")
+        e.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+        e.runner.open(1)
+        e.runner.panelLaunched("maps")
+        assertEquals("com.gt8d.launcher.panel" to "y", e.runner.lastOpenedPair)
+    }
+
+    @Test fun leftPanel_bootReady_allowsPanelLaunched() {
+        val e = leftPanelEnv()
+        e.runner.openForBoot(1)
+        resumePanelApp(e, "y")
+        e.runner.panelLaunched("maps")
+        assertEquals("com.gt8d.launcher.panel" to "maps", e.runner.lastOpenedPair)
+        assertTrue(e.curtainView.shownTargets.isEmpty())
+        assertNull(e.runner.opening.value)
+    }
+
+    @Test fun leftPanel_hostResumeAlone_doesNotSkipRetry() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        e.events.events.add(ResumeEvent("com.gt8d.launcher.panel", 100))
+        e.scheduler.advanceBy(3000)
+        assertEquals(2, e.vendor.calls.size)
+        assertEquals(0, e.runner.readyCount)
+    }
+
+    @Test fun panelLaunched_ignoredAfterSafety() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        e.scheduler.advanceBy(4000)
+        e.runner.panelLaunched("maps")
+        assertEquals("com.gt8d.launcher.panel" to "y", e.runner.lastOpenedPair)
+        assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+    }
+
     @Test fun currentIndexFlow_followsOpenAndHome() {
         val env = TestEnv(initialLastSetIndex = 2)
         assertEquals(2, env.runner.currentIndexFlow.value)
