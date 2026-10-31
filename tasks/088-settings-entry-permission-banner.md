@@ -48,5 +48,5 @@ v1.6 設計書 `docs/superpowers/specs/2026-10-31-v1.6-ux-design.md` の §3 A1�
 ## 補足(点検の反映)
 1. `PanelState` に `val missingPermissions: List<MissingPermission> = emptyList()` を**既定値付きで**足す(既存の呼び出し・LayoutMatrixTest を壊さない)。`needsPermission` が true で `missingPermissions` が空のとき(古い呼び出し)は、今の「許可が必要」の文言にする。
 2. 分割中の PanelActivity で設定を開くとき、初期ルートを `Permissions` にした場合も、Activity の作り直しで同じ画面に戻るよう、今の初期ルートの保存・復元(新しいセット・Lists)に `Permissions` を足す。
-3. テストを足す: `PanelScreenTest` で、アプリ一覧の `applist_settings` を押すとアプリ一覧が閉じ `onOpenSettings` が呼ばれる/許可の帯を押すと `onOpenPermissionSettings` が呼ばれる。ホームのワイド表示でも帯が新しい文言で、押すと同じ。`SettingsActivityTest.kt` は無いので新規に作ってよい(allow を create に変えた)。PanelActivity の作り直しの後も Permissions の画面のまま(既存の PanelActivityTest の作り方に合わせる。PanelActivityTest.kt も変更可)。
+3. テストを足す: `PanelScreenTest` で、アプリ一覧の `applist_settings` を押すとアプリ一覧が閉じ `onOpenSettings` が呼ばれる/許可の帯を押すと `onOpenPermissionSettings` が呼ばれる。ホームのワイド表示でも帯が新しい文言で、押すと同じ。`SettingsActivityTest.kt` はあるので、そこに足す。PanelActivity の作り直しの後も Permissions の画面のまま(既存の PanelActivityTest の作り方に合わせる。PanelActivityTest.kt も変更可)。
 4. 「この Task でしないこと」の「帯」は**画面の端の帯(`EdgeStripService`)**のこと。許可の帯(`PermissionBanner`)は変えてよい。
