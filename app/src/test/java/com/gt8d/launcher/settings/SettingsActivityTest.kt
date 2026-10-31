@@ -56,6 +56,20 @@ class SettingsActivityTest {
         rule.onNodeWithTag("perm_row_Notification").assertExists()
         rule.onNodeWithTag("settings_item_sets").assertDoesNotExist()
     }
+    @Test fun setsRoute_opensScreenSets() {
+        controller = Robolectric.buildActivity(SettingsActivity::class.java,
+            Intent(app, SettingsActivity::class.java).putExtra("open_route", "sets"))
+            .create().start().resume().visible()
+        rule.onNodeWithText("画面セット").assertIsDisplayed()
+        rule.onNodeWithTag("settings_item_sets").assertDoesNotExist()
+    }
+    @Test fun linkRoute_opensLinkDestination() {
+        controller = Robolectric.buildActivity(SettingsActivity::class.java,
+            Intent(app, SettingsActivity::class.java).putExtra("open_route", "link"))
+            .create().start().resume().visible()
+        rule.onNodeWithText("リンクの行き先").assertIsDisplayed()
+        rule.onNodeWithTag("settings_item_sets").assertDoesNotExist()
+    }
     @Test fun safetyCleared_startsHome_andFinishes() {
         SafetyGuard.recordStart(app); repeat(3) { SafetyGuard.recordCrash(app) }
         assertTrue(SafetyGuard.isFallbackActive(app)); host()

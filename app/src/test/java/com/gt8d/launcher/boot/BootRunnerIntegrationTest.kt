@@ -110,8 +110,7 @@ class BootRunnerIntegrationTest {
             }, watcher = watcher, warm = warm, curtain = curtain, scheduler = scheduler, clock = scheduler,
             ownPkg = "own", labelFor = { it }, startHome = { homes.add(scheduler.nowMs()) },
             messenger = object : Messenger {
-                override fun showSplitUnavailable() = throw AssertionError("message")
-                override fun showSwitchFailed() = throw AssertionError("message")
+                override fun show(notice: com.gt8d.launcher.notice.Notice) = throw AssertionError("message")
             },
         ))
         var readyAtOpen = 0

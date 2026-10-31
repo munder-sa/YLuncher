@@ -1,6 +1,7 @@
 package com.gt8d.launcher.sets
 
 import com.gt8d.launcher.apps.OwnPackages
+import com.gt8d.launcher.notice.Notice
 import com.gt8d.launcher.ui.home.numberedSetLabel
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
@@ -39,8 +40,7 @@ interface LastIndexStore {
 }
 
 interface Messenger {
-    fun showSplitUnavailable()
-    fun showSwitchFailed()
+    fun show(notice: Notice)
 }
 
 data class SetRunnerDeps(
@@ -361,12 +361,14 @@ class SetRunner(private val d: SetRunnerDeps) {
         val installedPkgs = d.installed()
         if (panelSide == Side.Left) {
             if (appPkg !in installedPkgs) {
+                d.messenger.show(Notice.AppMissing(appLabel(appPkg)))
                 DiagLog.d("SetRunner", "right uninstalled: $appPkg")
                 d.startHome()
                 waitSingle(d.ownPkg, startMs, useCurtain)
                 return
             }
             if (d.panelHostPkg !in installedPkgs) {
+                d.messenger.show(Notice.AppMissing("YLuncher パネル"))
                 DiagLog.d("SetRunner", "panel host missing")
                 d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
                 waitSingle(appPkg, startMs, useCurtain)
@@ -374,6 +376,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             }
         }
         if (left !in installedPkgs) {
+            d.messenger.show(Notice.AppMissing(appLabel(left)))
             DiagLog.d("SetRunner", "left uninstalled: $left")
             if (panelSide == null && (forLink || right in installedPkgs)) {
                 d.warm.recordAppLaunch(right, d.apps.startApp(right, false))
@@ -387,6 +390,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
 
         if (!forLink && right !in installedPkgs) {
+            d.messenger.show(Notice.AppMissing(if (panelSide == Side.Right) "YLuncher パネル" else appLabel(right)))
             DiagLog.d("SetRunner", if (panelSide != null) "panel host missing" else "right uninstalled: $right")
             d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
             waitSingle(left, startMs, useCurtain)
@@ -398,8 +402,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         val rightResizeable = panelSide == Side.Right || d.apps.isResizeable(right)
         if (!leftResizeable || !rightResizeable) {
             DiagLog.d("SetRunner", "unresizeable left=$leftResizeable right=$rightResizeable")
-            d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
-            d.messenger.showSplitUnavailable()
+            fullscreen(appPkg, Notice.SplitUnsupported(appLabel(if (!leftResizeable) left else right)))
             waitSingle(appPkg, startMs, useCurtain)
             notifyLinkNotSplit()
             return
@@ -414,8 +417,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         if (launcher == null) {
             DiagLog.d("SetRunner", "leftOnly mode=$mode")
-            d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
-            d.messenger.showSplitUnavailable()
+            fullscreen(appPkg, Notice.SplitFailed(appLabel(appPkg)))
             waitSingle(appPkg, startMs, useCurtain)
             notifyLinkNotSplit()
             return
@@ -449,14 +451,21 @@ class SetRunner(private val d: SetRunnerDeps) {
         waitKind = WaitKind.None
         cancelTimers()
         d.selector.onFailure(reason, countable = true)
-        d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
-        d.messenger.showSplitUnavailable()
+        fullscreen(left, Notice.SplitFailed(appLabel(left)))
         notifyLinkNotSplit()
         if (useCurtain) {
             d.curtain.fail()
         } else {
             finishWithoutCurtain()
         }
+    }
+
+    private fun appLabel(pkg: String): String = d.labelFor(pkg).ifBlank { pkg }
+
+    private fun fullscreen(pkg: String, success: Notice) {
+        val started = d.apps.startApp(pkg, false)
+        d.warm.recordAppLaunch(pkg, started)
+        d.messenger.show(if (started) success else Notice.OpenFailed(appLabel(pkg)))
     }
 
     private fun waitBoth(
@@ -639,7 +648,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
         if (monitoringAvailable && reason == HideReason.Safety && kind == WaitKind.Both) {
             d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
-            d.messenger.showSwitchFailed()
+            d.messenger.show(Notice.Slow)
         }
         runPendingIfNeeded()
     }
