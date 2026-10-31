@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 object AppGraph {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _panelPlacement = MutableStateFlow<PanelPlacement?>(null)
     val panelPlacement: StateFlow<PanelPlacement?> = _panelPlacement.asStateFlow()
 
@@ -152,8 +153,13 @@ object AppGraph {
                     app.startActivity(intent)
                 },
                 messenger = messenger,
+                updateConfig = { f -> config.update(f) },
+                scope = applicationScope,
             ),
         ).also { r ->
+            applicationScope.launch {
+                panelPlacement.collect { r.onPanelPlacementChanged(it) }
+            }
             CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).launch {
                 var prev: Opening? = r.opening.value
                 r.opening.collect { curr ->
