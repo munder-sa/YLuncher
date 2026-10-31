@@ -31,10 +31,47 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.assert
+import com.gt8d.launcher.ui.home.PanelIconMirrored
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CurtainContentTest {
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun whiteProgressDotsAndAppIconGeometry() {
+        val bitmap = ImageBitmap(96, 96)
+        rule.setContent {
+            CurtainContent(sampleTarget(right = SlotPreview.Panel), true,
+                iconFor = { bitmap })
+        }
+        rule.onNodeWithTag("curtain_progress").assert(SemanticsMatcher.expectValue(CurtainColor, Color.White))
+            .assert(SemanticsMatcher.expectValue(CurtainTrackColor, Color.White.copy(alpha = 0.24f)))
+        rule.onNodeWithTag("curtain_dot_0").assert(SemanticsMatcher.expectValue(CurtainColor, Color.White))
+        rule.onNodeWithTag("curtain_dot_1").assert(SemanticsMatcher.expectValue(CurtainColor, Color.White.copy(alpha = 0.4f)))
+        val icon = rule.onNodeWithTag("curtain_app_icon")
+            .assert(SemanticsMatcher.expectValue(CurtainIconCorner, 8)).getBoundsInRoot()
+        assertEquals(96f, icon.width.value)
+        assertEquals(96f, icon.height.value)
+        val panelBounds = rule.onNode(hasContentDescription("パネル"), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(PanelIconMirrored, false))
+            .getBoundsInRoot()
+        assertEquals(96f, panelBounds.width.value)
+        assertEquals(96f, panelBounds.height.value)
+    }
+
+    @Test fun leftPanelMirrorsAndMissingIconShowsInitial() {
+        rule.setContent { CurtainContent(sampleTarget().copy(left = SlotPreview.Panel), false) }
+        rule.onNode(hasContentDescription("パネル"), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(PanelIconMirrored, true))
+        rule.onNodeWithText("A").assertIsDisplayed()
+        rule.onNodeWithTag("curtain_app_icon").assertDoesNotExist()
+    }
+
     @Test fun cancel_visibilitySizeCallbackAndStablePositions() {
         var progress by mutableStateOf(false)
         var cancellable by mutableStateOf(true)

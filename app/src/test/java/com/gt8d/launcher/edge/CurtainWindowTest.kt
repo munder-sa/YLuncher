@@ -6,6 +6,7 @@ import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import androidx.lifecycle.Lifecycle
@@ -35,6 +36,53 @@ import java.time.Duration
 @Config(sdk = [35])
 class CurtainWindowTest {
     @get:Rule val composeRule = createEmptyComposeRule()
+
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun iconsArePassedToContentAndCachedAcrossDisplaysIncludingFailures() {
+        val pm = Shadows.shadowOf(context.packageManager)
+        pm.setApplicationIcon("first", android.graphics.drawable.ColorDrawable(android.graphics.Color.RED))
+        pm.setApplicationIcon("second", android.graphics.drawable.ColorDrawable(android.graphics.Color.BLUE))
+        var reads = 0
+        val countingContext = object : android.content.ContextWrapper(context) {
+            override fun getPackageManager(): android.content.pm.PackageManager {
+                reads++
+                return context.packageManager
+            }
+        }
+        val wm = AndroidWindowManagerFacade(context.getSystemService(WindowManager::class.java))
+        // View 自身による PackageManager の参照は、アイコン読み出しの計数に含めない。
+        val window = CurtainWindow(countingContext, wm, contentFactory = { ComposeView(context) })
+        fun target(pkg: String) = sampleTarget().copy(left = SlotPreview.App(pkg, "Example"))
+        try {
+            window.show(target("first"))
+            advance(120)
+            composeRule.onNodeWithTag("curtain_app_icon").assertExists()
+            val first = window.iconFor("first")
+            assertNotNull(first)
+            val before = reads
+            window.removeImmediately()
+            window.show(target("first"))
+            advance(120)
+            composeRule.onNodeWithTag("curtain_app_icon").assertExists()
+            assertSame(first, window.iconFor("first"))
+            assertEquals(before, reads)
+            assertNotNull(window.iconFor("second"))
+            assertEquals(before + 1, reads)
+            assertNull(window.iconFor("missing.package"))
+            assertEquals(before + 2, reads)
+            pm.setApplicationIcon("missing.package", android.graphics.drawable.ColorDrawable(android.graphics.Color.GREEN))
+            window.removeImmediately()
+            window.show(target("missing.package"))
+            advance(120)
+            composeRule.onNodeWithTag("curtain_app_icon").assertDoesNotExist()
+            composeRule.onNodeWithText("E").assertExists()
+            assertNull(window.iconFor("missing.package"))
+            assertEquals(before + 2, reads)
+        } finally {
+            window.removeImmediately()
+        }
+    }
 
     @Test fun cancelButton_callsProvidedCallback() {
         var calls = 0
