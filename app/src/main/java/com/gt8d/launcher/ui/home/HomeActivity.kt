@@ -157,6 +157,7 @@ class HomeActivity : ComponentActivity() {
                             onOpenNow = AppGraph.boot::openNow,
                             onStayHome = AppGraph.boot::stayHome,
                             modifier = Modifier.align(Alignment.Center),
+                            iconFor = AppGraph.catalog::icon,
                         )
                     }
                 }

@@ -39,6 +39,13 @@ import com.gt8d.launcher.R
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
+import com.gt8d.launcher.ui.home.PanelIcon
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
+
+val CurtainColor = SemanticsPropertyKey<Color>("CurtainColor")
+val CurtainTrackColor = SemanticsPropertyKey<Color>("CurtainTrackColor")
+val CurtainIconCorner = SemanticsPropertyKey<Int>("CurtainIconCorner")
 
 @Composable
 fun CurtainContent(
@@ -100,6 +107,7 @@ fun CurtainContent(
                 ) {
                     SlotPreviewBlock(
                         slot = target.left,
+                        mirrored = true,
                         iconFor = iconFor,
                         modifier = Modifier
                             .weight(leftWeight)
@@ -120,12 +128,16 @@ fun CurtainContent(
 
                 if (showProgress) {
                     LinearProgressIndicator(
-                        color = Palette.Accent,
-                        trackColor = Palette.Panel,
+                        color = Palette.PanelAccent,
+                        trackColor = Palette.PanelAccent.copy(alpha = 0.24f),
                         modifier = Modifier
                             .width(640.dp)
                             .height(4.dp)
-                            .testTag("curtain_progress"),
+                            .testTag("curtain_progress")
+                            .semantics {
+                                this[CurtainColor] = Palette.PanelAccent
+                                this[CurtainTrackColor] = Palette.PanelAccent.copy(alpha = 0.24f)
+                            },
                     )
                 } else {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -159,7 +171,7 @@ fun CurtainContent(
                 val safeCount = target.count.coerceAtLeast(0)
                 for (i in 0 until safeCount) {
                     val dotColor = if (i == target.position) {
-                        Palette.Accent
+                        Palette.PanelAccent
                     } else {
                         Color.White.copy(alpha = 0.4f)
                     }
@@ -167,7 +179,9 @@ fun CurtainContent(
                         modifier = Modifier
                             .size(12.dp)
                             .clip(CircleShape)
-                            .background(dotColor),
+                            .background(dotColor)
+                            .testTag("curtain_dot_$i")
+                            .semantics { this[CurtainColor] = dotColor },
                     )
                 }
             }
@@ -186,6 +200,7 @@ private fun parseRatioWeights(ratio: SplitRatio): Pair<Float, Float> {
 private fun SlotPreviewBlock(
     slot: SlotPreview,
     iconFor: (String) -> ImageBitmap?,
+    mirrored: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -206,7 +221,10 @@ private fun SlotPreviewBlock(
                         Image(
                             bitmap = icon,
                             contentDescription = slot.label,
-                            modifier = Modifier.size(64.dp),
+                            modifier = Modifier.size(96.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .testTag("curtain_app_icon")
+                                .semantics { this[CurtainIconCorner] = 8 },
                         )
                     } else {
                         val initial = slot.label.firstOrNull()?.toString() ?: "?"
@@ -241,20 +259,7 @@ private fun SlotPreviewBlock(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        repeat(3) {
-                            Box(
-                                modifier = Modifier
-                                    .width(12.dp)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Palette.Accent),
-                            )
-                        }
-                    }
+                    PanelIcon(Modifier.size(96.dp), mirrored = mirrored)
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "パネル",

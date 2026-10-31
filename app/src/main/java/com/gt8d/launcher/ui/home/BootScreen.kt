@@ -1,6 +1,11 @@
 package com.gt8d.launcher.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,6 +40,9 @@ import com.gt8d.launcher.curtain.SlotPreview
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
 
+val BootColor = SemanticsPropertyKey<Color>("BootColor")
+val BootContentColor = SemanticsPropertyKey<Color>("BootContentColor")
+
 @Composable
 fun BootScreen(
     target: CurtainTarget,
@@ -43,6 +51,7 @@ fun BootScreen(
     onOpenNow: () -> Unit,
     onStayHome: () -> Unit,
     modifier: Modifier = Modifier,
+    iconFor: (String) -> ImageBitmap? = { null },
 ) {
     val (leftWeight, rightWeight) = parseRatioWeights(target.ratio)
     val message = if (opening) {
@@ -76,7 +85,9 @@ fun BootScreen(
                 text = target.setName,
                 fontSize = Dims.BodyText,
                 fontWeight = FontWeight.Bold,
-                color = Palette.Accent,
+                color = Palette.PanelAccent,
+                modifier = Modifier.testTag("boot_set_name")
+                    .semantics { this[BootColor] = Palette.PanelAccent },
                 textAlign = TextAlign.Center,
             )
 
@@ -90,12 +101,15 @@ fun BootScreen(
             ) {
                 BootSlotBlock(
                     slot = target.left,
+                    mirrored = true,
+                    iconFor = iconFor,
                     modifier = Modifier
                         .weight(leftWeight)
                         .fillMaxHeight(),
                 )
                 BootSlotBlock(
                     slot = target.right,
+                    iconFor = iconFor,
                     modifier = Modifier
                         .weight(rightWeight)
                         .fillMaxHeight(),
@@ -111,10 +125,14 @@ fun BootScreen(
                         modifier = buttonModifier
                             .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Palette.Accent)
+                            .background(Palette.PanelAccent)
                             .clickable(onClick = onOpenNow)
                             .padding(horizontal = 24.dp, vertical = 16.dp)
-                            .testTag("boot_open_now"),
+                            .testTag("boot_open_now")
+                            .semantics {
+                                this[BootColor] = Palette.PanelAccent
+                                this[BootContentColor] = Palette.Background0
+                            },
                     ) {
                         OneLineText(
                             text = "今すぐ開く",
@@ -166,26 +184,41 @@ private fun parseRatioWeights(ratio: SplitRatio): Pair<Float, Float> {
 @Composable
 private fun BootSlotBlock(
     slot: SlotPreview,
+    iconFor: (String) -> ImageBitmap?,
+    mirrored: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val label = when (slot) {
         is SlotPreview.App -> slot.label
         SlotPreview.Panel -> "パネル"
     }
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(Palette.Background1)
             .padding(12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            fontSize = Dims.BodyText,
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        val showIcon = maxWidth >= 200.dp
+        Row(verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (showIcon) {
+                when (slot) {
+                    SlotPreview.Panel -> PanelIcon(Modifier.size(48.dp), mirrored = mirrored)
+                    is SlotPreview.App -> iconFor(slot.pkg)?.let {
+                        Image(it, slot.label, Modifier.size(48.dp).testTag("boot_app_icon"))
+                    }
+                }
+            }
+            Text(
+                text = label,
+                fontSize = Dims.BodyText,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f, fill = false),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }

@@ -31,10 +31,55 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.assert
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import com.gt8d.launcher.ui.theme.Palette
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class BootScreenTest {
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun whiteColorsAndWideSlotIcons() {
+        val bitmap = ImageBitmap(48, 48)
+        rule.setContent {
+            BootScreen(sampleTarget().copy(left = SlotPreview.Panel,
+                right = SlotPreview.App("app", "App"), ratio = SplitRatio.R5_5),
+                3, false, {}, {}, Modifier.width(640.dp), iconFor = { bitmap })
+        }
+        rule.onNodeWithTag("boot_set_name").assert(SemanticsMatcher.expectValue(BootColor, Color.White))
+        rule.onNodeWithTag("boot_open_now").assert(SemanticsMatcher.expectValue(BootColor, Color.White))
+            .assert(SemanticsMatcher.expectValue(BootContentColor, Palette.Background0))
+        val panelBounds = rule.onNode(hasContentDescription("パネル"), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(PanelIconMirrored, true))
+            .getBoundsInRoot()
+        assertEquals(48f, panelBounds.width.value)
+        assertEquals(48f, panelBounds.height.value)
+        val bounds = rule.onNodeWithTag("boot_app_icon").assertIsDisplayed().getBoundsInRoot()
+        assertEquals(48f, bounds.width.value)
+        assertEquals(48f, bounds.height.value)
+    }
+
+    @Test fun missingAppIconKeepsTextAndRightPanelIsNotMirrored() {
+        rule.setContent { BootScreen(sampleTarget().copy(ratio = SplitRatio.R5_5), 3, false, {}, {}, Modifier.width(640.dp)) }
+        rule.onNodeWithTag("boot_app_icon").assertDoesNotExist()
+        rule.onNodeWithText("YouTube").assertIsDisplayed()
+        rule.onNode(hasContentDescription("パネル"), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(PanelIconMirrored, false))
+    }
+
+    @Test fun narrowSlotsShowOnlyNames() {
+        rule.setContent { BootScreen(sampleTarget(), 3, false, {}, {}, Modifier.width(400.dp), iconFor = { ImageBitmap(48, 48) }) }
+        rule.onNodeWithTag("boot_app_icon").assertDoesNotExist()
+        rule.onNode(hasContentDescription("パネル"), useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithText("YouTube").assertIsDisplayed()
+        rule.onNodeWithText("パネル").assertIsDisplayed()
+    }
 
     @get:Rule(order = 0)
     val registerActivityRule = object : ExternalResource() {
