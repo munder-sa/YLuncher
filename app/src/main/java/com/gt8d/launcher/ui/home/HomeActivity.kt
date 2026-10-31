@@ -9,7 +9,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withResumed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -17,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.stockLauncherIntent
 import com.gt8d.launcher.boot.BootPhase
@@ -25,6 +30,8 @@ import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.settings.SettingsActivity
+import com.gt8d.launcher.settings.SettingsButton
+import com.gt8d.launcher.settings.safetyRecover
 import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
@@ -61,11 +68,26 @@ class HomeActivity : ComponentActivity() {
                             .background(Palette.Background0),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = "安全のため純正ランチャーを使っています",
-                            fontSize = Dims.BodyText,
-                            color = Color.White,
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "安全のため純正ランチャーを使っています",
+                                fontSize = Dims.BodyText,
+                                color = Color.White,
+                            )
+                            // SettingsButton の上下各4dpの余白を含めて高さと間隔を調整する。
+                            SettingsButton("純正ランチャーを開く", "safety_open_stock",
+                                Modifier.width(360.dp).height(80.dp)) {
+                                runCatching { startActivity(stockLauncherIntent()) }
+                            }
+                            SettingsButton("安全モードを解除", "safety_unlock",
+                                Modifier.width(360.dp).height(80.dp)) {
+                                safetyRecover(this@HomeActivity)
+                                recreate()
+                            }
+                        }
                     }
                 }
             }
@@ -152,7 +174,6 @@ class HomeActivity : ComponentActivity() {
         AppGraph.homeResumed = true
         AppGraph.homePausedAtMs = null
         if (SafetyGuard.isFallbackActive(this)) {
-            runCatching { startActivity(stockLauncherIntent()) }
             return
         }
         EdgeStripService.ensureRunning(this)
