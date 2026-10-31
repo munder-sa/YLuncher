@@ -23,6 +23,7 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.config.PanelView
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import kotlinx.coroutines.runBlocking
@@ -47,9 +48,9 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
-    @Test fun panelScreen_mediaToggle_savesAndSurvivesActivityRecreation() {
+    @Test fun panelScreen_viewSegment_savesAndSurvivesActivityRecreation() {
         runBlocking { AppGraph.config.update { Defaults.build(emptySet()) } }
-        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelMediaVisible == true }
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelView == PanelView.Apps }
         val controller = org.robolectric.Robolectric.buildActivity(ComponentActivity::class.java).setup()
         fun content() {
             controller.get().setContent {
@@ -60,22 +61,68 @@ class PanelScreenTest {
         try {
             content()
             rule.onNodeWithTag("media_card").assertExists()
-            rule.onNodeWithTag("panel_media_toggle").performClick()
+            rule.onNodeWithTag("panel_view_sets").performClick()
             rule.onNodeWithTag("media_card").assertDoesNotExist()
-            rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelMediaVisible == false }
+            for (set in Defaults.build(emptySet()).screenSets) {
+                rule.onNodeWithTag("home_set_${set.id}").assertExists()
+            }
+            rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelView == PanelView.Sets }
             controller.recreate()
             content()
-            rule.onNodeWithTag("panel_media_toggle").assertIsDisplayed()
+            rule.onNodeWithTag("panel_view_sets").assertIsSelected()
+            rule.onNodeWithTag("home_sets").assertExists()
+            for (set in Defaults.build(emptySet()).screenSets) {
+                rule.onNodeWithTag("home_set_${set.id}").assertExists()
+            }
             rule.onNodeWithTag("media_card").assertDoesNotExist()
         } finally { controller.pause().stop().destroy() }
     }
 
-    @Test fun panelScreen_wideHome_hasNoMediaToggle() {
+    @Test fun panelScreen_wideHome_hasNoViewSegment() {
         rule.setContent {
             LauncherTheme { PanelScreen(inSplit = false, homeWide = true, onLaunchApp = {}) }
         }
         rule.onNodeWithTag("home_player").assertExists()
-        rule.onNodeWithTag("panel_media_toggle").assertDoesNotExist()
+        rule.onNodeWithTag("panel_view_segment").assertDoesNotExist()
+    }
+
+    @Test fun panelScreen_sets_opensNumberAndGuardsWhileOpening() {
+        val sets = (1..2).map {
+            com.gt8d.launcher.config.ScreenSet("guard$it",
+                com.gt8d.launcher.config.Slot.App("missing$it"), com.gt8d.launcher.config.Slot.Panel)
+        }
+        runBlocking { AppGraph.config.update { Defaults.build(emptySet()).copy(screenSets = sets, panelView = PanelView.Sets) } }
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.screenSets == sets }
+        var added = 0
+        rule.setContent {
+            LauncherTheme { PanelScreen(inSplit = true, onNewSet = { added++ }, onLaunchApp = {}) }
+        }
+        rule.runOnIdle {
+            AppGraph.curtain.ready()
+            AppGraph.runner.abortBootToHome()
+            AppGraph.runner.followIndex(0)
+            com.gt8d.launcher.diag.DiagLog.clearForTest()
+        }
+        rule.onNodeWithTag("home_set_guard2").performScrollTo().performClick()
+        rule.runOnIdle {
+            assertEquals(2, AppGraph.runner.currentIndexFlow.value)
+            assertNotNull(AppGraph.runner.opening.value)
+        }
+        val opening = AppGraph.runner.opening.value
+        rule.onNodeWithTag("home_set_guard2").assertIsSelected()
+        rule.onNodeWithTag("home_set_guard1").performScrollTo().performClick()
+        rule.onNodeWithTag("home_set_add").performScrollTo().performClick()
+        rule.runOnIdle {
+            assertEquals(2, AppGraph.runner.currentIndexFlow.value)
+            assertEquals(opening, AppGraph.runner.opening.value)
+            assertEquals(0, added)
+            assertEquals(listOf("2"), com.gt8d.launcher.diag.DiagLog.dump()
+                .filter { it.contains("[SetRunner] open index=") }.map { it.substringAfter("open index=") })
+            AppGraph.curtain.ready()
+            assertNull(AppGraph.runner.opening.value)
+        }
+        rule.onNodeWithTag("home_set_add").performScrollTo().performClick()
+        assertEquals(1, added)
     }
 
     private val app get() = ApplicationProvider.getApplicationContext<Application>()

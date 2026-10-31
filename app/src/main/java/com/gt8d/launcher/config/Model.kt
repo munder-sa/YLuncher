@@ -40,8 +40,11 @@ data class LauncherConfig(
     val link: LinkConfig = LinkConfig(),
     val gesture: GestureConfig = GestureConfig(),
     val boot: BootConfig = BootConfig(),
-    val panelMediaVisible: Boolean = true,
+    val panelView: PanelView = PanelView.Apps,
 )
+
+@Serializable
+enum class PanelView { Apps, Sets }
 
 @Serializable
 data class ScreenSet(
