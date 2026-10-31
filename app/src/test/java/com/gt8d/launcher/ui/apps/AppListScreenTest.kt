@@ -76,6 +76,24 @@ class AppListScreenTest {
     }
     private val ownPkg = "com.gt8d.launcher"
 
+    @Test fun appList_settingsButton_minTouchAndCallback() {
+        var calls = 0
+        rule.setContent {
+            LauncherTheme {
+                AppListScreen(emptyList(), { null }, {}, {}, onOpenSettings = { calls++ })
+            }
+        }
+        rule.onNodeWithTag("applist_settings").assertIsDisplayed()
+            .assertWidthIsAtLeast(androidx.compose.ui.unit.Dp(72f))
+            .assertHeightIsAtLeast(androidx.compose.ui.unit.Dp(72f)).performClick()
+        assertEquals(1, calls)
+    }
+
+    @Test fun appList_withoutSettingsCallback_hasNoSettingsButton() {
+        rule.setContent { LauncherTheme { AppListScreen(emptyList(), { null }, {}, {}) } }
+        rule.onNodeWithTag("applist_settings").assertDoesNotExist()
+    }
+
     @Test
     fun appList_alwaysIncludesStockLauncher() {
         val youtube = AppListEntry(
