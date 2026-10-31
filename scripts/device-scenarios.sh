@@ -33,6 +33,34 @@ config_saved=0
 left_index=''
 original_home=''
 original_browser=''
+logcat_pid=''
+full_logcat_pid=''
+stream_dir=''
+stop_streams() {
+    local pid
+    for pid in "$logcat_pid" "$full_logcat_pid"; do
+        if [[ -n $pid ]]; then
+            kill "$pid" 2>/dev/null || :
+            wait "$pid" 2>/dev/null || :
+        fi
+    done
+    logcat_pid=''
+    full_logcat_pid=''
+}
+start_streams() {
+    stop_streams
+    stream_dir=$active
+    "${adb_cmd[@]}" logcat -v time GT8D:D '*:S' > "$active/logcat-stream.txt" &
+    logcat_pid=$!
+    "${adb_cmd[@]}" logcat -v time > "$active/logcat-full-stream.txt" &
+    full_logcat_pid=$!
+}
+clear_logs() {
+    stop_streams
+    adb logcat -c || return 1
+    start_streams
+    adb logcat -b events -c
+}
 row() {
     local reason=${3//$'\n'/; }
     reason=${reason//|/／}
@@ -40,7 +68,17 @@ row() {
 }
 capture() {
     local dir=$1 rc=0
-    adb logcat -d -v time GT8D:D '*:S' > "$dir/logcat.txt" || rc=1
+    stop_streams
+    if [[ -n $stream_dir && $dir != "$stream_dir" ]]; then
+        cat "$stream_dir/logcat-stream.txt" > "$dir/logcat-stream.txt" || rc=1
+        cat "$stream_dir/logcat-full-stream.txt" > "$dir/logcat-full-stream.txt" || rc=1
+    fi
+    adb logcat -d -v time GT8D:D '*:S' > "$dir/logcat-dump.txt" || rc=1
+    if [[ -n $stream_dir && -s $stream_dir/logcat-stream.txt ]]; then
+        cat "$stream_dir/logcat-stream.txt" > "$dir/logcat.txt" || rc=1
+    else
+        cat "$dir/logcat-dump.txt" > "$dir/logcat.txt" || rc=1
+    fi
     adb logcat -d -v time > "$dir/logcat-full.txt" || rc=1
     adb logcat -b events -d -v time > "$dir/events-full.txt" || rc=1
     awk '/wm_/ {print}' "$dir/events-full.txt" > "$dir/events.txt"
@@ -53,6 +91,7 @@ capture() {
 cleanup() {
     local status=$? current
     trap - EXIT INT TERM
+    stop_streams
     if [[ -n $active ]]; then
         capture "$active" || failed=1
         row "${active##*/}" FAIL '途中終了。終了時点のログと画面を保存'
@@ -94,6 +133,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+adb logcat -G 16M || :
 adb shell am force-stop com.gt8d.launcher || exit 1
 if ! adb shell "run-as com.gt8d.launcher sh -c 'if [ -f files/config-scenario-backup.json ]; then cat files/config-scenario-backup.json > files/config.json && rm files/config-scenario-backup.json; fi'"; then
     row setup FAIL '前回の設定の復元に失敗(退避: files/config-scenario-backup.json)'; exit 1
@@ -126,9 +166,10 @@ reset() {
         adb shell am force-stop com.gt8d.launcher || return 1
         adb shell am force-stop com.gt8d.launcher.panel || return 1
         adb shell am force-stop "$browser" || return 1
+        sleep 3
     fi
     sleep 1
-    adb logcat -c && adb logcat -b events -c
+    clear_logs
 }
 home_activity() {
     local current
@@ -179,10 +220,18 @@ parse_slots() {
 }
 reasons=()
 restore_panel_apps() {
+    local attempt
     adb shell am broadcast -n com.gt8d.launcher/.debug.DebugPanelReceiver -a com.gt8d.launcher.debug.PANEL --es view apps || return 1
     sleep 3
     adb logcat -d -v time GT8D:D '*:S' > "$active/restore-logcat.txt" || return 1
-    grep -Fq '[DebugPanel] view=Apps saved' "$active/restore-logcat.txt"
+    grep -Fq '[DebugPanel] view=Apps saved' "$active/restore-logcat.txt" || return 1
+    panel --ei open 1 || return 1
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 1
+        adb logcat -d -v time GT8D:D '*:S' > "$active/restore-open-logcat.txt" || return 1
+        if grep -Fq '[SetRunner] waitBoth ready left=com.google.android.youtube right=com.gt8d.launcher.panel' "$active/restore-open-logcat.txt"; then return 0; fi
+    done
+    return 1
 }
 expect_log() { if ! grep -Eq "$1" "$active/logcat.txt"; then reasons+=("ログ不足: $1"); fi; }
 no_safety() { if grep -Fq 'reason=Safety' "$active/logcat.txt"; then reasons+=('reason=Safety が発生'); fi; }
@@ -199,12 +248,15 @@ view_pattern() {
     printf 'START u0 \\{[^}]*act=android\\.intent\\.action\\.VIEW[^}]*pkg=%s([[:space:]}]|$)' "${browser//./\\.}"
 }
 view_sent() {
-    grep -Eq "$(view_pattern)" "$active/logcat-full.txt" || reasons+=('ブラウザへの VIEW がない')
+    local full=$active/logcat-full-stream.txt
+    [[ -s $full ]] || full=$active/logcat-full.txt
+    grep -Eq "$(view_pattern)" "$full" || reasons+=('ブラウザへの VIEW がない')
 }
 view_after_ready() {
-    local ready views
-    ready=$(awk '/\[SetRunner\] waitBoth ready/ {print NR; exit}' "$active/logcat-full.txt")
-    views=$(grep -nE "$(view_pattern)" "$active/logcat-full.txt" || :)
+    local ready views full=$active/logcat-full-stream.txt
+    [[ -s $full ]] || full=$active/logcat-full.txt
+    ready=$(awk '/\[SetRunner\] waitBoth ready/ {print NR; exit}' "$full")
+    views=$(grep -nE "$(view_pattern)" "$full" || :)
     if ! awk -F: -v ready="${ready:-0}" '
         NF>1 {if (!ready || $1<=ready) early=1}
         END {exit early ? 1 : 0}
@@ -261,7 +313,7 @@ check_swap_config() {
     }' "$file"
 }
 double_tap() {
-    local label=$1 attempt coords x y
+    local label=$1 attempt coords x y start_line
     for attempt in 1 2; do
         adb shell dumpsys activity activities > "$active/$label-bounds-$attempt.txt" || return 1
         coords=$(awk '
@@ -280,11 +332,11 @@ double_tap() {
         END {if(l && r) print int((lr+rl)/2), int((top+bottom)/2)}' "$active/$label-bounds-$attempt.txt")
         read -r x y <<< "$coords"
         [[ $x =~ ^[0-9]+$ && $y =~ ^[0-9]+$ ]] || return 1
-        adb logcat -c || return 1
+        start_line=$(awk 'END {print NR}' "$active/logcat-full-stream.txt")
         adb shell "input tap $x $y; input tap $x $y" || return 1
         sleep 3
         adb logcat -d -v time > "$active/$label-full-$attempt.txt" || return 1
-        if grep -Fq onDoubleTappedDivider "$active/$label-full-$attempt.txt"; then return 0; fi
+        if awk -v start="$start_line" 'NR>start && /onDoubleTappedDivider/ {found=1} END {exit !found}' "$active/logcat-full-stream.txt"; then return 0; fi
     done
     reasons+=('ダブルタップが効かない')
     return 1
@@ -294,6 +346,9 @@ swap_round() {
     double_tap "$label" || return 1
     panel --es status 1 || return 1
     adb logcat -d -v time GT8D:D '*:S' > "$active/$label-logcat.txt" || return 1
+    if [[ -s $active/logcat-stream.txt ]]; then
+        cat "$active/logcat-stream.txt" > "$active/$label-logcat.txt" || return 1
+    fi
     grep -Fq "[SetRunner] swapSaved id=scenario-left panel=$side" "$active/$label-logcat.txt" || reasons+=("swapSaved panel=$side がない")
     grep -Fq "[DebugPanel] status placement=$side " "$active/$label-logcat.txt" || reasons+=("placement=$side がない")
     adb exec-out run-as com.gt8d.launcher cat files/config.json > "$active/$label-config.json" || return 1
@@ -407,11 +462,14 @@ prepare_and_run() {
     local name=$1 attempt
     case "$name" in
         set_leftPanel_cold)
-            adb logcat -c || return 1
+            clear_logs || return 1
             panel --es addLeftPanelSet com.google.android.youtube || return 1
             left_index=''
             for attempt in 1 2 3 4 5; do
                 adb logcat -d -v time GT8D:D '*:S' > "$active/add-set-logcat.txt" || return 1
+                if [[ -s $active/logcat-stream.txt ]]; then
+                    cat "$active/logcat-stream.txt" > "$active/add-set-logcat.txt" || return 1
+                fi
                 left_index=$(sed -n 's/.*\[DebugPanel\] addLeftPanelSet index=\([0-9]*\).*/\1/p' "$active/add-set-logcat.txt" | tail -n 1)
                 [[ $left_index =~ ^[1-9][0-9]*$ ]] && break
                 sleep 1
@@ -421,18 +479,18 @@ prepare_and_run() {
             ;;
         set_leftPanel_warm)
             adb shell input keyevent KEYCODE_HOME || return 1
-            adb logcat -c && adb logcat -b events -c || return 1
+            clear_logs || return 1
             ;;
         leftPanel_launchApp|leftPanel_dividerSwap|leftPanel_link|leftPanel_link_twice|set_leftToRightPanel)
-            adb logcat -c && adb logcat -b events -c || return 1
+            clear_logs || return 1
             ;;
         link_cold_noTasks) reset cold || return 1 ;;
-        set_panelCard_switch) adb logcat -c && adb logcat -b events -c || return 1 ;;
+        set_panelCard_switch) clear_logs || return 1 ;;
         link_appPanelFront)
             adb shell dumpsys activity activities > "$active/activities-before.txt" || return 1
             home_task_ids "$active/activities-before.txt" > "$active/home-tasks-before.txt"
             adb logcat -b events -d -v time > "$active/events-before.txt" || return 1
-            adb logcat -c || return 1
+            clear_logs || return 1
             ;;
         link_warm_noTasks)
             reset || return 1
@@ -442,19 +500,20 @@ prepare_and_run() {
             # 温める操作の生成イベントを判定対象から除く前に保存する。
             mkdir -p "$active/warmup" || return 1
             capture "$active/warmup" || return 1
-            adb logcat -c && adb logcat -b events -c || return 1
+            clear_logs || return 1
             ;;
         link_homeTaskPresent)
             reset cold && home_activity && adb shell input keyevent KEYCODE_HOME || return 1 ;;
         link_browserTaskPresent)
             adb shell input keyevent KEYCODE_HOME || return 1
-            adb logcat -c && adb logcat -b events -c || return 1 ;;
+            clear_logs || return 1 ;;
         link_fromYlHome) reset && home_activity || return 1 ;;
         set_strip_coldPanel)
             reset cold || return 1
             adb shell "run-as com.gt8d.launcher sh -c 'mkdir -p /data/data/com.gt8d.launcher/files && echo 0 > /data/data/com.gt8d.launcher/files/last_set_index.txt'" || return 1
             adb shell am force-stop com.gt8d.launcher || return 1
             adb shell am force-stop com.gt8d.launcher.panel || return 1
+            sleep 3
             home_activity && chatgpt || return 1
             ;;
     esac
@@ -502,8 +561,8 @@ run() {
     # 左パネルの前提は状態を変更する場面の後にも開き直す。--only も同じ経路。
     if [[ $name == set_leftPanel_warm || $name == leftPanel_* || $name == set_leftToRightPanel ]]; then
         if [[ -n $prerequisite ]] && [[ $last_name != "$prerequisite" || $last_suffix != "$version" || $last_pass != 1 ]]; then
-            if [[ ${scenario_failed[$prerequisite_key]:-0} != 1 && ${prerequisite_rebuilt[$prerequisite_key]:-0} != 1 ]]; then
-                prerequisite_rebuilt[$prerequisite_key]=1
+            if [[ ${scenario_failed[$prerequisite_key]:-0} != 1 || ${prerequisite_rebuilt[$prerequisite_key]:-0} != 1 ]]; then
+                if [[ ${scenario_failed[$prerequisite_key]:-0} == 1 ]]; then prerequisite_rebuilt[$prerequisite_key]=1; fi
                 run "$prerequisite" "@prerequisite$version" "$version"
             fi
         fi
@@ -516,8 +575,11 @@ run() {
         return
     fi
     scenario_runs[$key]=$(( ${scenario_runs[$key]:-0} + 1 ))
-    if [[ ${scenario_runs[$key]} -gt 1 ]]; then suffix+="@run${scenario_runs[$key]}"; fi
+    if [[ $suffix == @prerequisite* ]]; then
+        suffix="@prerequisite$version@run${scenario_runs[$key]}"
+    elif [[ ${scenario_runs[$key]} -gt 1 ]]; then suffix+="@run${scenario_runs[$key]}"; fi
     active="$out/$name$suffix"
+    stream_dir=''
     mkdir -p "$active" || exit 1
     reasons=()
     prepare_and_run "$name" > "$active/commands.txt" 2>&1 || reasons+=('準備または操作コマンドが失敗')
@@ -555,8 +617,9 @@ run() {
             last_pass=0
         fi
     fi
-    if ((last_pass == 0)); then scenario_failed[$key]=1; fi
+    scenario_failed[$key]=$((1 - last_pass))
     active=''
+    stream_dir=''
 }
 switch_home() {
     local actual
