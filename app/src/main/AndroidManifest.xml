@@ -39,7 +39,7 @@
     <application
         android:name=".LauncherApp"
         android:icon="@mipmap/ic_launcher"
-        android:label="GT8D Launcher"
+        android:label="YLuncher"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
@@ -60,7 +60,7 @@
             android:name=".ui.panel.PanelActivity"
             android:exported="true"
             android:permission="com.gt8d.launcher.permission.OPEN_PANEL"
-            android:label="GT8D パネル"
+            android:label="YLuncher パネル"
             android:resizeableActivity="true" />
 
         <activity
@@ -87,7 +87,7 @@
         <service
             android:name=".media.MediaListenerService"
             android:exported="true"
-            android:label="GT8D Launcher"
+            android:label="YLuncher"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />

@@ -41,8 +41,8 @@ class EdgeStripService : Service() {
         private val mutableStripBounds = MutableStateFlow(StripBounds(null, null))
         val stripBounds: StateFlow<StripBounds> = mutableStripBounds.asStateFlow()
         private const val CHANNEL_ID = "gt8d_edge_strip"
-        private const val CHANNEL_NAME = "GT8D Launcher"
-        private const val NOTIFICATION_TEXT = "GT8D Launcher 動作中"
+        private const val CHANNEL_NAME = "YLuncher"
+        private const val NOTIFICATION_TEXT = "YLuncher 動作中"
         private const val NOTIFICATION_ID = 1
         private const val GLOW_FADE_MS = 100L
         private const val LONG_PRESS_SLOP_DP = 16f
