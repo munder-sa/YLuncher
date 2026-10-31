@@ -158,4 +158,23 @@ class DailyScreensTest {
         rule.onNodeWithTag("boot_wait_car_note").assertTextEquals("車での確認の後に使えるようになります")
         assertTrue(config.boot.waitForCar); assertEquals(0, writes)
     }
+
+    @Test fun autoSaveNote_onAllImmediateScreens_andListsPicker() {
+        var route by mutableStateOf<SettingsRoute>(SettingsRoute.Gesture)
+        rule.setContent { LauncherTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+            when (route) {
+                SettingsRoute.Gesture -> GestureScreen(config, update)
+                SettingsRoute.Boot -> BootSettingsScreen(config, update)
+                SettingsRoute.Link -> LinkScreen(config, update)
+                SettingsRoute.Lists -> ListsScreen(config, update, { it }, { listOf("a") })
+                else -> Unit
+            }
+        } } }
+        listOf(SettingsRoute.Gesture, SettingsRoute.Boot, SettingsRoute.Link, SettingsRoute.Lists).forEach {
+            rule.runOnIdle { route = it }
+            rule.onNodeWithText("変更は自動で保存されます").performScrollTo().assertIsDisplayed()
+        }
+        click("lists_panel_add")
+        rule.onNodeWithText("変更は自動で保存されます").performScrollTo().assertIsDisplayed()
+    }
 }

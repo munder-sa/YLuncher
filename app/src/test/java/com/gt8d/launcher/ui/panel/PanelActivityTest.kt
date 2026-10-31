@@ -317,7 +317,7 @@ class PanelActivityTest {
     }
     @Test fun longPressAppList_inSplit_showsSettingsInPanel() {
         splitPanel(); settingsLongPress()
-        rule.onNodeWithTag("settings_close").assertIsDisplayed()
+        rule.onNodeWithTag("settings_back").assertIsDisplayed()
         assertTrue(controller!!.get().settingsShown)
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }
@@ -333,7 +333,7 @@ class PanelActivityTest {
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }
     @Test fun settings_close_returnsToPanel() {
-        splitPanel(); settingsLongPress(); rule.onNodeWithTag("settings_close").performClick()
+        splitPanel(); settingsLongPress(); rule.onNodeWithTag("settings_back").performClick()
         rule.onNodeWithTag("dock_applist").assertIsDisplayed(); assertFalse(controller!!.get().settingsShown)
     }
     @Test fun settings_survivesRecreate() {

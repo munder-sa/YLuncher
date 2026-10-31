@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +19,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.split.SplitMode
@@ -80,6 +83,7 @@ fun SettingsHost(
     setsStore: SetsStore? = null,
     labelFor: (String) -> String = { AppGraph.catalog.label(it) },
     launchablePackages: () -> List<String> = { AppGraph.catalog.launchables().map { it.pkg } },
+    iconFor: ((String) -> ImageBitmap?)? = null,
 ) {
     var nav by remember { mutableStateOf(if (initialRoute == null) SettingsNav() else SettingsNav(listOf(SettingsRoute.Root, initialRoute))) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -90,6 +94,7 @@ fun SettingsHost(
         } else nav = popped
     }
     BackHandler(onBack = back)
+    val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     Column(modifier.fillMaxSize().background(Palette.Background0).padding(12.dp)) {
         SettingsTopBar(
             when (nav.current) {
@@ -97,7 +102,10 @@ fun SettingsHost(
                 is SettingsRoute.SetEdit -> "画面セットの編集"
                 else -> detailItems.first { it.route == nav.current }.title
             },
-            onBack = back, onClose = onExit,
+            onBack = {
+                if (nav.current is SettingsRoute.SetEdit) dispatcher?.onBackPressed() ?: back()
+                else back()
+            }, onClose = onExit,
         )
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
             if (nav.current == SettingsRoute.Root) {
@@ -123,11 +131,12 @@ fun SettingsHost(
             } else if (nav.current == SettingsRoute.Sets || nav.current is SettingsRoute.SetEdit) {
                 val context = LocalContext.current
                 val store = setsStore ?: remember { SetsStore.forApp(context) }
+                val catalog = remember(context) { AppCatalog(context.applicationContext) }
                 SetsScreen(nav.current, store,
                     onEdit = { nav = nav.push(SettingsRoute.SetEdit(it)) },
                     onBack = back, onOpenSet = onOpenSet, labelFor = labelFor,
                     onMissing = { nav = SettingsNav(listOf(SettingsRoute.Root, SettingsRoute.Sets)) },
-                    launchablePackages = launchablePackages)
+                    launchablePackages = launchablePackages, iconFor = iconFor ?: catalog::icon)
             } else if (nav.current == SettingsRoute.Permissions) {
                 AppPermissionsScreen()
             } else if (nav.current == SettingsRoute.AppPairPrep) {

@@ -46,13 +46,14 @@ class SettingsActivityTest {
         rule.waitForIdle()
     }
     @Test fun close_finishes() {
-        host(); rule.onNodeWithTag("settings_close").performClick(); assertTrue(controller!!.get().isFinishing)
+        host(); rule.onNodeWithTag("settings_back").performClick(); assertTrue(controller!!.get().isFinishing)
     }
     @Test fun permissionsRoute_opensPermissionCheck() {
         controller = Robolectric.buildActivity(SettingsActivity::class.java,
             Intent(app, SettingsActivity::class.java).putExtra("open_route", "permissions"))
             .create().start().resume().visible()
         rule.onNodeWithText("許可のチェック").assertIsDisplayed()
+        rule.onNodeWithText("変更は自動で保存されます").assertDoesNotExist()
         rule.onNodeWithTag("perm_row_Notification").assertExists()
         rule.onNodeWithTag("settings_item_sets").assertDoesNotExist()
     }

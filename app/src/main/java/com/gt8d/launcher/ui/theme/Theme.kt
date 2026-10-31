@@ -28,7 +28,7 @@ object Palette {
 }
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Palette.Accent,
+    primary = Palette.PanelAccent,
     onPrimary = Palette.Background0,
     background = Palette.Background0,
     onBackground = Color.White,

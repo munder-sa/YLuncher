@@ -11,6 +11,7 @@ import com.gt8d.launcher.ui.theme.Dims
 
 @Composable
 fun GestureScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> LauncherConfig) -> Unit) {
+    SettingsAutoSaveNote()
     OneLineText("スワイプ帯の幅", fontSize = Dims.BodyText)
     DailySettings.stripWidthChoices.chunked(2).forEach { choices ->
         Row(Modifier.fillMaxWidth()) {

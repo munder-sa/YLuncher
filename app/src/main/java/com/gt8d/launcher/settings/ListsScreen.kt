@@ -25,6 +25,7 @@ fun ListsScreen(
     labelFor: (String) -> String = { AppGraph.catalog.label(it) },
     launchablePackages: () -> List<String> = { AppGraph.catalog.launchables().map { it.pkg } },
 ) {
+    SettingsAutoSaveNote()
     var picking by remember { mutableStateOf<String?>(null) }
     fun apps(cfg: LauncherConfig, section: String): List<String> = when (section) {
         "home" -> cfg.homeApps
