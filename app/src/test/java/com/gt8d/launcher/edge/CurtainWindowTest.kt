@@ -4,6 +4,10 @@ import android.app.Application
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import org.junit.Rule
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
@@ -24,11 +28,46 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.LooperMode
 import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CurtainWindowTest {
+    @get:Rule val composeRule = createEmptyComposeRule()
+
+    @Test fun cancelButton_callsProvidedCallback() {
+        var calls = 0
+        val wm = AndroidWindowManagerFacade(context.getSystemService(WindowManager::class.java))
+        val window = CurtainWindow(context, wm, onCancel = { calls++ })
+        try {
+            window.show(sampleTarget())
+            window.showProgress()
+            composeRule.onNodeWithTag("curtain_cancel").performClick()
+            assertEquals(1, calls)
+        } finally {
+            window.removeImmediately()
+        }
+    }
+
+    @Test
+    @LooperMode(LooperMode.Mode.PAUSED)
+    fun cancelledHide_fadesFor150msLikeReady() {
+        for (reason in listOf(HideReason.Ready, HideReason.Cancelled)) {
+            val wm = FakeWindowManagerFacade()
+            val window = CurtainWindow(context, wm)
+            window.show(sampleTarget())
+            val view = wm.added.single().first
+            window.hide(reason)
+            val hiddenAtMs = android.os.SystemClock.uptimeMillis()
+            assertEquals(150L, view.animate().duration)
+            view.animate().cancel()
+            advance(149)
+            assertTrue("removed before 150ms: $reason start=$hiddenAtMs now=${android.os.SystemClock.uptimeMillis()}", wm.removed.isEmpty())
+            advance(1)
+            assertEquals(listOf(view), wm.removed)
+        }
+    }
 
     private val context get() = ApplicationProvider.getApplicationContext<Application>()
     private fun advance(ms: Long) {

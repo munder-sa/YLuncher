@@ -37,6 +37,156 @@ import kotlinx.coroutines.test.*
 import com.gt8d.launcher.split.PanelPlacement
 
 class SetRunnerTest {
+    @Test fun cancelOpening_clearsStatePendingAndRetry_withoutFailureOrNotice() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.runner.next()
+        e.runner.cancelOpening()
+        assertEquals(1, e.startHomeCount)
+        assertEquals(SetNavigator.HOME, e.runner.currentIndex)
+        assertEquals(SetNavigator.HOME, e.lastIndex.lastSetIndex)
+        assertNull(e.runner.opening.value)
+        assertNull(e.runner.lastOpenedPair)
+        assertNull(e.runner.lastOpenedAtMs)
+        assertNull(e.runner.lastReadyAtMs)
+        e.scheduler.advanceBy(10000)
+        assertEquals(1, e.vendor.calls.size)
+        assertEquals(0, e.selector.state.consecutiveFailures)
+        assertTrue(e.messenger.notices.isEmpty())
+        assertEquals(listOf(HideReason.Cancelled), e.curtainView.hiddenReasons)
+    }
+
+    @Test fun cancelGuard_watchesActualLeftRightPanelAndVendor_notUnrelatedOrPending() {
+        for ((index, pkg, expected) in listOf(
+            Triple(2, "youtube", 2), Triple(2, "applemusic", 2),
+            Triple(1, "com.gt8d.launcher.panel", 2),
+            Triple(2, com.gt8d.launcher.split.VendorBridge.VENDOR_PKG, 2),
+            Triple(2, "unrelated", 1), Triple(2, "maps", 1),
+        )) {
+            val e = TestEnv()
+            e.runner.open(index)
+            e.runner.next()
+            e.runner.cancelOpening()
+            e.scheduler.advanceBy(1500)
+            e.events.events.add(ResumeEvent(pkg, e.scheduler.nowMs()))
+            e.scheduler.advanceBy(500)
+            assertEquals("pkg=$pkg", expected, e.startHomeCount)
+            e.scheduler.advanceBy(5000)
+            assertEquals(expected, e.startHomeCount)
+            assertEquals(1, e.vendor.calls.size)
+        }
+    }
+
+    @Test fun cancelGuard_fixedDeadlineAndAtMostTwoAdditionalHomes() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.runner.cancelOpening()
+        repeat(4) {
+            e.scheduler.advanceBy(500)
+            e.events.events.add(ResumeEvent("youtube", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(300)
+        }
+        assertEquals(3, e.startHomeCount)
+        val late = TestEnv()
+        late.runner.open(2)
+        late.runner.cancelOpening()
+        late.scheduler.advanceBy(4500)
+        late.events.events.add(ResumeEvent("youtube", 4500))
+        late.scheduler.advanceBy(300)
+        assertEquals(2, late.startHomeCount)
+        late.scheduler.advanceBy(300)
+        late.events.events.add(ResumeEvent("applemusic", late.scheduler.nowMs()))
+        late.scheduler.advanceBy(1000)
+        assertEquals(2, late.startHomeCount)
+    }
+
+    @Test fun cancelGuard_deadlineStartsAtCancellation_andQueryFailureStopsGuard() {
+        for (queryFails in listOf(false, true)) {
+            val e = leftPanelEnv()
+            e.runner.open(1)
+            e.scheduler.advanceBy(1000)
+            e.runner.cancelOpening()
+            if (queryFails) {
+                e.events.queryFails = true
+                e.scheduler.advanceBy(200)
+                e.events.queryFails = false
+            }
+            e.scheduler.advanceBy(4000)
+            e.events.events.add(ResumeEvent("com.gt8d.launcher.panel", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(200)
+            assertEquals(if (queryFails) 1 else 2, e.startHomeCount)
+            e.scheduler.advanceBy(1000)
+            e.events.events.add(ResumeEvent("y", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(1000)
+            assertEquals(if (queryFails) 1 else 2, e.startHomeCount)
+        }
+    }
+
+    @Test fun cancelGuard_stopsWhenMonitoringUnavailableInitiallyOrDuringGuard() {
+        for (initially in listOf(true, false)) {
+            val e = TestEnv(watcherAvailable = !initially)
+            e.runner.open(2)
+            e.runner.cancelOpening()
+            e.events.isAvailable = false
+            e.scheduler.advanceBy(200)
+            e.events.isAvailable = true
+            e.events.events.add(ResumeEvent("youtube", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(5000)
+            assertEquals(1, e.startHomeCount)
+        }
+    }
+
+    @Test fun cancelGuard_allSixOperationsStopIt_evenBeforeNullConfigReturn() {
+        val operations = listOf<(SetRunner) -> Unit>(
+            { it.open(1) }, { it.next() }, { it.prev() }, { it.home() },
+            { it.openForBoot(1) }, { it.openForLink("youtube", "maps", {}, {}) },
+        )
+        for (operation in operations) for (loading in listOf(false, true)) {
+            val e = TestEnv()
+            e.runner.open(2)
+            e.runner.cancelOpening()
+            e.loading = loading
+            operation(e.runner)
+            val homesAfterOperation = e.startHomeCount
+            e.events.events.add(ResumeEvent("youtube", 100))
+            e.scheduler.advanceBy(2000)
+            assertEquals(homesAfterOperation, e.startHomeCount)
+        }
+    }
+
+    @Test fun cancel_thenNextOpensNormally_andOldAppDoesNotReturnHome() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.runner.cancelOpening()
+        e.runner.next()
+        assertEquals(1, e.runner.currentIndex)
+        assertEquals(2, e.vendor.calls.size)
+        e.events.events.add(ResumeEvent("applemusic", 100))
+        e.scheduler.advanceBy(200)
+        assertEquals(1, e.startHomeCount)
+        resumePanelApp(e, "youtube")
+        assertEquals(1, e.runner.readyCount)
+        assertNull(e.runner.opening.value)
+    }
+
+    @Test fun cancelLink_doesNotInvokeEitherCallback() {
+        val e = TestEnv()
+        var ready = 0
+        var fallback = 0
+        assertTrue(e.runner.openForLink("youtube", "maps", { ready++ }, { fallback++ }))
+        e.runner.cancelOpening()
+        e.scheduler.advanceBy(10000)
+        assertEquals(0, ready)
+        assertEquals(0, fallback)
+        assertTrue(e.messenger.notices.isEmpty())
+    }
+
+    @Test fun target_cancellableOnlyForExistingSets() {
+        val e = TestEnv()
+        assertFalse(e.runner.targetFor(SetNavigator.HOME).cancellable)
+        assertFalse(e.runner.targetFor(99).cancellable)
+        assertTrue(e.runner.targetFor(1).cancellable)
+    }
     @Test fun unsupported_namesFirstUnsupportedApp_andReportsFullscreenFailure() {
         for (unsupported in listOf(setOf("youtube"), setOf("applemusic"), setOf("youtube", "applemusic"))) {
             for (started in listOf(true, false)) {

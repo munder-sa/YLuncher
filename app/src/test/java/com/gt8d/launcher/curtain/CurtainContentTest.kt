@@ -15,11 +15,14 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.width
+import androidx.compose.ui.unit.height
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -32,6 +35,34 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CurtainContentTest {
+    @Test fun cancel_visibilitySizeCallbackAndStablePositions() {
+        var progress by mutableStateOf(false)
+        var cancellable by mutableStateOf(true)
+        var calls = 0
+        rule.setContent {
+            LauncherTheme {
+                CurtainContent(sampleTarget().copy(cancellable = cancellable), progress,
+                    onCancel = { calls++ })
+            }
+        }
+        rule.onNodeWithTag("curtain_opening").assertTextEquals("開いています").assertIsDisplayed()
+        rule.onNodeWithTag("curtain_cancel").assertDoesNotExist()
+        val tags = listOf("curtain_set_name", "curtain_left", "curtain_right", "curtain_dots")
+        val before = tags.map { rule.onNodeWithTag(it).getBoundsInRoot() }
+        progress = true
+        rule.waitForIdle()
+        val button = rule.onNodeWithTag("curtain_cancel").assertIsDisplayed().assertTextEquals("ホームへ戻る")
+        val bounds = button.getBoundsInRoot()
+        assertTrue(bounds.height.value >= 72f)
+        assertTrue(bounds.width.value >= 72f)
+        button.performClick()
+        assertEquals(1, calls)
+        assertEquals(before, tags.map { rule.onNodeWithTag(it).getBoundsInRoot() })
+        cancellable = false
+        rule.waitForIdle()
+        rule.onNodeWithTag("curtain_cancel").assertDoesNotExist()
+        assertEquals(before, tags.map { rule.onNodeWithTag(it).getBoundsInRoot() })
+    }
 
     @get:Rule(order = 0)
     val registerActivityRule = object : ExternalResource() {

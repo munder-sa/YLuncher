@@ -1,5 +1,7 @@
 package com.gt8d.launcher.edge
 
+import com.gt8d.launcher.AppGraph
+
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
@@ -104,6 +106,7 @@ class EdgeStripService : Service() {
             context = this,
             wm = facade,
             readdStrips = ::readdStrips,
+            onCancel = { AppGraph.curtain.cancel() },
         )
         curtainWindow = window
         curtainView = window
