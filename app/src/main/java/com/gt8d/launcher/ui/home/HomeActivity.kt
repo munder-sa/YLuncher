@@ -110,6 +110,11 @@ class HomeActivity : ComponentActivity() {
                                         DiagLog.d("Home", "settings ignored while opening")
                                     } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java))
                                 },
+                                onOpenPermissionSettings = {
+                                    if (AppGraph.runner.opening.value != null) {
+                                        DiagLog.d("Home", "settings ignored while opening")
+                                    } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_route", "permissions"))
+                                },
                                 onLaunchComponent = { component ->
                                     val succeeded = activityLauncher.startComponent(component, adjacent = false)
                                     AppGraph.warm.recordAppLaunch(component.packageName, succeeded)

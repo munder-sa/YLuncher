@@ -51,6 +51,32 @@ import org.robolectric.annotation.TextLayoutMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
 class PanelContentTest {
+    @Test fun panel_missingPermissions_textAndCallback() {
+        var missing by mutableStateOf(listOf(MissingPermission.Notification))
+        var opened = 0
+        rule.setContent {
+            LauncherTheme {
+                PanelContent(PanelState(null, null, 0L, emptyList(), emptyList(),
+                    DockStatus(true, null), false, missing.isNotEmpty(), missingPermissions = missing),
+                    emptyActions { opened++ })
+            }
+        }
+        val cases = listOf(
+            listOf(MissingPermission.Notification) to "再生情報の表示に許可が必要です",
+            listOf(MissingPermission.Overlay) to "画面の端の操作に許可が必要です",
+            listOf(MissingPermission.UsageStats) to "アプリの切り替えの検知に許可が必要です",
+            listOf(MissingPermission.Overlay, MissingPermission.UsageStats) to "許可が 2 件足りません",
+        )
+        for ((permissions, text) in cases) {
+            rule.runOnIdle { missing = permissions; Snapshot.sendApplyNotifications() }
+            rule.onNodeWithText(text).assertIsDisplayed()
+        }
+        rule.onNodeWithTag("permission_banner").performClick()
+        assertEquals(1, opened)
+        rule.runOnIdle { missing = emptyList(); Snapshot.sendApplyNotifications() }
+        rule.onNodeWithTag("permission_banner").assertDoesNotExist()
+    }
+
     private fun assertDockSide(left: Boolean) {
         val dock = rule.onNodeWithTag("dock").getBoundsInRoot()
         val content = rule.onNodeWithTag("panel_view_segment").getBoundsInRoot()

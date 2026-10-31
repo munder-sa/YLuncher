@@ -33,13 +33,17 @@ import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
 import com.gt8d.launcher.ui.apps.AppListEntry
 import com.gt8d.launcher.ui.apps.buildAppList
 
+enum class MissingPermission { Notification, Overlay, UsageStats }
+
 data class PanelEnvironment(
     val dockStatus: DockStatus,
-    val needsPermission: Boolean,
+    val missingPermissions: List<MissingPermission>,
     val installedPkgs: Set<String>,
     val appListEntries: List<AppListEntry>,
     val revision: Long,
-)
+) {
+    val needsPermission: Boolean get() = missingPermissions.isNotEmpty()
+}
 
 internal object WifiReader {
     var read: (Context) -> WifiIndicator = ::readWifiFromSystem
@@ -71,16 +75,20 @@ private fun readDockStatus(context: Context): DockStatus {
     return DockStatus(wifiOn = wifi !is WifiIndicator.Off, bluetoothOn = bluetooth, wifi = wifi)
 }
 
-private fun readNeedsPermission(context: Context): Boolean {
+private fun readMissingPermissions(context: Context): List<MissingPermission> {
     val notification = runCatching {
         context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
     }.getOrDefault(false)
     val overlay = runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false)
-    return !notification || !overlay || !UsageStatsForegroundEvents(context).available()
+    return buildList {
+        if (!notification) add(MissingPermission.Notification)
+        if (!overlay) add(MissingPermission.Overlay)
+        if (!UsageStatsForegroundEvents(context).available()) add(MissingPermission.UsageStats)
+    }
 }
 
 private fun readEnvironment(context: Context, catalog: AppCatalog, revision: Long) = PanelEnvironment(
-    readDockStatus(context), readNeedsPermission(context), catalog.installed(),
+    readDockStatus(context), readMissingPermissions(context), catalog.installed(),
     buildAppList(catalog.launchables(), context.packageName), revision,
 )
 
@@ -93,7 +101,7 @@ fun rememberPanelEnvironment(catalog: AppCatalog): PanelEnvironment {
         var observing = false
         fun refreshRadios() {
             environment = environment.copy(
-                dockStatus = readDockStatus(context), needsPermission = readNeedsPermission(context),
+                dockStatus = readDockStatus(context), missingPermissions = readMissingPermissions(context),
                 revision = environment.revision + 1,
             )
         }

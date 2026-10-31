@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +49,7 @@ fun AppListScreen(
     onClose: () -> Unit,
     gridState: LazyGridState = rememberLazyGridState(),
     iconRevision: Int = 0,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     BackHandler {
         onClose()
@@ -84,6 +86,19 @@ fun AppListScreen(
                     tint = Color.White,
                     modifier = Modifier.size(32.dp),
                 )
+            }
+            if (onOpenSettings != null) {
+                Row(
+                    modifier = Modifier
+                        .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                        .clickable(onClick = onOpenSettings)
+                        .testTag("applist_settings"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(Icons.Default.Settings, null, Modifier.size(32.dp), tint = Color.White)
+                    Text("設定", fontSize = Dims.BodyText, color = Color.White)
+                }
             }
         }
 

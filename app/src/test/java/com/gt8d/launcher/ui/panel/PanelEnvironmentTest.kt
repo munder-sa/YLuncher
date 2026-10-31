@@ -125,6 +125,34 @@ class PanelEnvironmentTest {
         rule.runOnIdle { owner.stop(); permissions(true); radios(true, true); owner.resume() }
         rule.runOnIdle { assertEquals(DockStatus(true, true, WifiIndicator.Disconnected), result.dockStatus); assertFalse(result.needsPermission) }
     }
+    @Test fun environment_missingPermissions_allCombinationsInOrder() {
+        permissions(false)
+        host()
+        for (mask in 0..7) {
+            val notification = mask and 1 != 0
+            val overlay = mask and 2 != 0
+            val usage = mask and 4 != 0
+            rule.runOnIdle {
+                owner.stop()
+                Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners",
+                    if (notification) "${app.packageName}/.media.MediaWatcher" else "")
+                ShadowSettings.setCanDrawOverlays(overlay)
+                Shadows.shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName,
+                    if (usage) AppOpsManager.MODE_ALLOWED else AppOpsManager.MODE_IGNORED)
+                owner.resume()
+            }
+            rule.runOnIdle {
+                val expected = buildList {
+                    if (!notification) add(MissingPermission.Notification)
+                    if (!overlay) add(MissingPermission.Overlay)
+                    if (!usage) add(MissingPermission.UsageStats)
+                }
+                assertEquals("mask=$mask", expected, result.missingPermissions)
+                assertEquals(expected.isNotEmpty(), result.needsPermission)
+            }
+        }
+    }
     @Test fun environment_radioBroadcast_refreshesWithoutMediaChange() {
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         radios(false, false); host()

@@ -1,27 +1,17 @@
 package com.gt8d.launcher.ui.panel
 
 import android.content.ComponentName
-import android.content.Intent
-import android.net.Uri
 import android.os.SystemClock
-import android.provider.Settings
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.PanelView
 import com.gt8d.launcher.ui.home.HomeClockHeader
 import com.gt8d.launcher.ui.home.HomeMiniPlayer
 import com.gt8d.launcher.ui.home.HomeSetCards
-import com.gt8d.launcher.ui.layout.OneLineText
 import com.gt8d.launcher.ui.layout.PanelLayout
-import com.gt8d.launcher.ui.theme.Palette
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,6 +49,7 @@ fun PanelScreen(
     homeWide: Boolean = false,
     homeConfig: LauncherConfig? = null,
     placement: PanelPlacement? = null,
+    onOpenPermissionSettings: () -> Unit = {},
     onLaunchApp: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -98,6 +89,7 @@ fun PanelScreen(
                 showAppList = false
             },
             onClose = { showAppList = false },
+            onOpenSettings = { showAppList = false; onOpenSettings() },
         )
         return
     }
@@ -134,6 +126,7 @@ fun PanelScreen(
         dockStatus = environment.dockStatus,
         showCar = AppGraph.bridge.carHomeAvailable,
         needsPermission = environment.needsPermission,
+        missingPermissions = environment.missingPermissions,
     )
 
     val actions = PanelActions(
@@ -154,17 +147,7 @@ fun PanelScreen(
         onCar = { AppGraph.bridge.switchToCarScreen() },
         onAppList = { showAppList = true },
         onAppListLongPress = onOpenSettings,
-        onOpenPermissions = {
-            runCatching {
-                val intent = Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.fromParts("package", context.packageName, null),
-                ).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-            }
-        },
+        onOpenPermissions = onOpenPermissionSettings,
     )
 
     if (homeWide) {
@@ -211,12 +194,7 @@ internal fun HomeWideContent(
                 val clockHeight = maxHeight * 0.22f
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (state.needsPermission) {
-                        Surface(color = Palette.Panel, shape = RoundedCornerShape(12.dp), modifier = Modifier
-                            .fillMaxWidth().heightIn(min = 72.dp).clickable(onClick = actions.onOpenPermissions)
-                            .testTag("permission_banner")) {
-                            Box(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 12.dp),
-                                contentAlignment = Alignment.Center) { OneLineText("許可が必要", color = Palette.PanelAccent) }
-                        }
+                        PermissionBanner(state.missingPermissions, actions.onOpenPermissions)
                     }
                     HomeClockHeader(clockHeight)
                     HomeSetCards(config.screenSets, appInfo, currentIndex, onOpen, onNewSet,

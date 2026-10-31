@@ -48,6 +48,39 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun panelScreen_appListSettings_closesListAndOpensSettingsOnce() {
+        var opened = 0
+        rule.setContent {
+            LauncherTheme { PanelScreen(false, onOpenSettings = { opened++ }, onLaunchApp = {}) }
+        }
+        openList()
+        rule.onNodeWithTag("applist_settings").assertIsDisplayed().performClick()
+        assertEquals(1, opened)
+        rule.onNodeWithTag("applist_settings").assertDoesNotExist()
+        rule.onNodeWithTag("applist_close").assertDoesNotExist()
+        rule.onNodeWithTag("dock_applist").assertExists()
+    }
+
+    @Test fun panelScreen_permissionBanner_opensPermissionSettings() = checkPermissionSettings(false)
+    @Test fun panelScreen_wideHome_permissionBanner_opensPermissionSettings() = checkPermissionSettings(true)
+
+    private fun checkPermissionSettings(wide: Boolean) {
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
+        ShadowSettings.setCanDrawOverlays(true)
+        Shadows.shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
+            AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName, AppOpsManager.MODE_ALLOWED)
+        var opened = 0
+        rule.setContent {
+            LauncherTheme {
+                PanelScreen(false, homeWide = wide, onOpenPermissionSettings = { opened++ }, onLaunchApp = {})
+            }
+        }
+        rule.onNodeWithText("再生情報の表示に許可が必要です").assertIsDisplayed()
+        rule.onNodeWithTag("permission_banner").assertIsDisplayed().performClick()
+        assertEquals(1, opened)
+        assertNull(Shadows.shadowOf(app).nextStartedActivity)
+    }
+
     @Test fun home_ignoresPlacement() {
         AppGraph.reportPanelPlacement(com.gt8d.launcher.split.PanelPlacement.Left)
         try {
