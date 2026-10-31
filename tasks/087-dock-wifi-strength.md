@@ -51,3 +51,13 @@
 
 ## 報告
 変更点、使ったアイコンの名前、テストの結果(件数)、**決めたこと**。
+
+## 追記(司令塔の判断。1回目は ShadowConnectivityManager で止まった)
+- 今の作業ツリーの変更を土台に続ける。アイコンは報告どおり `SignalWifi0Bar`・`NetworkWifi1Bar`〜`NetworkWifi3Bar`・`SignalWifi4Bar`・`SignalWifiOff` でよい。
+- **テストのために差し替え口を作る**: `PanelEnvironment.kt` に `internal object WifiReader { var read: (Context) -> WifiIndicator = ::readWifiFromSystem }`(`readWifiFromSystem` は今の WifiManager/ConnectivityManager を読む処理)。`readDockStatus` は `WifiReader.read(context)` を使う(`wifiOn` は `!is WifiIndicator.Off`)。
+- `PanelEnvironmentTest` は ConnectivityManager の Shadow を使わない: `WifiReader.read` を偽物にして `Connected(4)` → 偽物の値を `Connected(1)` に変えて `RSSI_CHANGED_ACTION` を送る → `dockStatus.wifi == Connected(1)`。`NETWORK_STATE_CHANGED_ACTION` でも同様。テストの後で `WifiReader.read` を元に戻す(`finally`)。
+- `readWifiFromSystem` そのものの単体テストは不要(実機で司令塔が確かめる)。
+
+## 追記2(司令塔の判断)
+- おすすめの案でよい: Wi-Fi の値の取得は `WifiReader` の偽物、コールバックの登録・解除の確認(`environment_networkCallback_refreshesAndUnregisters`。1回目に足したテスト)には ConnectivityManager の Shadow を使ってよい。Shadow で登録・解除が確かめられない場合は、そのテストを「登録が失敗しても落ちない・放送で更新される」確認に変えてよい(報告する)。
+- 1回目の作業ツリーの変更を土台に、追記の内容を仕上げて、許可コマンドでテストを通す。
