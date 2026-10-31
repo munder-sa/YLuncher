@@ -21,10 +21,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.gt8d.launcher.R
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.layout.OneLineText
+import com.gt8d.launcher.ui.layout.MarqueeText
 import com.gt8d.launcher.ui.panel.AppInfo
 import com.gt8d.launcher.ui.panel.MediaAction
 import com.gt8d.launcher.ui.panel.SeekBar
@@ -70,9 +72,25 @@ fun HomeMiniPlayer(
                 val wrapFavorite = now.hasFavorite && maxWidth < 336.dp
                 val controlsHeight = if (wrapFavorite) 176.dp else 96.dp
                 val required = titleHeight + artistHeight + seekHeight + controlsHeight
-                val showDetails = maxHeight >= required + 44.dp + (if (seekHeight > 0.dp) timeHeight else 0.dp)
-                val artSize = minOf(maxWidth, (maxHeight - required -
-                    (if (showDetails) 44.dp + (if (seekHeight > 0.dp) timeHeight else 0.dp) else 0.dp)).coerceAtLeast(0.dp))
+                fun layout(spacing: PlayerSpacing): PlayerLayout {
+                    fun gaps(details: Boolean, art: Boolean) = playerGaps(
+                        spacing, details, art, now.artist != null, seekHeight > 0.dp)
+                    fun fixed(details: Boolean, art: Boolean) = required +
+                        (if (details) 44.dp + (if (seekHeight > 0.dp) timeHeight else 0.dp) else 0.dp) +
+                        gaps(details, art).total
+                    val details = maxHeight >= fixed(true, false)
+                    val art = minOf(maxWidth, (maxHeight - fixed(details, true)).coerceAtLeast(0.dp))
+                    return PlayerLayout(details, art, gaps(details, art > 0.dp), fixed(details, false))
+                }
+                val normal = layout(PlayerSpacing.Normal)
+                val layout = if (normal.artSize >= 120.dp && normal.fixedHeight <= maxHeight) normal else {
+                    val compact = layout(PlayerSpacing.Compact)
+                    if (compact.fixedHeight <= maxHeight) compact else layout(PlayerSpacing.Minimal)
+                }
+                val showDetails = layout.showDetails
+                val artSize = layout.artSize
+                val gaps = layout.gaps
+                val restartKey = now.pkg to now.title to now.artist
                 Column(Modifier.fillMaxSize()) {
                     if (showDetails) {
                         val app = appInfo(now.pkg)
@@ -83,15 +101,23 @@ fun HomeMiniPlayer(
                         }
                     }
                     if (artSize > 0.dp) {
+                        Spacer(Modifier.height(gaps.beforeArt))
                         val artwork = now.artwork
-                        val artModifier = Modifier.size(artSize).align(Alignment.CenterHorizontally).clip(RoundedCornerShape(16.dp))
+                        val artModifier = Modifier.size(artSize).align(Alignment.CenterHorizontally).clip(RoundedCornerShape(16.dp)).testTag("player_art")
                         if (artwork == null) Image(painterResource(R.drawable.artwork_placeholder), null, artModifier)
                         else Image(artwork.asImageBitmap(), null, artModifier)
                     }
-                    OneLineText(now.title, Modifier.fillMaxWidth().testTag("player_title"),
-                        fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-                    now.artist?.let { OneLineText(it, Modifier.fillMaxWidth().testTag("player_artist"), color = Palette.Muted) }
+                    Spacer(Modifier.height(gaps.beforeTitle))
+                    MarqueeText(now.title, Modifier.fillMaxWidth(), tag = "player_title",
+                        fontSize = 28.sp, fontWeight = FontWeight.SemiBold, restartKey = restartKey)
+                    now.artist?.let {
+                        Spacer(Modifier.height(gaps.beforeArtist))
+                        MarqueeText(it, Modifier.fillMaxWidth(), tag = "player_artist", color = Palette.Muted, restartKey = restartKey)
+                    }
+                    Spacer(Modifier.height(gaps.beforeSeek))
                     SeekBar(now.durationMs, positionMs, onSeek, tag = "player_seek", showTimes = showDetails, timesTag = "player_times")
+                    Spacer(Modifier.height(gaps.beforeControls))
+                    Spacer(Modifier.weight(1f))
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally) {
                         if (wrapFavorite) PlayerControl(MediaAction.Favorite, onAction)
@@ -108,6 +134,31 @@ fun HomeMiniPlayer(
         }
     }
 }
+
+private data class PlayerGaps(
+    val beforeArt: Dp, val beforeTitle: Dp, val beforeArtist: Dp,
+    val beforeSeek: Dp, val beforeControls: Dp,
+) {
+    val total get() = beforeArt + beforeTitle + beforeArtist + beforeSeek + beforeControls
+}
+
+private data class PlayerLayout(val showDetails: Boolean, val artSize: Dp, val gaps: PlayerGaps, val fixedHeight: Dp)
+
+private enum class PlayerSpacing(val appToArt: Dp, val artToTitle: Dp, val titleToArtist: Dp,
+                               val artistToSeek: Dp, val beforeControls: Dp) {
+    Normal(16.dp, 24.dp, 4.dp, 16.dp, 16.dp),
+    Compact(8.dp, 8.dp, 2.dp, 8.dp, 8.dp),
+    Minimal(0.dp, 0.dp, 0.dp, 4.dp, 0.dp),
+}
+
+private fun playerGaps(spacing: PlayerSpacing, app: Boolean, art: Boolean, artist: Boolean, seek: Boolean): PlayerGaps =
+    PlayerGaps(
+        if (app && art) spacing.appToArt else 0.dp,
+        if (art) spacing.artToTitle else 0.dp,
+        if (artist) spacing.titleToArtist else 0.dp,
+        if (artist && seek) spacing.artistToSeek else 0.dp,
+        if (seek) spacing.beforeControls else 0.dp,
+    )
 
 @Composable
 private fun AppImage(app: AppInfo, modifier: Modifier) {

@@ -15,6 +15,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.geometry.Offset
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.media.NowPlaying
@@ -31,6 +34,22 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MediaCardTest {
+
+    @Test fun longTitle_isOneLine() {
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(
+                    now = NowPlaying("music", "長い曲名".repeat(30), "Artist", null, 120000L, true, false),
+                    idleApp = null, positionMs = 0L,
+                    onAction = {}, onSeek = {}, onLaunch = {},
+                )
+            }
+        }
+        val results = mutableListOf<TextLayoutResult>()
+        rule.onNodeWithTag("title", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        assertEquals(1, results.single().lineCount)
+    }
 
     @Test
     fun mediaCard_pointerSeek_commitsEndOnceOnRelease() = pointerSeek(0L, true, 120000L)

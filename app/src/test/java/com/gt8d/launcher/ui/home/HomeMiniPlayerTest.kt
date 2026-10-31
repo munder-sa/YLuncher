@@ -116,4 +116,22 @@ class HomeMiniPlayerTest {
         rule.onNodeWithTag("player_title").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(results) }
         assertEquals(1, results.single().lineCount)
     }
+    @Test fun spacing_isBalanced() {
+        host(height = 800)
+        fun bounds(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        val art = bounds("player_art")
+        val title = bounds("player_title")
+        val artist = bounds("player_artist")
+        val seek = bounds("player_seek")
+        val density = rule.density.density
+        assertEquals(24f * density, title.top - art.bottom, 1f * density)
+        assertTrue(seek.top - artist.bottom >= 16f * density)
+        val player = bounds("home_player")
+        listOf("player_art", "player_title", "player_artist", "player_seek", "player_times",
+            "player_prev", "player_play", "player_next", "player_fav").forEach {
+            val child = bounds(it)
+            assertTrue("$it top", child.top >= player.top)
+            assertTrue("$it bottom", child.bottom <= player.bottom)
+        }
+    }
 }

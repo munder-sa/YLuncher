@@ -43,6 +43,7 @@ import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.layout.OneLineText
+import com.gt8d.launcher.ui.layout.MarqueeText
 import com.gt8d.launcher.ui.layout.PanelLayout
 
 @Composable
@@ -171,19 +172,22 @@ private fun ActiveMediaContent(
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                OneLineText(
+                val restartKey = now.pkg to now.title to now.artist
+                MarqueeText(
                     text = now.title,
                     fontSize = Dims.BodyText,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    modifier = Modifier.testTag("title"),
+                    tag = "title",
+                    restartKey = restartKey,
                 )
                 if (now.artist != null) {
-                    OneLineText(
+                    MarqueeText(
                         text = now.artist,
                         fontSize = Dims.BodyText,
                         color = Color.LightGray,
-                        modifier = Modifier.testTag("artist"),
+                        tag = "artist",
+                        restartKey = restartKey,
                     )
                 }
             }
