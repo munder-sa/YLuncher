@@ -1,12 +1,12 @@
-create app/src/main/java/com/gt8d/launcher/notice/Notice.kt
-create app/src/main/java/com/gt8d/launcher/notice/NoticeOverlay.kt
+write app/src/main/java/com/gt8d/launcher/notice/Notice.kt
+write app/src/main/java/com/gt8d/launcher/notice/NoticeOverlay.kt
 write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
 write app/src/main/java/com/gt8d/launcher/AppGraph.kt
 write app/src/main/java/com/gt8d/launcher/link/LinkEntryActivity.kt
 write app/src/main/java/com/gt8d/launcher/settings/SettingsActivity.kt
 write app/src/main/java/com/gt8d/launcher/ui/home/HomeSetCards.kt
-create app/src/test/java/com/gt8d/launcher/notice/NoticeTest.kt
-create app/src/test/java/com/gt8d/launcher/notice/NoticeOverlayTest.kt
+write app/src/test/java/com/gt8d/launcher/notice/NoticeTest.kt
+write app/src/test/java/com/gt8d/launcher/notice/NoticeOverlayTest.kt
 write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
 write app/src/test/java/com/gt8d/launcher/link/LinkEntryActivityTest.kt
 write app/src/test/java/com/gt8d/launcher/ui/home/HomeSetCardsTest.kt

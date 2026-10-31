@@ -22,6 +22,8 @@ class SettingsActivity : ComponentActivity() {
                     else when (intent.getStringExtra("open_route")) {
                         "lists" -> SettingsRoute.Lists
                         "permissions" -> SettingsRoute.Permissions
+                        "sets" -> SettingsRoute.Sets
+                        "link" -> SettingsRoute.Link
                         else -> null
                     },
                     onOpenSet = { AppGraph.runner.open(it); finish() })

@@ -32,11 +32,11 @@ class HomeSetCardsTest {
     }
     private fun host(width: Int = 700, height: Int = 800, count: Int = 1,
                      current: Int = 0, onOpen: (Int) -> Unit = {}, onAdd: () -> Unit = {},
-                     leftLabel: String = "左アプリ", screenSets: List<ScreenSet> = sets(count)) {
+                     leftLabel: String = "左アプリ", screenSets: List<ScreenSet> = sets(count), installed: Boolean = true) {
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
             Box(Modifier.size(width.dp, height.dp).testTag("area")) {
-                HomeSetCards(screenSets, { AppInfo(it, if (it == "left") leftLabel else "右アプリ", null, true) },
+                HomeSetCards(screenSets, { AppInfo(it, if (it == "left") leftLabel else "右アプリ", null, installed) },
                     current, onOpen, onAdd, Modifier.fillMaxSize())
             }
         } }
@@ -48,6 +48,14 @@ class HomeSetCardsTest {
         rule.onNodeWithText("1  左アプリ | パネル").assertExists()
         rule.onNodeWithText("2  左アプリ | 右アプリ").assertExists()
         rule.onAllNodesWithContentDescription("左アプリ", useUnmergedTree = true).assertCountEquals(2)
+    }
+    @Test fun missingApp_showsMissingTextBelowInitial() {
+        host(installed = false)
+        val initial = rule.onNodeWithText("左", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val missing = rule.onNodeWithText("見つかりません", useUnmergedTree = true)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(missing.top >= initial.bottom)
+        rule.onNodeWithContentDescription("左アプリ(アプリが見つかりません)", useUnmergedTree = true).assertExists()
     }
     @Test fun panel_shows56dpIcon_withoutStandaloneText() {
         host()

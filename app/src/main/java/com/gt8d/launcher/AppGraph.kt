@@ -3,9 +3,7 @@ package com.gt8d.launcher
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
-import android.widget.Toast
+import com.gt8d.launcher.notice.NoticeOverlay
 import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.boot.BootSequence
@@ -23,7 +21,6 @@ import com.gt8d.launcher.foreground.ForegroundWatcher
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
 import com.gt8d.launcher.foreground.WarmTracker
 import com.gt8d.launcher.safety.SafetyGuard
-import com.gt8d.launcher.sets.Messenger
 import com.gt8d.launcher.sets.Opening
 import com.gt8d.launcher.sets.SetRunner
 import com.gt8d.launcher.sets.SetRunnerDeps
@@ -115,23 +112,13 @@ object AppGraph {
         )
     }
 
+    val noticeOverlay: NoticeOverlay by lazy {
+        NoticeOverlay(app, { curtain.isShowing }, { runner.home() })
+    }
+
     val runner: SetRunner by lazy {
-        val mainHandler = Handler(Looper.getMainLooper())
         val scheduler = MainThreadScheduler()
         val apps = AndroidActivityLauncher(app)
-        val messenger = object : Messenger {
-            override fun showSplitUnavailable() {
-                mainHandler.post {
-                    Toast.makeText(app, "分割が使えなくなりました", Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun showSwitchFailed() {
-                mainHandler.post {
-                    Toast.makeText(app, "切り替えに失敗しました", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
         SetRunner(
             SetRunnerDeps(
                 config = { latestConfig.value },
@@ -155,7 +142,7 @@ object AppGraph {
                     }
                     app.startActivity(intent)
                 },
-                messenger = messenger,
+                messenger = noticeOverlay,
                 updateConfig = { f -> config.update(f) },
                 scope = applicationScope,
             ),
@@ -283,7 +270,11 @@ object AppGraph {
         }
 
         override fun hide(reason: HideReason) {
-            EdgeStripService.curtainView?.hide(reason)
+            try {
+                EdgeStripService.curtainView?.hide(reason)
+            } finally {
+                noticeOverlay.onCurtainHidden(reason)
+            }
         }
     }
 }
