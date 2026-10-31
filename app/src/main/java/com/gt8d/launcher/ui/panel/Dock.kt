@@ -22,7 +22,12 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ViewColumn
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.SignalWifiOff
+import androidx.compose.material.icons.filled.SignalWifi0Bar
+import androidx.compose.material.icons.filled.SignalWifi4Bar
+import androidx.compose.material.icons.filled.NetworkWifi1Bar
+import androidx.compose.material.icons.filled.NetworkWifi2Bar
+import androidx.compose.material.icons.filled.NetworkWifi3Bar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,11 +40,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.MAX_DOCK_APPS
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
+
+val WifiBars = SemanticsPropertyKey<Int>("WifiBars")
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -71,13 +79,29 @@ fun Dock(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.sizeIn(minWidth = Dims.MinTouch, minHeight = 36.dp),
             ) {
+                val bars = (status.wifi as? WifiIndicator.Connected)?.bars ?: -1
                 Icon(
-                    imageVector = Icons.Default.Wifi,
-                    contentDescription = "Wi-Fi",
-                    tint = if (status.wifiOn) Color.White else Color.White.copy(alpha = 0.35f),
+                    imageVector = when (status.wifi) {
+                        WifiIndicator.Off -> Icons.Default.SignalWifiOff
+                        WifiIndicator.Disconnected -> Icons.Default.SignalWifi0Bar
+                        is WifiIndicator.Connected -> when (bars) {
+                            0 -> Icons.Default.SignalWifi0Bar
+                            1 -> Icons.Default.NetworkWifi1Bar
+                            2 -> Icons.Default.NetworkWifi2Bar
+                            3 -> Icons.Default.NetworkWifi3Bar
+                            else -> Icons.Default.SignalWifi4Bar
+                        }
+                    },
+                    contentDescription = when (status.wifi) {
+                        WifiIndicator.Off -> "Wi-Fi オフ"
+                        WifiIndicator.Disconnected -> "Wi-Fi 未接続"
+                        is WifiIndicator.Connected -> "Wi-Fi 強さ $bars/4"
+                    },
+                    tint = if (bars >= 0) Color.White else Color.White.copy(alpha = 0.35f),
                     modifier = Modifier
                         .size(20.dp)
-                        .testTag("dock_wifi"),
+                        .testTag("dock_wifi")
+                        .semantics { this[WifiBars] = bars },
                 )
                 if (status.bluetoothOn != null) {
                     Icon(

@@ -15,6 +15,8 @@ import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Process
 import android.os.Handler
@@ -39,6 +41,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSettings
+import org.robolectric.shadows.ShadowNetwork
+import org.robolectric.shadows.ShadowNetworkCapabilities
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -119,7 +123,7 @@ class PanelEnvironmentTest {
         permissions(false); radios(false, false); host()
         rule.runOnIdle { assertEquals(DockStatus(false, false), result.dockStatus); assertTrue(result.needsPermission) }
         rule.runOnIdle { owner.stop(); permissions(true); radios(true, true); owner.resume() }
-        rule.runOnIdle { assertEquals(DockStatus(true, true), result.dockStatus); assertFalse(result.needsPermission) }
+        rule.runOnIdle { assertEquals(DockStatus(true, true, WifiIndicator.Disconnected), result.dockStatus); assertFalse(result.needsPermission) }
     }
     @Test fun environment_radioBroadcast_refreshesWithoutMediaChange() {
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
@@ -127,7 +131,7 @@ class PanelEnvironmentTest {
         val before = result.revision
         rule.runOnIdle { radios(true, false) }
         broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
-        rule.runOnIdle { assertEquals(DockStatus(true, false), result.dockStatus); assertEquals(before + 1, result.revision) }
+        rule.runOnIdle { assertEquals(DockStatus(true, false, WifiIndicator.Disconnected), result.dockStatus); assertEquals(before + 1, result.revision) }
         rule.runOnIdle { radios(true, true) }
         broadcast(BluetoothAdapter.ACTION_STATE_CHANGED)
         rule.runOnIdle { assertEquals(true, result.dockStatus.bluetoothOn) }
@@ -176,6 +180,52 @@ class PanelEnvironmentTest {
             assertEquals(0, owner.registry.observerCount)
         } finally {
             observer.dispose()
+        }
+    }
+    @Test fun environment_wifiRssiBroadcast_refreshesBars() {
+        val original = WifiReader.read
+        var wifi: WifiIndicator = WifiIndicator.Connected(4)
+        try {
+            WifiReader.read = { wifi }
+            host()
+            rule.runOnIdle { assertEquals(WifiIndicator.Connected(4), result.dockStatus.wifi) }
+            rule.runOnIdle { wifi = WifiIndicator.Connected(1) }
+            broadcast(WifiManager.RSSI_CHANGED_ACTION)
+            rule.runOnIdle { assertEquals(WifiIndicator.Connected(1), result.dockStatus.wifi) }
+            rule.runOnIdle { wifi = WifiIndicator.Disconnected }
+            broadcast(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            rule.runOnIdle { assertEquals(WifiIndicator.Disconnected, result.dockStatus.wifi) }
+        } finally {
+            WifiReader.read = original
+        }
+    }
+    @Test fun environment_networkCallback_refreshesAndUnregisters() {
+        val original = WifiReader.read
+        var wifi: WifiIndicator = WifiIndicator.Disconnected
+        try {
+            WifiReader.read = { wifi }
+            val connectivity = Shadows.shadowOf(app.getSystemService(ConnectivityManager::class.java))
+            val before = connectivity.networkCallbacks.toSet()
+            host()
+            val callback = (connectivity.networkCallbacks.toSet() - before).single()
+            val network = ShadowNetwork.newInstance(43)
+            val capabilities = ShadowNetworkCapabilities.newInstance()
+            Shadows.shadowOf(capabilities).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            rule.runOnIdle {
+                wifi = WifiIndicator.Connected(4)
+                callback.onCapabilitiesChanged(network, capabilities)
+            }
+            rule.runOnIdle { assertEquals(WifiIndicator.Connected(4), result.dockStatus.wifi) }
+            rule.runOnIdle {
+                wifi = WifiIndicator.Disconnected
+                callback.onLost(network)
+            }
+            rule.runOnIdle { assertEquals(WifiIndicator.Disconnected, result.dockStatus.wifi) }
+            rule.runOnIdle { visible.value = false }
+            rule.waitForIdle()
+            assertFalse(callback in connectivity.networkCallbacks)
+        } finally {
+            WifiReader.read = original
         }
     }
     @Test fun environment_packageBroadcast_refreshesInstalledAndEntries() {

@@ -9,6 +9,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
+import android.net.wifi.WifiInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -35,14 +41,34 @@ data class PanelEnvironment(
     val revision: Long,
 )
 
-private fun readDockStatus(context: Context): DockStatus {
-    val wifi = runCatching {
-        context.getSystemService(WifiManager::class.java)?.isWifiEnabled == true
+internal object WifiReader {
+    var read: (Context) -> WifiIndicator = ::readWifiFromSystem
+}
+
+private fun readWifiFromSystem(context: Context): WifiIndicator {
+    val wifiManager = runCatching { context.getSystemService(WifiManager::class.java) }.getOrNull()
+    val enabled = runCatching {
+        wifiManager?.isWifiEnabled == true
     }.getOrDefault(false)
+    val info = runCatching {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val capabilities = connectivity?.getNetworkCapabilities(connectivity.activeNetwork)
+        if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true)
+            capabilities.transportInfo as? WifiInfo else null
+    }.getOrNull()
+    val signal = runCatching {
+        if (info != null && wifiManager != null)
+            wifiManager.calculateSignalLevel(info.rssi) to wifiManager.maxSignalLevel else null
+    }.getOrNull()
+    return wifiIndicatorOf(enabled, signal != null, signal?.first ?: 0, signal?.second ?: 0)
+}
+
+private fun readDockStatus(context: Context): DockStatus {
+    val wifi = WifiReader.read(context)
     val bluetooth = if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
         runCatching { context.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled }.getOrNull()
     } else null
-    return DockStatus(wifi, bluetooth)
+    return DockStatus(wifiOn = wifi !is WifiIndicator.Off, bluetoothOn = bluetooth, wifi = wifi)
 }
 
 private fun readNeedsPermission(context: Context): Boolean {
@@ -65,6 +91,21 @@ fun rememberPanelEnvironment(catalog: AppCatalog): PanelEnvironment {
     var environment by remember(context, catalog) { mutableStateOf(readEnvironment(context, catalog, 0L)) }
     DisposableEffect(context, owner, catalog) {
         var observing = false
+        fun refreshRadios() {
+            environment = environment.copy(
+                dockStatus = readDockStatus(context), needsPermission = readNeedsPermission(context),
+                revision = environment.revision + 1,
+            )
+        }
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) = refreshRadios()
+            override fun onLost(network: Network) = refreshRadios()
+        }
+        val callbackRegistered = runCatching {
+            connectivity?.registerDefaultNetworkCallback(callback, Handler(Looper.getMainLooper()))
+            connectivity != null
+        }.getOrDefault(false)
         val observer = LifecycleEventObserver { _, event ->
             if (observing && event == Lifecycle.Event.ON_RESUME) {
                 catalog.invalidateAllIcons()
@@ -73,11 +114,9 @@ fun rememberPanelEnvironment(catalog: AppCatalog): PanelEnvironment {
         }
         val radios = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action != WifiManager.WIFI_STATE_CHANGED_ACTION && intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
-                environment = environment.copy(
-                    dockStatus = readDockStatus(context), needsPermission = readNeedsPermission(context),
-                    revision = environment.revision + 1,
-                )
+                if (intent.action !in setOf(WifiManager.WIFI_STATE_CHANGED_ACTION, WifiManager.RSSI_CHANGED_ACTION,
+                        WifiManager.NETWORK_STATE_CHANGED_ACTION, BluetoothAdapter.ACTION_STATE_CHANGED)) return
+                refreshRadios()
             }
         }
         val packages = object : BroadcastReceiver() {
@@ -90,6 +129,8 @@ fun rememberPanelEnvironment(catalog: AppCatalog): PanelEnvironment {
         }
         ContextCompat.registerReceiver(context, radios, IntentFilter().apply {
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            addAction(WifiManager.RSSI_CHANGED_ACTION)
+            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         }, ContextCompat.RECEIVER_EXPORTED)
         ContextCompat.registerReceiver(context, packages, IntentFilter().apply {
@@ -102,6 +143,7 @@ fun rememberPanelEnvironment(catalog: AppCatalog): PanelEnvironment {
         observing = true
         environment = readEnvironment(context, catalog, environment.revision)
         onDispose {
+            if (callbackRegistered) connectivity?.unregisterNetworkCallback(callback)
             owner.lifecycle.removeObserver(observer)
             context.unregisterReceiver(radios)
             context.unregisterReceiver(packages)

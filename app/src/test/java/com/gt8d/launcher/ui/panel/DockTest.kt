@@ -10,6 +10,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
@@ -61,6 +64,28 @@ class DockTest {
 
     @get:Rule(order = 1)
     val rule = createComposeRule()
+
+    @Test
+    fun dock_wifiReflectsStrengthAndConnection() {
+        var status by mutableStateOf(DockStatus(true, null))
+        rule.setContent {
+            LauncherTheme {
+                Dock(status, emptyList(), false, {}, {}, {}, {}, {}, {})
+            }
+        }
+        fun check(bars: Int, description: String) {
+            rule.onNodeWithTag("dock_wifi")
+                .assert(SemanticsMatcher.expectValue(WifiBars, bars))
+                .assertContentDescriptionEquals(description)
+        }
+        check(4, "Wi-Fi 強さ 4/4")
+        rule.runOnIdle { status = DockStatus(true, null, WifiIndicator.Connected(3)) }
+        check(3, "Wi-Fi 強さ 3/4")
+        rule.runOnIdle { status = DockStatus(true, null, WifiIndicator.Disconnected) }
+        check(-1, "Wi-Fi 未接続")
+        rule.runOnIdle { status = DockStatus(false, null) }
+        check(-1, "Wi-Fi オフ")
+    }
 
     @Test
     fun dock_hasButtonsInOrder() {
