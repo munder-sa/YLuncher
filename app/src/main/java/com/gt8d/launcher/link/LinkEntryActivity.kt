@@ -13,6 +13,7 @@ import com.gt8d.launcher.config.Side
 import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.split.SplitMode
 import com.gt8d.launcher.split.PanelPlacement
+import com.gt8d.launcher.split.VendorBridge
 import com.gt8d.launcher.time.ElapsedClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filterNotNull
@@ -42,7 +43,8 @@ class LinkEntryActivity : ComponentActivity() {
             val startedAt = AppGraph.runner.lastOpenedAtMs
             val other = pair != null && startedAt != null &&
                 AppGraph.watcher.foregroundPkgsSince(startedAt).any {
-                    it != pair.first && it != pair.second && !OwnPackages.isOwn(it)
+                    it != pair.first && it != pair.second && !OwnPackages.isOwn(it) &&
+                        it != VendorBridge.VENDOR_PKG
                 }
             val clues = FrontClues(
                 homeResumed = homeFront,

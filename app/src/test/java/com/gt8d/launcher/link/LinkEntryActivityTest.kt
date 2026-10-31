@@ -22,6 +22,7 @@ import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.sets.SetRunnerDeps
 import com.gt8d.launcher.split.SplitModeState
 import com.gt8d.launcher.split.PanelPlacement
+import com.gt8d.launcher.split.VendorBridge
 import java.time.Duration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -94,10 +95,10 @@ class LinkEntryActivityTest {
         pairField.set(AppGraph.runner, savedPair)
     }
 
-    private fun open(url: String): LinkEntryActivity {
+    private fun open(url: String, referrer: String = "com.example.mail"): LinkEntryActivity {
         controller = Robolectric.buildActivity(LinkEntryActivity::class.java,
             Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                .putExtra(Intent.EXTRA_REFERRER_NAME, "android-app://com.example.mail"))
+                .putExtra(Intent.EXTRA_REFERRER_NAME, "android-app://$referrer"))
         return controller!!.create().get()
     }
 
@@ -338,6 +339,46 @@ class LinkEntryActivityTest {
         assertView(shadowOf(app).nextStartedActivity, "https://example.com", "com.android.chrome")
         fixture.scheduler.advanceBy(10000)
         assertNull(shadowOf(app).nextStartedActivity)
+    }
+
+    @Test fun vendorSplitActivity_isNotOtherForeground() {
+        assertVendorSplitForeground(realOtherApp = false)
+    }
+
+    @Test fun vendorSplitActivity_realOtherApp_stillCounts() {
+        assertVendorSplitForeground(realOtherApp = true)
+    }
+
+    private fun assertVendorSplitForeground(realOtherApp: Boolean) {
+        flow.value = Defaults.build(emptySet())
+        val fixture = splitFixture()
+        val startedAtField = AppGraph.runner.javaClass.getDeclaredField("lastOpenedAtMs").apply {
+            isAccessible = true
+        }
+        val eventsField = AppGraph.watcher.javaClass.getDeclaredField("events").apply {
+            isAccessible = true
+        }
+        val savedStartedAt = startedAtField.get(AppGraph.runner)
+        val savedEvents = eventsField.get(AppGraph.watcher)
+        val packages = listOf(VendorBridge.VENDOR_PKG, "com.android.chrome", "y") +
+            if (realOtherApp) listOf("maps") else emptyList()
+        try {
+            pairField.set(AppGraph.runner, "com.android.chrome" to "y")
+            startedAtField.set(AppGraph.runner, 0L)
+            eventsField.set(AppGraph.watcher, object : ForegroundEvents {
+                override fun available() = true
+                override fun resumedSince(sinceMs: Long) = packages.map { ResumeEvent(it, 100L) }
+            })
+            val activity = open("https://example.com", referrer = "y")
+            val expectedPair = if (realOtherApp) "y" to "com.android.chrome"
+                else "com.android.chrome" to "y"
+            assertEquals(listOf(expectedPair), fixture.calls)
+            assertNull(shadowOf(app).nextStartedActivity)
+            assertTrue(activity.isFinishing)
+        } finally {
+            eventsField.set(AppGraph.watcher, savedEvents)
+            startedAtField.set(AppGraph.runner, savedStartedAt)
+        }
     }
 
     @Test fun noBrowser_doesNothing() {
