@@ -37,10 +37,84 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import org.robolectric.annotation.TextLayoutMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
 class PanelContentTest {
+    @Test fun panel_mediaToggle_defaultAndHiddenAndPlayingBadge() {
+        var visible by mutableStateOf(true)
+        var playing by mutableStateOf(false)
+        var clicks = 0
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.size(516.dp, 800.dp)) {
+                    PanelContent(
+                        PanelState(NowPlaying("music", "Song", "Artist", null, 180000L, playing, false),
+                            null, 0L, emptyList(), emptyList(), DockStatus(true, null), false, false,
+                            mediaVisible = visible),
+                        emptyActions().copy(onToggleMedia = { clicks++; visible = !visible }),
+                    )
+                }
+            }
+        }
+        val toggle = rule.onNodeWithTag("panel_media_toggle").assertIsDisplayed()
+        val bounds = toggle.getBoundsInRoot()
+        assertTrue(bounds.width >= 72.dp && bounds.height >= 72.dp)
+        rule.onNodeWithTag("media_card").assertExists()
+        rule.onNodeWithTag("panel_media_playing_badge", useUnmergedTree = true).assertDoesNotExist()
+        val originalTop = rule.onNodeWithTag("icon_grid").getBoundsInRoot().top
+        toggle.performClick()
+        assertEquals(1, clicks)
+        rule.onNodeWithTag("media_card").assertDoesNotExist()
+        assertTrue(rule.onNodeWithTag("icon_grid").getBoundsInRoot().top < originalTop)
+        rule.onNodeWithTag("panel_media_playing_badge", useUnmergedTree = true).assertDoesNotExist()
+        rule.runOnIdle {
+            playing = true
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        }
+        rule.onNodeWithTag("panel_media_playing_badge", useUnmergedTree = true).assertExists()
+        rule.runOnIdle {
+            visible = true
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        }
+        rule.onNodeWithTag("panel_media_playing_badge", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun panel_mediaToggle_inlineAt516dp() {
+        assertTogglePlacement(516, inline = true)
+    }
+
+    @Test fun panel_mediaToggle_belowClockAt240dp() {
+        assertTogglePlacement(240, inline = false)
+    }
+
+    private fun assertTogglePlacement(width: Int, inline: Boolean) {
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.size(width.dp, 800.dp)) {
+                    PanelContent(
+                        PanelState(null, null, 0L, emptyList(), emptyList(),
+                            DockStatus(true, null), false, false), emptyActions(),
+                    )
+                }
+            }
+        }
+        val clock = rule.onNodeWithTag("clock").getBoundsInRoot()
+        val toggle = rule.onNodeWithTag("panel_media_toggle").assertIsDisplayed().getBoundsInRoot()
+        assertTrue(toggle.width >= 72.dp && toggle.height >= 72.dp)
+        assertTrue(toggle.left >= 0.dp && toggle.right <= width.dp)
+        if (inline) {
+            assertTrue(toggle.top < clock.bottom && clock.top < toggle.bottom)
+            assertTrue(toggle.left >= clock.right)
+        } else {
+            assertTrue(toggle.top >= clock.bottom)
+        }
+    }
+
 
     @Test
     fun panel_clockShownWhileIdleAndPlaying() {

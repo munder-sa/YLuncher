@@ -29,7 +29,6 @@ fun FitClock(
     val density = LocalDensity.current
     val heightPx = with(density) { maxHeight.toPx() }
     BoxWithConstraints(modifier) {
-        val textConstraints = Constraints(maxWidth = constraints.maxWidth)
         fun clockStyle(size: Float) = TextStyle(
             color = Color.White,
             fontSize = size.sp,
@@ -44,16 +43,25 @@ fun FitClock(
                 softWrap = false,
                 maxLines = 1,
                 density = density,
-                constraints = textConstraints,
+                constraints = Constraints(),
             )
-            // Match the fixed width used by BasicText, including its paragraph width.
-            return measurer.measure(
-                text = "00:00",
+            val current = measurer.measure(
+                text = text,
                 style = style,
                 softWrap = false,
                 maxLines = 1,
                 density = density,
-                constraints = Constraints.fixedWidth(natural.size.width),
+                constraints = Constraints(),
+            )
+            val width = maxOf(natural.size.width, current.size.width)
+            // BasicText receives a maximum width, rather than fixed text constraints.
+            return measurer.measure(
+                text = text,
+                style = style,
+                softWrap = false,
+                maxLines = 1,
+                density = density,
+                constraints = Constraints(maxWidth = width),
             )
         }
         var candidate = maxSp
@@ -62,7 +70,8 @@ fun FitClock(
         while (candidate >= minSp) {
             val style = clockStyle(candidate)
             val result = measureClock(style)
-            if (!result.hasVisualOverflow && result.size.height <= heightPx) {
+            if (!result.hasVisualOverflow && result.size.width <= constraints.maxWidth &&
+                result.size.height <= heightPx) {
                 selectedStyle = style
                 selectedLayout = result
                 break

@@ -40,6 +40,12 @@ import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.ui.apps.AppListScreen
 import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import androidx.compose.runtime.rememberCoroutineScope
+import com.gt8d.launcher.diag.DiagLog
 
 @Composable
 fun PanelScreen(
@@ -55,6 +61,12 @@ fun PanelScreen(
     val context = LocalContext.current
     val latestConfig by AppGraph.latestConfig.collectAsState()
     val config = homeConfig ?: latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
+    var pending by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val scope = rememberCoroutineScope()
+    val mediaSaveMutex = remember { Mutex() }
+    LaunchedEffect(config.panelMediaVisible, pending) {
+        if (pending == config.panelMediaVisible) pending = null
+    }
     val now by MediaWatcher.nowPlaying.collectAsState()
     var showAppList by rememberSaveable { mutableStateOf(false) }
     val environment = rememberPanelEnvironment(AppGraph.catalog)
@@ -156,7 +168,22 @@ fun PanelScreen(
         HomeWideContent(state, actions, config, { catalog.info(it, installedPkgs) }, currentIndex,
             onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet)
     } else {
-        PanelContent(state = state, actions = actions)
+        PanelContent(state = state.copy(mediaVisible = pending ?: config.panelMediaVisible),
+            actions = actions.copy(onToggleMedia = {
+                val visible = !(pending ?: config.panelMediaVisible)
+                pending = visible
+                scope.launch {
+                    try {
+                        mediaSaveMutex.withLock {
+                            AppGraph.config.update { it.copy(panelMediaVisible = visible) }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        DiagLog.d("Panel", "media visibility save failed: $e")
+                    }
+                }
+            }))
     }
 }
 

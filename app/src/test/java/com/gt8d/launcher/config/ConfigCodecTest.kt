@@ -6,6 +6,15 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ConfigCodecTest {
+    @Test fun panelMediaVisible_legacyDefaultsAndFalseRoundTrip() {
+        val base = Defaults.build(emptySet())
+        val legacy = ConfigCodec.encode(base).replace(Regex(",?\"panelMediaVisible\":true"), "")
+        org.junit.Assert.assertFalse(legacy.contains("panelMediaVisible"))
+        assertEquals(true, ConfigCodec.decode(legacy)!!.panelMediaVisible)
+        val hidden = base.copy(panelMediaVisible = false)
+        assertEquals(hidden, ConfigCodec.decode(ConfigCodec.encode(hidden)))
+    }
+
     @Test fun browserPkg_oldDataDefaultsAndNonDefaultRoundTrip() {
         val base = Defaults.build(emptySet())
         val legacy = ConfigCodec.encode(base).replace(Regex(",?\\\"browserPkg\\\":\\\"[^\\\"]*\\\""), "")

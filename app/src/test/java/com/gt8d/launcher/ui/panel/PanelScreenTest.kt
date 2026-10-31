@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import android.os.Process
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -46,6 +47,37 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun panelScreen_mediaToggle_savesAndSurvivesActivityRecreation() {
+        runBlocking { AppGraph.config.update { Defaults.build(emptySet()) } }
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelMediaVisible == true }
+        val controller = org.robolectric.Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        fun content() {
+            controller.get().setContent {
+                LauncherTheme { PanelScreen(inSplit = true, onLaunchApp = {}) }
+            }
+            controller.visible()
+        }
+        try {
+            content()
+            rule.onNodeWithTag("media_card").assertExists()
+            rule.onNodeWithTag("panel_media_toggle").performClick()
+            rule.onNodeWithTag("media_card").assertDoesNotExist()
+            rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelMediaVisible == false }
+            controller.recreate()
+            content()
+            rule.onNodeWithTag("panel_media_toggle").assertIsDisplayed()
+            rule.onNodeWithTag("media_card").assertDoesNotExist()
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun panelScreen_wideHome_hasNoMediaToggle() {
+        rule.setContent {
+            LauncherTheme { PanelScreen(inSplit = false, homeWide = true, onLaunchApp = {}) }
+        }
+        rule.onNodeWithTag("home_player").assertExists()
+        rule.onNodeWithTag("panel_media_toggle").assertDoesNotExist()
+    }
+
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val pkg = "example.selected"
     private val launches = mutableListOf<String>()
