@@ -114,7 +114,11 @@ private fun SetBlock(app: AppInfo?, modifier: Modifier, side: Side) {
             PanelIcon(Modifier.size(56.dp), mirrored = (side == Side.Left))
         } else {
             val description = app.label + if (app.installed) "" else "(アプリが見つかりません)"
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (!app.installed) {
+                Text("見つかりません", modifier = Modifier.semantics { contentDescription = description },
+                    fontSize = Dims.BodyText, color = Palette.Muted,
+                    maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+            } else {
                 Box(Modifier.size(56.dp).semantics { contentDescription = description }, contentAlignment = Alignment.Center) {
                     if (app.installed && app.icon != null) Image(app.icon, null, Modifier.fillMaxSize())
                     else Box(Modifier.fillMaxSize().clip(shape).background(if (app.installed) Palette.Panel else Palette.Control),
@@ -122,7 +126,6 @@ private fun SetBlock(app: AppInfo?, modifier: Modifier, side: Side) {
                         Text(app.label.firstOrNull()?.toString() ?: "?", color = if (app.installed) Color.White else Palette.Muted, fontSize = Dims.BodyText)
                     }
                 }
-                if (!app.installed) Text("見つかりません", fontSize = Dims.BodyText, color = Palette.Muted)
             }
         }
     }

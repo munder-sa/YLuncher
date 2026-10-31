@@ -2,6 +2,8 @@ package com.gt8d.launcher.notice
 
 import android.app.Application
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -56,6 +58,21 @@ class NoticeOverlayTest {
 
     private fun text() = (overlay.visibleView!!.getChildAt(0) as TextView).text.toString()
     private fun button() = overlay.visibleView!!.getChildAt(1) as Button
+
+    @Test fun actionButton_hasTransparentOutlineAndWhiteText_withoutAllCaps() {
+        overlay.show(Notice.AppMissing("動画"))
+        val button = button()
+        val background = button.background as GradientDrawable
+        assertEquals(Color.TRANSPARENT, background.color!!.defaultColor)
+        assertEquals(Color.WHITE, button.currentTextColor)
+        assertFalse(button.isAllCaps)
+        assertNull(button.backgroundTintList)
+        assertNull(button.stateListAnimator)
+        assertEquals(0f, button.elevation, 0f)
+        val density = app.resources.displayMetrics.density
+        assertTrue(button.minimumHeight >= 72 * density)
+        assertTrue(button.minimumWidth >= 72 * density)
+    }
 
     @Test fun showsTextAndButton_withWindowFlagsAndBottomCenterPosition() {
         overlay.show(Notice.AppMissing("動画"))

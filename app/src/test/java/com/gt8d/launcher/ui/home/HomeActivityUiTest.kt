@@ -123,7 +123,9 @@ class HomeActivityUiTest {
         val index = runner.currentIndex
         val scheduler = com.gt8d.launcher.time.FakeScheduler()
         field.set(runner, original.copy(config = { flow.value }, installed = { emptySet() },
-            scheduler = scheduler, clock = scheduler, startHome = {}))
+            scheduler = scheduler, clock = scheduler, startHome = {},
+            // カードの配線(開き始め)を見るため、ホーム表示中の即時完了(Task 099)は外す。
+            homeVisible = { false }))
         try {
             runner.followIndex(0)
             androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()

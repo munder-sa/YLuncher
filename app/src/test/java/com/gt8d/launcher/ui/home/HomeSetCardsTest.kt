@@ -49,13 +49,26 @@ class HomeSetCardsTest {
         rule.onNodeWithText("2  左アプリ | 右アプリ").assertExists()
         rule.onAllNodesWithContentDescription("左アプリ", useUnmergedTree = true).assertCountEquals(2)
     }
-    @Test fun missingApp_showsMissingTextBelowInitial() {
-        host(installed = false)
-        val initial = rule.onNodeWithText("左", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val missing = rule.onNodeWithText("見つかりません", useUnmergedTree = true)
-            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue(missing.top >= initial.bottom)
-        rule.onNodeWithContentDescription("左アプリ(アプリが見つかりません)", useUnmergedTree = true).assertExists()
+    @Test fun missingApp_showsOnlyMissingTextInsideSlot_withoutOverlappingSetName() {
+        host(height = 560, count = 5, installed = false)
+        rule.onNodeWithText("左", useUnmergedTree = true).assertDoesNotExist()
+        val slot = rule.onNodeWithTag("home_set_s1_left", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val missingNode = rule.onNode(hasText("見つかりません") and hasAnyAncestor(hasTestTag("home_set_s1_left")),
+            useUnmergedTree = true).assertIsDisplayed()
+        val missing = missingNode.fetchSemanticsNode().boundsInRoot
+        assertTrue(missing.left >= slot.left)
+        assertTrue(missing.right <= slot.right)
+        assertTrue(missing.top >= slot.top)
+        assertTrue(missing.bottom <= slot.bottom)
+        assertEquals(slot.center.x, missing.center.x, 1f) // 座標の丸めの 0.5px を許す
+        assertEquals(slot.center.y, missing.center.y, 1f) // 座標の丸めの 0.5px を許す
+        val name = rule.onNodeWithText("1  左アプリ | パネル", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(missing.bottom <= name.top)
+        val layouts = mutableListOf<TextLayoutResult>()
+        missingNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1, layouts.single().lineCount)
+        rule.onNode(hasContentDescription("左アプリ(アプリが見つかりません)") and hasAnyAncestor(hasTestTag("home_set_s1_left")),
+            useUnmergedTree = true).assertExists()
     }
     @Test fun panel_shows56dpIcon_withoutStandaloneText() {
         host()

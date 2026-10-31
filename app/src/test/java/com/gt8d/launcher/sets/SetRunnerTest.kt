@@ -351,6 +351,53 @@ class SetRunnerTest {
         assertTrue(e.vendor.calls.isEmpty())
     }
 
+    @Test fun missingApp_homeVisible_completesReadyBeforeSafety() {
+        for (leftPanel in listOf(true, false)) {
+            val e = TestEnv(homeVisible = { true })
+            e.config = e.config.copy(screenSets = listOf(ScreenSet("missing",
+                if (leftPanel) Slot.Panel else Slot.App("missingLeft"), Slot.App("missingRight"), SplitRatio.R5_5)))
+            e.runner.open(1)
+            assertEquals(1, e.startHomeCount)
+            assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+            assertFalse(e.curtain.isShowing)
+            assertNull(e.runner.opening.value)
+            assertEquals(listOf(Notice.AppMissing(if (leftPanel) "missingRight" else "missingLeft")), e.messenger.notices)
+            e.scheduler.advanceBy(4000)
+            assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        }
+    }
+
+    @Test fun missingApp_homeNotVisible_waitsForForeground() {
+        for (leftPanel in listOf(true, false)) {
+            val e = TestEnv(homeVisible = { false })
+            e.config = e.config.copy(screenSets = listOf(ScreenSet("missing",
+                if (leftPanel) Slot.Panel else Slot.App("missingLeft"), Slot.App("missingRight"), SplitRatio.R5_5)))
+            e.runner.open(1)
+            assertEquals(1, e.startHomeCount)
+            e.scheduler.advanceBy(200)
+            assertTrue(e.curtain.isShowing)
+            assertTrue(e.curtainView.hiddenReasons.isEmpty())
+            e.events.events.add(ResumeEvent(e.ownPkg, 250))
+            e.scheduler.advanceBy(200)
+            assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+            assertNull(e.runner.opening.value)
+            assertEquals(listOf(Notice.AppMissing(if (leftPanel) "missingRight" else "missingLeft")), e.messenger.notices)
+        }
+    }
+
+    @Test fun missingApp_homeVisible_bootCompletesWithoutCurtain() {
+        for (leftPanel in listOf(true, false)) {
+            val e = TestEnv(homeVisible = { true })
+            e.config = e.config.copy(screenSets = listOf(ScreenSet("missing",
+                if (leftPanel) Slot.Panel else Slot.App("missingLeft"), Slot.App("missingRight"), SplitRatio.R5_5)))
+            e.runner.openForBoot(1)
+            assertEquals(1, e.startHomeCount)
+            assertNull(e.runner.opening.value)
+            assertTrue(e.curtainView.shownTargets.isEmpty())
+            assertEquals(listOf(Notice.AppMissing(if (leftPanel) "missingRight" else "missingLeft")), e.messenger.notices)
+        }
+    }
+
     @Test fun leftPanel_panelHostMissing_opensAppFullscreen() {
         val e = leftPanelEnv()
         e.installed.remove("com.gt8d.launcher.panel")
@@ -1294,6 +1341,7 @@ class SetRunnerTest {
         ownTaskExists: () -> Boolean = { true },
         var loading: Boolean = false,
         scope: CoroutineScope? = null,
+        homeVisible: () -> Boolean = { false },
     ) {
         val ownPkg = "com.gt8d.launcher"
         var config = LauncherConfig(
@@ -1344,6 +1392,7 @@ class SetRunnerTest {
                 labelFor = { labels[it] ?: it },
                 startHome = { startHomeCount++ },
                 messenger = messenger,
+                homeVisible = homeVisible,
                 scope = scope,
                 updateConfig = { f -> config = f(config) },
             ),

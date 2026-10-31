@@ -143,6 +143,7 @@ object AppGraph {
                     app.startActivity(intent)
                 },
                 messenger = noticeOverlay,
+                homeVisible = { AppGraph.homeResumed },
                 updateConfig = { f -> config.update(f) },
                 scope = applicationScope,
             ),
