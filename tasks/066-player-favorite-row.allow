@@ -1,0 +1,3 @@
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeMiniPlayer.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeMiniPlayerTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.layout.*'
