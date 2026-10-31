@@ -340,7 +340,7 @@ last_name=''
 last_suffix=''
 last_pass=0
 run() {
-    local name=$1 suffix=$2 version=${3:-$2} prerequisite=''
+    local name=$1 suffix=$2 version=${3-$2} prerequisite=''
     case "$name" in
         link_browserTaskPresent) prerequisite=link_cold_noTasks ;;
         set_panelCard_switch) prerequisite=set_strip_coldPanel ;;
