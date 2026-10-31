@@ -73,7 +73,7 @@ class NoticeOverlay(
         pending = null
         pendingTimer?.cancel()
         pendingTimer = null
-        display(next)
+        if (reason != HideReason.Cancelled) display(next)
     }
 
     private fun dismiss() {

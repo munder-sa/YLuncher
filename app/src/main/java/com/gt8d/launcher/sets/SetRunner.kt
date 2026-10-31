@@ -23,6 +23,7 @@ import com.gt8d.launcher.split.LaunchResult
 import com.gt8d.launcher.split.SplitLauncher
 import com.gt8d.launcher.split.SplitMode
 import com.gt8d.launcher.split.SplitModeSelector
+import com.gt8d.launcher.split.VendorBridge
 import com.gt8d.launcher.time.Cancellable
 import com.gt8d.launcher.time.Clock
 import com.gt8d.launcher.time.Scheduler
@@ -125,6 +126,40 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var monitoringAvailable: Boolean = true
     private var expectedDelayMs: Long = WarmTracker.COLD_MS
     private val activeTimers = mutableListOf<Cancellable>()
+    private var cancelGuard: Cancellable? = null
+
+    private fun stopCancelGuard() {
+        cancelGuard?.cancel()
+        cancelGuard = null
+    }
+
+    private fun startCancelGuard(opening: Opening?, cancelledAtMs: Long) {
+        stopCancelGuard()
+        if (opening == null || !d.watcher.available()) return
+        val packages = setOf(opening.left, opening.right, VendorBridge.VENDOR_PKG)
+        val deadline = cancelledAtMs + CANCEL_GUARD_MS
+        var since = cancelledAtMs
+        var returns = 0
+        fun poll() {
+            cancelGuard = d.scheduler.schedule(POLL_MS) {
+                cancelGuard = null
+                val now = d.clock.nowMs()
+                if (now >= deadline || !d.watcher.available()) return@schedule
+                val pkg = d.watcher.lastForegroundSince(since)
+                if (!d.watcher.available()) return@schedule
+                if (pkg in packages) {
+                    DiagLog.d("SetRunner", "cancel guard home pkg=$pkg")
+                    d.startHome()
+                    since = d.clock.nowMs() + 1L
+                    returns++
+                }
+                if (returns < 2) poll()
+            }
+        }
+        poll()
+    }
+
+    fun cancelOpening() { d.curtain.cancel() }
 
     init {
         d.curtain.onHidden = ::onCurtainHidden
@@ -133,6 +168,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun configForOperation(): LauncherConfig? = d.config()
 
     fun next() {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         val base = pending?.index ?: currentIndex
         val setCount = cfg.screenSets.size
@@ -145,6 +181,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     fun followIndex(index: Int) { currentIndex = index; d.lastIndex.lastSetIndex = index }
 
     fun prev() {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         val base = pending?.index ?: currentIndex
         val setCount = cfg.screenSets.size
@@ -154,6 +191,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun home() {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         home(cfg)
     }
@@ -179,6 +217,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun open(index: Int) {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         open(index, cfg)
     }
@@ -200,6 +239,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun openForBoot(index: Int) {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         cancelLinkCallbacks()
         DiagLog.d("SetRunner", "openForBoot index=$index")
@@ -276,6 +316,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun openForLink(left: String, right: String, onReady: () -> Unit, onNotSplit: () -> Unit): Boolean {
+        stopCancelGuard()
         cancelLinkCallbacks()
         val cfg = configForOperation() ?: return false
         if (_opening.value != null) return false
@@ -641,8 +682,22 @@ class SetRunner(private val d: SetRunnerDeps) {
         waitKind = WaitKind.None
         cancelTimers()
         openingForBoot = false
+        val cancelledOpening = _opening.value
         _opening.value = null
         when (reason) {
+            HideReason.Cancelled -> {
+                val cancelledAtMs = d.clock.nowMs()
+                DiagLog.d("SetRunner", "opening cancelled")
+                pending = null
+                currentIndex = SetNavigator.HOME
+                d.lastIndex.lastSetIndex = SetNavigator.HOME
+                lastOpenedPair = null
+                lastOpenedAtMs = null
+                lastReadyAtMs = null
+                d.startHome()
+                startCancelGuard(cancelledOpening, cancelledAtMs)
+                return
+            }
             HideReason.Ready, HideReason.Timed -> ready?.invoke()
             HideReason.Failed, HideReason.Safety -> fallback?.invoke()
         }
@@ -689,6 +744,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 ratio = SplitRatio.R6_4,
                 position = 0,
                 count = count,
+                cancellable = false,
             )
         }
         val set = sets.getOrNull(index - 1) ?: return CurtainTarget(
@@ -698,6 +754,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             ratio = SplitRatio.R6_4,
             position = 0,
             count = count,
+            cancellable = false,
         )
         val leftPreview = when (val l = set.slotAt(Side.Left)) {
             is Slot.App -> SlotPreview.App(l.pkg, d.labelFor(l.pkg))
@@ -722,5 +779,6 @@ class SetRunner(private val d: SetRunnerDeps) {
         const val POLL_MS = 200L
         const val RETRY_AT_MS = 3000L
         const val BOOT_CLEAR_MS = 10000L
+        const val CANCEL_GUARD_MS = 5000L
     }
 }

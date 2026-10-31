@@ -21,6 +21,30 @@ import org.robolectric.shadows.ShadowToast
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class NoticeOverlayTest {
+    @Test fun cancelled_discardsPendingWithoutDismissingVisibleNotice() {
+        overlay.show(Notice.Slow)
+        val visible = overlay.visibleView
+        curtain = true
+        overlay.show(Notice.NoBrowser)
+        curtain = false
+        overlay.onCurtainHidden(HideReason.Cancelled)
+        assertSame(visible, overlay.visibleView)
+        assertEquals(Notice.Slow.text, text())
+        scheduler.advanceBy(5000)
+        assertSame(visible, overlay.visibleView)
+        assertEquals(Notice.Slow.text, text())
+    }
+
+    @Test fun cancelled_pendingNeverAppearsAfterFiveSeconds() {
+        curtain = true
+        overlay.show(Notice.NoBrowser)
+        curtain = false
+        overlay.onCurtainHidden(HideReason.Cancelled)
+        assertNull(overlay.visibleView)
+        scheduler.advanceBy(5000)
+        overlay.onCurtainHidden(HideReason.Ready)
+        assertNull(overlay.visibleView)
+    }
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val scheduler = FakeScheduler()
     private var curtain = false

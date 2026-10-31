@@ -26,6 +26,7 @@ class CurtainWindow(
     private val wm: WindowManagerFacade,
     private val contentFactory: (Context) -> ComposeView = { ComposeView(it) },
     private val readdStrips: () -> Unit = {},
+    private val onCancel: () -> Unit = {},
 ) : CurtainView {
 
     companion object {
@@ -69,6 +70,7 @@ class CurtainWindow(
                         CurtainContent(
                             target = currentTarget,
                             showProgress = showProgressState.value,
+                            onCancel = onCancel,
                         )
                     }
                 }

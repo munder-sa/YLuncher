@@ -1,6 +1,7 @@
 package com.gt8d.launcher.curtain
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,10 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +45,7 @@ fun CurtainContent(
     target: CurtainTarget,
     showProgress: Boolean,
     iconFor: (String) -> ImageBitmap? = { null },
+    onCancel: () -> Unit = {},
 ) {
     val (leftWeight, rightWeight) = parseRatioWeights(target.ratio)
 
@@ -67,14 +72,22 @@ fun CurtainContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = target.setName,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.testTag("curtain_set_name"),
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = target.setName,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testTag("curtain_set_name"),
+                )
+                Text(
+                    text = "開いています",
+                    fontSize = Dims.BodyText,
+                    color = Palette.Muted,
+                    modifier = Modifier.testTag("curtain_opening"),
+                )
+            }
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -116,6 +129,25 @@ fun CurtainContent(
                     )
                 } else {
                     Spacer(modifier = Modifier.height(4.dp))
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier.height(Dims.MinTouch),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (showProgress && target.cancellable) {
+                        OutlinedButton(
+                            onClick = onCancel,
+                            modifier = Modifier.height(Dims.MinTouch)
+                                .widthIn(min = Dims.MinTouch)
+                                .testTag("curtain_cancel"),
+                            shape = RoundedCornerShape(36.dp),
+                            border = BorderStroke(2.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        ) {
+                            Text("ホームへ戻る", fontSize = Dims.BodyText)
+                        }
+                    }
                 }
             }
 

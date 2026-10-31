@@ -17,6 +17,7 @@ data class CurtainTarget(
     val ratio: SplitRatio,
     val position: Int,
     val count: Int,
+    val cancellable: Boolean = true,
 )
 
 enum class HideReason {
@@ -24,6 +25,7 @@ enum class HideReason {
     Timed,
     Safety,
     Failed,
+    Cancelled,
 }
 
 interface CurtainView {
@@ -94,6 +96,10 @@ class CurtainController(
 
     fun fail() {
         hide(HideReason.Failed)
+    }
+
+    fun cancel() {
+        hide(HideReason.Cancelled)
     }
 
     private fun hide(reason: HideReason) {
