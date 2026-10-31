@@ -64,6 +64,7 @@ data class SetRunnerDeps(
     val panelHostPkg: String = OwnPackages.PANEL_HOST,
     val updateConfig: suspend ((LauncherConfig) -> LauncherConfig) -> Unit = {},
     val scope: CoroutineScope? = null,
+    val homeVisible: () -> Boolean = { false },
 )
 
 class SetRunner(private val d: SetRunnerDeps) {
@@ -404,8 +405,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             if (appPkg !in installedPkgs) {
                 d.messenger.show(Notice.AppMissing(appLabel(appPkg)))
                 DiagLog.d("SetRunner", "right uninstalled: $appPkg")
-                d.startHome()
-                waitSingle(d.ownPkg, startMs, useCurtain)
+                fallbackHome(startMs, useCurtain)
                 return
             }
             if (d.panelHostPkg !in installedPkgs) {
@@ -423,8 +423,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 d.warm.recordAppLaunch(right, d.apps.startApp(right, false))
                 waitSingle(right, startMs, useCurtain)
             } else {
-                d.startHome()
-                waitSingle(d.ownPkg, startMs, useCurtain)
+                fallbackHome(startMs, useCurtain)
             }
             notifyLinkNotSplit()
             return
@@ -483,6 +482,16 @@ class SetRunner(private val d: SetRunnerDeps) {
                     useCurtain = useCurtain,
                 )
             }
+        }
+    }
+
+    private fun fallbackHome(startMs: Long, useCurtain: Boolean) {
+        val homeVisible = d.homeVisible()
+        d.startHome()
+        if (homeVisible) {
+            if (useCurtain) d.curtain.ready() else finishWithoutCurtain()
+        } else {
+            waitSingle(d.ownPkg, startMs, useCurtain)
         }
     }
 

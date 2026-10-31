@@ -114,6 +114,17 @@ class NoticeOverlay(
                 setTextColor(Color.WHITE)
                 minimumHeight = dp(Dims.MinTouch.value)
                 minimumWidth = dp(Dims.MinTouch.value)
+                isAllCaps = false
+                gravity = Gravity.CENTER
+                setPadding(dp(24f), 0, dp(24f), 0)
+                backgroundTintList = null
+                background = GradientDrawable().apply {
+                    setColor(Color.TRANSPARENT)
+                    setStroke(dp(2f), Color.WHITE)
+                    cornerRadius = dp(36f).toFloat()
+                }
+                stateListAnimator = null
+                elevation = 0f
                 setOnClickListener {
                     if (visibleView !== row) return@setOnClickListener
                     dismiss()
