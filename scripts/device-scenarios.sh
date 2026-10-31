@@ -5,7 +5,8 @@ read -r -a adb_cmd <<< "${ADB:-adb.exe -s 192.168.137.248:5555}"
 adb() { "${adb_cmd[@]}" "$@"; }
 with_home=0
 only=''
-names=(link_cold_noTasks link_appPanelFront link_panelTaskPresent link_warm_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel)
+browser=com.android.chrome
+names=(link_cold_noTasks link_browserTaskPresent link_warm_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel link_appPanelFront)
 while (($#)); do
     case "$1" in
         --with-ylauncher-home) with_home=1; shift ;;
@@ -103,6 +104,7 @@ reset() {
     if [[ ${1:-} == cold ]]; then
         adb shell am force-stop com.gt8d.launcher || return 1
         adb shell am force-stop com.gt8d.launcher.panel || return 1
+        adb shell am force-stop "$browser" || return 1
     fi
     sleep 1
     adb logcat -c && adb logcat -b events -c
@@ -153,7 +155,33 @@ parse_slots() {
 reasons=()
 expect_log() { if ! grep -Eq "$1" "$active/logcat.txt"; then reasons+=("ログ不足: $1"); fi; }
 no_safety() { if grep -Fq 'reason=Safety' "$active/logcat.txt"; then reasons+=('reason=Safety が発生'); fi; }
-browser_created() { grep -E 'wm_create_activity.*com\.gt8d\.launcher/([^], ]*\.)?FullscreenBrowserActivity' "$active/events.txt" >/dev/null; }
+left_is() {
+    local expected=$1 actual
+    actual=$(awk '$1=="LEFT" {print $2}' "$active/slots.txt")
+    [[ $actual == "$expected/"* ]] || reasons+=("左の最前面が $expected でない: ${actual:-枠なし}")
+}
+view_pattern() {
+    printf 'START u0 \\{[^}]*act=android\\.intent\\.action\\.VIEW[^}]*pkg=%s([[:space:]}]|$)' "${browser//./\\.}"
+}
+view_sent() {
+    grep -Eq "$(view_pattern)" "$active/logcat-full.txt" || reasons+=('ブラウザへの VIEW がない')
+}
+view_after_ready() {
+    local ready views
+    ready=$(awk '/\[SetRunner\] waitBoth ready/ {print NR; exit}' "$active/logcat-full.txt")
+    views=$(grep -nE "$(view_pattern)" "$active/logcat-full.txt" || :)
+    if ! awk -F: -v ready="${ready:-0}" '
+        NF>1 {if (!ready || $1<=ready) early=1}
+        END {exit early ? 1 : 0}
+    ' <<< "$views"; then
+        reasons+=('VIEW が分割の成立より前')
+    fi
+}
+split_shown() {
+    if ! grep -q '^LEFT ' "$active/slots.txt" || ! grep -q '^RIGHT ' "$active/slots.txt"; then
+        reasons+=('分割の枠が2つない')
+    fi
+}
 right_is() {
     local expected=$1 actual
     actual=$(awk '$1=="RIGHT" {print $2}' "$active/slots.txt")
@@ -169,19 +197,19 @@ home_task_ids() {
     }' "$1"
 }
 judge() {
-    local name=$1 right id
+    local name=$1 right left id top
     parse_slots "$active/activities.txt" > "$active/slots.txt"
     case "$name" in
         link_appPanelFront)
-            expect_log '\[Link\] front=AppPanel'
-            expect_log 'route=PanelTaskBrowser'
-            right_is com.gt8d.launcher
-            # 消去しなかったイベントログから、準備時点までの行を出現回数ごとに除く。
-            awk 'FILENAME==ARGV[1] {seen[$0]++; next} seen[$0]>0 {seen[$0]--; next} /wm_/ {print}' \
-                "$active/events-before.txt" "$active/events-full.txt" > "$active/events-new.txt"
-            if grep -Eq 'wm_create_activity.*com\.gt8d\.launcher/([^], ]*\.)?(PanelActivity|FullscreenBrowserActivity)' "$active/events-new.txt"; then
-                reasons+=('wm_create_activity に PanelActivity または FullscreenBrowserActivity がある')
-            fi
+            expect_log '\[Link\] front=AppPanel\(left=com\.google\.android\.youtube\)'
+            expect_log 'route=SplitWithBrowser\(left=com\.google\.android\.youtube\)'
+            expect_log '\[SetRunner\] waitBoth ready'
+            no_safety
+            split_shown
+            left_is com.google.android.youtube
+            right_is "$browser"
+            view_sent
+            view_after_ready
             home_task_ids "$active/activities.txt" > "$active/home-tasks-after.txt"
             while IFS= read -r id; do
                 if ! grep -Fxq "$id" "$active/home-tasks-before.txt"; then
@@ -191,11 +219,19 @@ judge() {
             ;;
         link_fromYlHome)
             expect_log '\[Link\] front=Home'
-            browser_created || reasons+=('wm_create_activity に FullscreenBrowserActivity がない')
+            expect_log 'route=FullscreenBrowser'
+            view_sent
             [[ ! -s $active/slots.txt ]] || reasons+=('分割の枠が残っている')
+            top=$(awk '/topResumedActivity=ActivityRecord\{/ {
+                for(i=1;i<=NF;i++) if($i ~ /^[A-Za-z0-9_.]+\/[A-Za-z0-9_.$]+$/) {print $i; break}
+                exit
+            }' "$active/activities.txt")
+            [[ $top == "$browser/"* ]] || reasons+=("最前面が $browser でない: ${top:-取得できない}")
             ;;
         set_strip_coldPanel)
             expect_log '\[SetRunner\] waitBoth ready'
+            left=$(sed -n 's/.*openSplit left=\([^ ]*\) right=.*/\1/p' "$active/logcat.txt" | tail -n 1)
+            [[ $left == com.google.android.youtube ]] || reasons+=("openSplit の左が com.google.android.youtube でない: ${left:-取得できない}")
             right=$(sed -n 's/.*openSplit left=[^ ]* right=\([^ ]*\).*/\1/p' "$active/logcat.txt" | tail -n 1)
             if [[ $right =~ ^[a-zA-Z0-9_.]+$ ]]; then
                 right_is "$right"
@@ -203,11 +239,19 @@ judge() {
             else reasons+=('openSplit の右パッケージを取得できない'); fi
             ;;
         *)
-            expect_log '\[Link\] front=Fullscreen\(pkg=com\.openai\.chatgpt\)'
+            if [[ $name == link_browserTaskPresent ]]; then
+                expect_log '\[Link\] front=(Fullscreen\(pkg=com\.openai\.chatgpt\)|AppApp\(left=com\.openai\.chatgpt, )'
+            else
+                expect_log '\[Link\] front=Fullscreen\(pkg=com\.openai\.chatgpt\)'
+            fi
+            expect_log 'route=SplitWithBrowser\(left=com\.openai\.chatgpt\)'
             expect_log '\[SetRunner\] waitBoth ready'
             no_safety
-            right_is com.gt8d.launcher
-            if browser_created; then reasons+=('wm_create_activity に FullscreenBrowserActivity がある'); fi
+            split_shown
+            left_is com.openai.chatgpt
+            right_is "$browser"
+            view_sent
+            view_after_ready
             ;;
     esac
 }
@@ -223,7 +267,7 @@ prepare_and_run() {
             ;;
         link_warm_noTasks)
             reset || return 1
-            adb shell am start -n com.gt8d.launcher/.link.FullscreenBrowserActivity --es url about:blank || return 1
+            adb shell am start -a android.intent.action.VIEW -d https://example.com/ -p "$browser" || return 1
             sleep 2
             adb shell input keyevent KEYCODE_HOME && remove_yl_tasks || return 1
             # 温める操作の生成イベントを判定対象から除く前に保存する。
@@ -233,7 +277,7 @@ prepare_and_run() {
             ;;
         link_homeTaskPresent)
             reset cold && home_activity && adb shell input keyevent KEYCODE_HOME || return 1 ;;
-        link_panelTaskPresent)
+        link_browserTaskPresent)
             adb shell input keyevent KEYCODE_HOME || return 1
             adb logcat -c && adb logcat -b events -c || return 1 ;;
         link_fromYlHome) reset && home_activity || return 1 ;;
@@ -245,28 +289,44 @@ prepare_and_run() {
     esac
     case "$name" in
         link_fromYlHome) link com.google.android.gm && sleep 6 ;;
-        link_appPanelFront) link com.openai.chatgpt && sleep 6 ;;
+        link_appPanelFront) link com.google.android.youtube && sleep 10 ;;
         set_strip_coldPanel) adb shell input swipe 20 540 500 540 300 && sleep 10 ;;
         *) chatgpt && link com.openai.chatgpt && sleep 10 ;;
     esac
 }
+last_name=''
+last_suffix=''
+last_pass=0
 run() {
-    local name=$1 suffix=$2
+    local name=$1 suffix=$2 version=${3:-$2} prerequisite=''
+    case "$name" in
+        link_browserTaskPresent) prerequisite=link_cold_noTasks ;;
+        link_appPanelFront) prerequisite=set_strip_coldPanel ;;
+    esac
+    if [[ -n $prerequisite ]] && [[ $last_name != "$prerequisite" || $last_suffix != "$version" || $last_pass != 1 ]]; then
+        row "$name$suffix" SKIP "前提の $prerequisite が不合格"
+        failed=1
+        last_name=$name; last_suffix=$version; last_pass=0
+        return
+    fi
     active="$out/$name$suffix"
     mkdir -p "$active" || exit 1
     reasons=()
     prepare_and_run "$name" > "$active/commands.txt" 2>&1 || reasons+=('準備または操作コマンドが失敗')
     capture "$active" || reasons+=('ログ・画面の保存に失敗')
     judge "$name"
+    last_name=$name; last_suffix=$version; last_pass=0
     if ((${#reasons[@]})); then
         row "$name$suffix" FAIL "$(IFS=';'; echo "${reasons[*]}")"
         failed=1
     else
+        last_pass=1
         case "$name" in
-            link_appPanelFront) row "$name$suffix" PASS 'front=AppPanel、route=PanelTaskBrowser、右最前面 PanelActivity、Activity 生成なし、ホーム affinity のタスク増加なし' ;;
-            link_fromYlHome) row "$name$suffix" PASS 'front=Home、ブラウザ生成あり、分割枠なし' ;;
-            set_strip_coldPanel) row "$name$suffix" PASS 'waitBoth ready、openSplit の右パッケージと右最前面が一致（YLuncher なら PanelActivity、Safety なし）' ;;
-            *) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt)、waitBoth ready、Safety なし、右最前面 PanelActivity、ブラウザ生成なし' ;;
+            link_appPanelFront) row "$name$suffix" PASS 'front=AppPanel(left=com.google.android.youtube)、route=SplitWithBrowser(left=com.google.android.youtube)、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Chrome、VIEW は分割成立後、ホーム affinity のタスク増加なし' ;;
+            link_fromYlHome) row "$name$suffix" PASS 'front=Home、route=FullscreenBrowser、ブラウザへの VIEW あり、分割枠なし、最前面 Chrome' ;;
+            set_strip_coldPanel) row "$name$suffix" PASS 'waitBoth ready、openSplit の左 YouTube、右パッケージと右最前面が一致（YLuncher なら PanelActivity、Safety なし）' ;;
+            link_browserTaskPresent) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt) または AppApp(left=com.openai.chatgpt, …)、route=SplitWithBrowser(left=com.openai.chatgpt)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
+            *) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt)、route=SplitWithBrowser(left=com.openai.chatgpt)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
         esac
     fi
     active=''
@@ -284,14 +344,19 @@ mkdir -p "$out/initial" || exit 1
 capture "$out/initial" || { row setup FAIL '開始時の証跡保存に失敗'; exit 1; }
 for name in "${names[@]}"; do
     [[ -z $only || $only == "$name" ]] || continue
-    if [[ ( $name == link_panelTaskPresent || $name == link_appPanelFront ) && -n $only ]]; then run link_cold_noTasks '@prerequisite'; fi
+    if [[ -n $only ]]; then
+        case "$name" in
+            link_browserTaskPresent) run link_cold_noTasks '@prerequisite' '' ;;
+            link_appPanelFront) run set_strip_coldPanel '@prerequisite' '' ;;
+        esac
+    fi
     run "$name" ''
 done
 if ((with_home)); then
     switch_home com.gt8d.launcher || { row setup FAIL 'YLuncher ホームへの切り替えに失敗'; exit 1; }
-    for name in link_cold_noTasks link_appPanelFront link_homeTaskPresent link_fromYlHome set_strip_coldPanel; do
+    for name in link_cold_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel link_appPanelFront; do
         [[ -z $only || $only == "$name" ]] || continue
-        if [[ $name == link_appPanelFront && -n $only ]]; then run link_cold_noTasks '@prerequisite@ylhome'; fi
+        if [[ $name == link_appPanelFront && -n $only ]]; then run set_strip_coldPanel '@prerequisite@ylhome' '@ylhome'; fi
         run "$name" '@ylhome'
     done
 fi
