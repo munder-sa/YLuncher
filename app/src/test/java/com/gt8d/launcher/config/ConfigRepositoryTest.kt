@@ -11,6 +11,60 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class ConfigRepositoryTest {
+    private val v2Json = """{"version":2,"screenSets":[{"id":"s1","left":{"pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.Panel"}}],"homeApps":["a"],"panelApps":[],"dockApps":[],"idleApp":"a"}"""
+
+    @Test fun migrateFromV2_writesBackupThenV3() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "config.json").apply { writeText(v2Json) }
+        val loaded = ConfigRepository(file) { setOf("a") }.config.first()
+        assertEquals(3, loaded.version)
+        assertEquals(listOf(ScreenSet("s1", Slot.App("a"), Slot.Panel)), loaded.screenSets)
+        assertEquals(v2Json, File(dir, "config-v2-backup.json").readText())
+        assertTrue(file.readText().contains("\"version\":3"))
+        assertTrue(file.readText().contains("\"left\":{\"type\":\"com.gt8d.launcher.config.Slot.App\""))
+    }
+
+    @Test fun migrate_secondLoad_keepsBackup() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "config.json").apply { writeText(v2Json) }
+        val first = ConfigRepository(file) { setOf("a") }.config.first()
+        val backup = File(dir, "config-v2-backup.json")
+        assertEquals(v2Json, backup.readText())
+        assertEquals(first, ConfigRepository(file) { setOf("a") }.config.first())
+        assertEquals(v2Json, backup.readText())
+    }
+
+    @Test fun migrate_backupFails_keepsV2OnDisk() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "config.json").apply { writeText(v2Json) }
+        val repo = ConfigRepository(file, backupWriter = { _, _ -> throw java.io.IOException("test failure") }) { setOf("a") }
+        val loaded = repo.config.first()
+        assertEquals(v2Json, file.readText())
+        assertEquals(3, loaded.version)
+        assertEquals(listOf(ScreenSet("s1", Slot.App("a"), Slot.Panel)), loaded.screenSets)
+        assertFalse(File(dir, "config-v2-backup.json").exists())
+    }
+
+    @Test fun migrate_corruptBackup_isRecreated() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "config.json").apply { writeText(v2Json) }
+        val backup = File(dir, "config-v2-backup.json").apply { writeText("{ broken") }
+        assertEquals(3, ConfigRepository(file) { setOf("a") }.config.first().version)
+        assertEquals(v2Json, backup.readText())
+        assertTrue(file.readText().contains("\"version\":3"))
+    }
+
+    @Test fun migrate_v3Backup_isRecreated() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "config.json").apply { writeText(v2Json) }
+        val backup = File(dir, "config-v2-backup.json").apply {
+            writeText(ConfigCodec.encode(Defaults.build(installed)))
+        }
+        assertEquals(3, ConfigRepository(file) { setOf("a") }.config.first().version)
+        assertEquals(v2Json, backup.readText())
+        assertTrue(file.readText().contains("\"version\":3"))
+    }
+
     @Test
     fun backupFailure_preservesOriginalAndDoesNotEmitDefaults() = runTest {
         val dir = tempFolder.newFolder("backupFailure")
@@ -58,7 +112,7 @@ class ConfigRepositoryTest {
     fun load_v1_nonDefaultSettings_persistsV2WithoutBackup() = runTest {
         val input = """{"version":1,"screenSets":[{"id":"s1","left":{"pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.Panel"}},{"id":"s2","left":{"pkg":"b"},"right":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"c"}}],"homeApps":["c","a"],"panelApps":["b","c"],"dockApps":["c","b"],"idleApp":"b","link":{"mode":"Chrome","chromeDomains":["example.org","example.net"]},"gesture":{"stripWidthPx":12,"glow":false,"longPressMs":800}}"""
         val expected = LauncherConfig(
-            version = 2,
+            version = 3,
             screenSets = listOf(
                 ScreenSet("s1", Slot.App("a"), Slot.Panel, SplitRatio.R5_5, null),
                 ScreenSet("s2", Slot.App("b"), Slot.App("c"), SplitRatio.R5_5, null),
@@ -112,7 +166,7 @@ class ConfigRepositoryTest {
         // Case 2: Future version ("version": 3)
         val dir2 = tempFolder.newFolder("corrupt2")
         val file2 = File(dir2, "config.json")
-        val futureJson = ConfigCodec.encode(Defaults.build(installed).copy(version = 3))
+        val futureJson = ConfigCodec.encode(Defaults.build(installed).copy(version = CONFIG_VERSION + 1))
         file2.writeText(futureJson)
 
         val repo2 = ConfigRepository(file2) { installed }
@@ -135,7 +189,7 @@ class ConfigRepositoryTest {
         val loaded = repo.config.first()
         val bak = File(dir, "config.bak.json")
 
-        assertEquals(2, loaded.version)
+        assertEquals(3, loaded.version)
         assertEquals(listOf("a", "b"), loaded.homeApps)
         assertEquals(
             listOf(ScreenSet("s1", Slot.App("a"), Slot.Panel, SplitRatio.R5_5)),

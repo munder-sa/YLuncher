@@ -24,7 +24,7 @@ class DefaultsTest {
     fun build_allInstalled_matchesSpec() {
         val cfg = Defaults.build(allPackages)
 
-        assertEquals(2, cfg.version)
+        assertEquals(CONFIG_VERSION, cfg.version)
         assertEquals(
             listOf(
                 ScreenSet("set1", Slot.App(Defaults.PKG_YOUTUBE), Slot.Panel, SplitRatio.R6_4),

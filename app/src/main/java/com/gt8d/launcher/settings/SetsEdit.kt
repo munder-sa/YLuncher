@@ -13,10 +13,10 @@ data class SetDraft(
     val ratio: SplitRatio,
     val appPairLabel: String? = null,
 ) {
-    val canSave: Boolean get() = left != null && ratio.allowedFor(right)
+    val canSave: Boolean get() = left != null && ratio.allowedFor(Slot.App(left ?: ""), right)
 
     fun withRight(right: Slot): SetDraft = copy(right = right, ratio = when {
-        ratio.allowedFor(right) -> ratio
+        ratio.allowedFor(Slot.App(left ?: ""), right) -> ratio
         ratio == SplitRatio.R3_7 -> SplitRatio.R4_6
         else -> SplitRatio.R6_4
     })
@@ -27,7 +27,7 @@ data class SetDraft(
     }
 
     companion object {
-        fun from(set: ScreenSet) = SetDraft(set.id, set.left.pkg, set.right, set.ratio, set.appPairLabel)
+        fun from(set: ScreenSet) = SetDraft(set.id, (set.left as? Slot.App)?.pkg, set.right, set.ratio, set.appPairLabel)
         fun new(id: String) = SetDraft(id, null, Slot.Panel, SplitRatio.R6_4)
     }
 }

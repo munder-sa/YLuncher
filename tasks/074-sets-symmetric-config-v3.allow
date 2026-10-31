@@ -10,3 +10,4 @@ write app/src/test/java/com/gt8d/launcher/config/ConfigRepositoryTest.kt
 write app/src/test/java/com/gt8d/launcher/config/SplitRatioTest.kt
 create app/src/test/java/com/gt8d/launcher/config/ScreenSetSidesTest.kt
 command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.config.*' --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.ui.home.*'
+write app/src/test/java/com/gt8d/launcher/config/DefaultsTest.kt

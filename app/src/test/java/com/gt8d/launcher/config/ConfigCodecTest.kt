@@ -32,7 +32,7 @@ class ConfigCodecTest {
     fun migrate_v1_nonDefaultSettings_preservesWholeConfig() {
         val input = """{"version":1,"screenSets":[{"id":"s1","left":{"pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.Panel"}},{"id":"s2","left":{"pkg":"b"},"right":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"c"}}],"homeApps":["c","a"],"panelApps":["b","c"],"dockApps":["c","b"],"idleApp":"b","link":{"mode":"Chrome","chromeDomains":["example.org","example.net"]},"gesture":{"stripWidthPx":12,"glow":false,"longPressMs":800}}"""
         val expected = LauncherConfig(
-            version = 2,
+            version = 3,
             screenSets = listOf(
                 ScreenSet("s1", Slot.App("a"), Slot.Panel, SplitRatio.R5_5, null),
                 ScreenSet("s2", Slot.App("b"), Slot.App("c"), SplitRatio.R5_5, null),
@@ -51,7 +51,7 @@ class ConfigCodecTest {
     @Test
     fun codec_roundTrip() {
         val original = LauncherConfig(
-            version = 2,
+            version = CONFIG_VERSION,
             screenSets = listOf(
                 ScreenSet(
                     id = "set1",
@@ -91,7 +91,7 @@ class ConfigCodecTest {
 
         assertNotNull(decoded)
         decoded!!
-        assertEquals(2, decoded.version)
+        assertEquals(3, decoded.version)
         assertEquals(
             listOf(
                 ScreenSet(
@@ -119,7 +119,27 @@ class ConfigCodecTest {
     fun decode_version3_returnsNull() {
         val valid = Defaults.build(setOf(Defaults.PKG_YOUTUBE))
         assertNotNull(ConfigCodec.decode(ConfigCodec.encode(valid.copy(version = 2))))
-        val futureJson = ConfigCodec.encode(valid.copy(version = 3))
+        val futureJson = ConfigCodec.encode(valid.copy(version = CONFIG_VERSION + 1))
         assertNull(ConfigCodec.decode(futureJson))
+    }
+
+    @Test fun decode_v2_leftWithoutType_becomesApp() {
+        val json = """{"version":2,"screenSets":[{"id":"s1","left":{"pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.Panel"}}],"homeApps":[],"panelApps":[],"dockApps":[],"idleApp":"a"}"""
+        val decoded = ConfigCodec.decode(json)!!
+        assertEquals(3, decoded.version)
+        assertEquals(listOf(ScreenSet("s1", Slot.App("a"), Slot.Panel)), decoded.screenSets)
+    }
+
+    @Test fun roundTrip_leftPanel() {
+        val config = Defaults.build(emptySet()).copy(screenSets = listOf(
+            ScreenSet("s", Slot.Panel, Slot.App("y"), SplitRatio.R4_6)))
+        assertEquals(config, ConfigCodec.decode(ConfigCodec.encode(config)))
+    }
+
+    @Test fun decode_dropsBothPanelSets() {
+        val valid = listOf(ScreenSet("r", Slot.App("a"), Slot.Panel),
+            ScreenSet("l", Slot.Panel, Slot.App("b")), ScreenSet("a", Slot.App("a"), Slot.App("b")))
+        val config = Defaults.build(emptySet()).copy(screenSets = valid + ScreenSet("bad", Slot.Panel, Slot.Panel))
+        assertEquals(config.copy(screenSets = valid), ConfigCodec.decode(ConfigCodec.encode(config)))
     }
 }

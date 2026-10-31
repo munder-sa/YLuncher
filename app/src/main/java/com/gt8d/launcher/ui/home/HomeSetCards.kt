@@ -65,7 +65,7 @@ fun HomeSetCards(
                                 }
                             } else {
                                 val set = sets[index]
-                                val left = appInfo(set.left.pkg)
+                                val left = (set.left as? Slot.App)?.let { appInfo(it.pkg) }
                                 val right = (set.right as? Slot.App)?.let { appInfo(it.pkg) }
                                 val highlight = currentIndex == index + 1
                                 Column(Modifier.weight(1f).height(cardHeight).clip(shape).background(Palette.Background1)
@@ -80,7 +80,7 @@ fun HomeSetCards(
                                         SetBlock(right, Modifier.weight(ratio[1]).fillMaxHeight())
                                     }
                                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                        OneLineText("${left.label} | ${right?.label ?: "パネル"}")
+                                        OneLineText("${left?.label ?: "パネル"} | ${right?.label ?: "パネル"}")
                                     }
                                 }
                             }

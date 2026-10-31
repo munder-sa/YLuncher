@@ -113,7 +113,10 @@ fun SetsScreen(
                     BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         val stacked = maxWidth <= 516.dp
                         val name: @Composable (Modifier) -> Unit = { nameModifier ->
-                            SettingsRow("${labelFor(set.left.pkg)} | ${when (val right = set.right) {
+                            SettingsRow("${when (val left = set.left) {
+                                is Slot.App -> labelFor(left.pkg)
+                                Slot.Panel -> "パネル"
+                            }} | ${when (val right = set.right) {
                                 Slot.Panel -> "パネル"
                                 is Slot.App -> labelFor(right.pkg)
                             }}", "set_row_${set.id}", { onEdit(set.id) }, modifier = nameModifier, enabled = !busy,
@@ -176,7 +179,7 @@ fun SetsScreen(
                         SetButton("アプリ", "set_right_app", enabled = !busy, selected = draft.right is Slot.App) { pickingLeft = false }
                     }
                     (draft.right as? Slot.App)?.let { OneLineText("右のアプリ: ${labelFor(it.pkg)}", fontSize = Dims.BodyText) }
-                    SplitRatio.entries.filter { it.allowedFor(draft.right) }.chunked(3).forEach { ratios ->
+                    SplitRatio.entries.filter { it.allowedFor(Slot.App(draft.left ?: ""), draft.right) }.chunked(3).forEach { ratios ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ratios.forEach { ratio ->
                                 SetButton(ratio.label, "set_ratio_${ratio.label}", enabled = !busy, selected = draft.ratio == ratio) {

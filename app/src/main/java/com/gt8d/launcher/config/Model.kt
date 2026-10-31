@@ -2,7 +2,7 @@ package com.gt8d.launcher.config
 
 import kotlinx.serialization.Serializable
 
-const val CONFIG_VERSION = 2
+const val CONFIG_VERSION = 3
 const val MAX_PANEL_APPS = 5
 const val MAX_DOCK_APPS = 4
 
@@ -19,10 +19,19 @@ enum class SplitRatio(val label: String, val vendorValue: String) {
     }
 }
 
-fun SplitRatio.allowedFor(right: Slot): Boolean = when (right) {
-    is Slot.Panel -> this in SplitRatio.forPanel
-    is Slot.App -> true
+fun SplitRatio.allowedFor(left: Slot, right: Slot): Boolean =
+    if (left is Slot.Panel || right is Slot.Panel) this in SplitRatio.forPanel else true
+
+fun SplitRatio.mirrored(): SplitRatio = when (this) {
+    SplitRatio.R3_7 -> SplitRatio.R7_3
+    SplitRatio.R4_6 -> SplitRatio.R6_4
+    SplitRatio.R5_5 -> SplitRatio.R5_5
+    SplitRatio.R6_4 -> SplitRatio.R4_6
+    SplitRatio.R7_3 -> SplitRatio.R3_7
 }
+
+@Serializable
+enum class Side { Left, Right }
 
 @Serializable
 data class BootConfig(
@@ -49,7 +58,7 @@ enum class PanelView { Apps, Sets }
 @Serializable
 data class ScreenSet(
     val id: String,
-    val left: Slot.App,
+    val left: Slot,
     val right: Slot,
     val ratio: SplitRatio = SplitRatio.R5_5,
     val appPairLabel: String? = null,
@@ -63,6 +72,17 @@ sealed interface Slot {
     @Serializable
     data object Panel : Slot
 }
+
+val ScreenSet.panelSide: Side? get() = when {
+    left is Slot.Panel -> Side.Left
+    right is Slot.Panel -> Side.Right
+    else -> null
+}
+val ScreenSet.isValid: Boolean get() = !(left is Slot.Panel && right is Slot.Panel)
+fun ScreenSet.slotAt(side: Side): Slot = if (side == Side.Left) left else right
+fun ScreenSet.appPkgAt(side: Side): String? = (slotAt(side) as? Slot.App)?.pkg
+fun ScreenSet.swapped(): ScreenSet =
+    copy(left = right, right = left, ratio = ratio.mirrored(), appPairLabel = null)
 
 @Serializable
 data class LinkConfig(

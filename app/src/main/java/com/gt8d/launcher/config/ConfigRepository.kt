@@ -17,9 +17,14 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.int
 
 class ConfigRepository(
     private val file: File,
+    private val backupWriter: (File, String) -> Unit = { f, s -> f.writeText(s) },
     private val installed: () -> Set<String>,
 ) : LastIndexStore {
     private val lastSetFile = File(file.parentFile, "last_set_index.txt")
@@ -61,6 +66,8 @@ class ConfigRepository(
             }
         }
 
+        migrateFileIfNeeded()
+
         val serializer = object : Serializer<LauncherConfig> {
             override val defaultValue: LauncherConfig
                 get() = Defaults.build(installed())
@@ -90,6 +97,30 @@ class ConfigRepository(
             scope = CoroutineScope(Dispatchers.IO + newJob),
             produceFile = { file },
         )
+    }
+
+    private fun migrateFileIfNeeded() {
+        runCatching {
+            if (!file.isFile) return
+            val original = file.readText()
+            fun version(text: String): Int =
+                Json.parseToJsonElement(text).jsonObject["version"]?.jsonPrimitive?.int ?: 1
+            if (version(original) >= CONFIG_VERSION) return
+            val decoded = ConfigCodec.decode(original) ?: return
+            val backup = File(file.parentFile, "config-v2-backup.json")
+            val validBackup = runCatching {
+                val text = backup.readText()
+                ConfigCodec.decode(text) != null && version(text) < 3
+            }.getOrDefault(false)
+            if (!validBackup) {
+                val tmp = File(file.parentFile, "config-v2-backup.json.tmp")
+                backupWriter(tmp, original)
+                if (tmp.readText() != original || !tmp.renameTo(backup)) return
+            }
+            val tmp = File(file.parentFile, "config.json.tmp")
+            tmp.writeText(ConfigCodec.encode(decoded))
+            tmp.renameTo(file)
+        }
     }
 
     private companion object {

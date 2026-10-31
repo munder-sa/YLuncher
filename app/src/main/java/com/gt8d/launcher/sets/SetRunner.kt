@@ -271,7 +271,13 @@ class SetRunner(private val d: SetRunnerDeps) {
 
     private fun openSet(set: ScreenSet, target: CurtainTarget, useCurtain: Boolean) {
         val forLink = linkFallback != null
-        val left = set.left.pkg
+        val left = when (val l = set.left) {
+            is Slot.App -> l.pkg
+            Slot.Panel -> {
+                d.startHome()
+                return
+            }
+        }
         val isPanelRight = set.right is Slot.Panel
         val right = when (val r = set.right) {
             is Slot.App -> r.pkg
@@ -590,8 +596,10 @@ class SetRunner(private val d: SetRunnerDeps) {
             position = 0,
             count = count,
         )
-        val leftPkg = set.left.pkg
-        val leftPreview = SlotPreview.App(leftPkg, d.labelFor(leftPkg))
+        val leftPreview = when (val l = set.left) {
+            is Slot.App -> SlotPreview.App(l.pkg, d.labelFor(l.pkg))
+            Slot.Panel -> SlotPreview.Panel
+        }
         val rightPreview = when (val r = set.right) {
             is Slot.Panel -> SlotPreview.Panel
             is Slot.App -> SlotPreview.App(r.pkg, d.labelFor(r.pkg))

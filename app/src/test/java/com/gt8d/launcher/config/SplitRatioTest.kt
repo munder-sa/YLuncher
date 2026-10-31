@@ -21,15 +21,15 @@ class SplitRatioTest {
 
     @Test
     fun panelRatios_only46_55_64() {
-        assertFalse(SplitRatio.R3_7.allowedFor(Slot.Panel))
-        assertTrue(SplitRatio.R4_6.allowedFor(Slot.Panel))
-        assertTrue(SplitRatio.R5_5.allowedFor(Slot.Panel))
-        assertTrue(SplitRatio.R6_4.allowedFor(Slot.Panel))
-        assertFalse(SplitRatio.R7_3.allowedFor(Slot.Panel))
+        assertFalse(SplitRatio.R3_7.allowedFor(Slot.App("x"), Slot.Panel))
+        assertTrue(SplitRatio.R4_6.allowedFor(Slot.App("x"), Slot.Panel))
+        assertTrue(SplitRatio.R5_5.allowedFor(Slot.App("x"), Slot.Panel))
+        assertTrue(SplitRatio.R6_4.allowedFor(Slot.App("x"), Slot.Panel))
+        assertFalse(SplitRatio.R7_3.allowedFor(Slot.App("x"), Slot.Panel))
 
         val appSlot = Slot.App("x")
         for (ratio in SplitRatio.entries) {
-            assertTrue(ratio.allowedFor(appSlot))
+            assertTrue(ratio.allowedFor(appSlot, appSlot))
         }
     }
 }

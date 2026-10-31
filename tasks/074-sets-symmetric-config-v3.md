@@ -70,3 +70,10 @@ v1.5 で、画面セットのパネルを左にも置けるようにする。設
 
 ## 報告
 変更点、テストの結果(件数)、D の箇所ごとの分け方、**決めたこと**。
+
+## 補足(点検の反映)
+1. 移行の順番: `createDataStore` の中の「前の Job の `cancelAndJoin`」の**後**、`DataStoreFactory.create` の**前**に `migrateFileIfNeeded()` を行う(前のインスタンスが止まってからファイルを書き換える)。
+2. 差し込み口を足す場合は、`installed` を**最後の引数のまま**にする(既存の `ConfigRepository(file) { emptySet() }` の呼び出しを壊さない)。例: `ConfigRepository(file, backupWriter = ..., installed)` の順、または `backupWriter` を持つ別のコンストラクタ。
+3. `ConfigCodecTest` の既存テストで、版 2 を往復比較するもの(54 行付近)は入力を `CONFIG_VERSION` に、版 3 を未来として拒否するもの(119 行付近)は `CONFIG_VERSION + 1` に変えてよい(拒否する検証は残す)。`ConfigCodecTest.kt` は変更の許可に入っている。
+4. 既存のバックアップを残す条件は「`ConfigCodec.decode` で読め、**かつ生の JSON の `version` が 3 未満**」。版 3 以上のバックアップは作り直す。テスト `migrate_v3Backup_isRecreated` を足す。
+5. `SetsEdit`・`SetsScreen` の比率の判定で、左が未選択(`left == null`)のときは `Slot.App("")`(仮のアプリ)を渡して判定する(右だけで決まる今の結果と同じになる)。`canSave` の `left != null` は残す。
