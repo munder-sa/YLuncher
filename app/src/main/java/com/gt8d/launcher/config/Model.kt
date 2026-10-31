@@ -40,6 +40,7 @@ data class LauncherConfig(
     val link: LinkConfig = LinkConfig(),
     val gesture: GestureConfig = GestureConfig(),
     val boot: BootConfig = BootConfig(),
+    val panelMediaVisible: Boolean = true,
 )
 
 @Serializable

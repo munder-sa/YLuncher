@@ -12,6 +12,7 @@
 - `app/src/main/java/com/gt8d/launcher/config/Model.kt`
 - `app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt`
 - `app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt`
+- `app/src/main/java/com/gt8d/launcher/ui/layout/FitClock.kt`(追記で追加)
 - `app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt`
 - `app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt`
 - `app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt`
@@ -47,3 +48,15 @@
 - `LayoutMatrixTest`: モードAの既存の検証は全部残す。モードBの組み合わせでは `media_card` が無いことを確かめ、カードを使う重なり・スクロールの検証からは外す。トグルはスクロール領域の外なので、`performScrollTo` の対象から外し、表示・72dp 以上・画面内・時計と重ならないことを直接確かめる。
 - 折り返しの判定: `FitClock` と同じ条件(`"00:00"`・Bold・tnum・文字倍率込み)で 40sp の幅を測り、左の列の幅から 72dp + 8dp を引いた幅に収まらなければ下の行へ回す。横並び・下の行の両方の場合をテストする(幅を変えて)。
 - ワイド: `HomeWideContent` は `mediaVisible`・`onToggleMedia` を参照せず、見た目も動きも変えない。
+
+## 追記(司令塔の検証結果、1回目の続き)
+今の作業ツリーの変更を土台に続ける。1回目はテストのコマンドが zsh の glob で起動しなかった。**許可コマンドはパターンを引用符で囲んだ形に変えた**(下の allow のとおり、そのまま実行する)。
+司令塔が `test assembleDebug` を流した結果、次が失敗した:
+1. `LayoutMatrixTest.layout_fitsAndAllControlsAreReachable`(狭い表示のほぼ全部、LayoutMatrixTest.kt:90 の `clockLayout.hasVisualOverflow`): 例 `387x400 scale=1 home=false` で、時計が `size=189 x 87`・`fontSize=74sp` ではみ出す。横並び(`inlineToggle`)にしたとき、`FitClock` の選ぶ大きさが、実際に与えられた幅と合っていない。原因を調べて直す(`FitClock` を `Modifier.weight(1f)` で Row に入れたときの制約、`FitClock` 内の測り方、`inlineToggle` の判定のどれか)。**テストの判定は弱めない**。FitClock.kt を直す必要があれば、報告で止まらずに直してよい(allow に足した)。
+2. `PanelContentTest.panel_mediaToggle_defaultAndHiddenAndPlayingBadge`: `runOnIdle { playing = true }` の後に印が出ない。このプロジェクトでは、テストのスレッドから状態を書いた後に `Snapshot.sendApplyNotifications()` が要る(既知)。テスト側でそうする。
+直したら許可コマンドで流し、全件の結果を報告する。
+
+## 追記2(司令塔の判断)
+- 測って決める仕様を優先する。「360dp・文字倍率1.3では必ず下の行」というテストの期待値は、codex が1回目に書いた想定で、仕様ではない。LayoutMatrixTest では、組み合わせごとに「トグルが時計と同じ行(縦の範囲が重なる)か、時計の下(トグルの top >= 時計の bottom)か」のどちらかであり、どちらでも時計と重ならず・画面内・72dp 以上であることを確かめる形に直す。横並びと下の行の両方が起きることは、PanelContentTest で幅を変えた2つの場合(例: 516dp → 横並び、狭くて 40sp の時計 + 80dp が入らない幅 → 下の行)で確かめる。
+- 再生の印は `useUnmergedTree = true` で探す(トグルの toggleable が子を統合するため)。
+- 許可コマンドは引用符つきの形だけを使う。

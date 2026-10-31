@@ -38,15 +38,16 @@ import org.robolectric.annotation.TextLayoutMode
 class LayoutMatrixTest(
     private val width: Int, private val height: Int, private val scale: Float,
     private val home: Boolean, private val playing: Boolean,
+    private val mediaVisible: Boolean,
 ) {
     companion object {
         @JvmStatic @ParameterizedRobolectricTestRunner.Parameters(name = "{0}x{1} scale={2} home={3} playing={4}")
         fun cases(): List<Array<Any>> = buildList {
             for (w in listOf(360, 387, 516, 645, 774))
                 for (h in listOf(400, 600, 726)) for (s in listOf(1f, 1.3f))
-                    for (p in listOf(false, true)) add(arrayOf(w, h, s, false, p))
+                    for (p in listOf(false, true)) for (m in listOf(true, false)) add(arrayOf(w, h, s, false, p, m))
             for (w in listOf(387, 516, 645, 774, 839, 840, 903, 1291))
-                for (h in listOf(600, 726)) add(arrayOf(w, h, 1f, true, false))
+                for (h in listOf(600, 726)) add(arrayOf(w, h, 1f, true, false, true))
         }
     }
     @get:Rule val rule = createEmptyComposeRule()
@@ -59,7 +60,7 @@ class LayoutMatrixTest(
         val state = PanelState(
             if (playing) NowPlaying("music", "長い曲名のテスト", "長いアーティスト名", null, 180000L, true, true) else null,
             AppInfo("idle", "Apple Music", null, true), 10000L, apps, apps.take(4),
-            DockStatus(true, true), true, true,
+            DockStatus(true, true), true, true, mediaVisible = mediaVisible,
         )
         val actions = PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
         var pixelsPerDp = 0f
@@ -89,6 +90,14 @@ class LayoutMatrixTest(
             assertFalse("size=${clockLayout.size} paragraph=${clockLayout.multiParagraph.width}x${clockLayout.multiParagraph.height} input=${clockLayout.layoutInput}", clockLayout.hasVisualOverflow)
             val cb = clock.fetchSemanticsNode().boundsInRoot
             assertTrue(cb.left >= root.left && cb.right <= root.right && cb.top >= root.top && cb.bottom <= root.bottom)
+            if (!(home && width >= 840)) {
+                val toggle = rule.onNodeWithTag("panel_media_toggle").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                assertTrue(toggle.width >= 72 * pixelsPerDp && toggle.height >= 72 * pixelsPerDp)
+                assertTrue(toggle.left >= root.left && toggle.right <= root.right && toggle.top >= root.top && toggle.bottom <= root.bottom)
+                assertFalse(toggle.left < cb.right && cb.left < toggle.right && toggle.top < cb.bottom && cb.top < toggle.bottom)
+                if (!mediaVisible) rule.onNodeWithTag("media_card").assertDoesNotExist()
+                assertTrue((toggle.top < cb.bottom && cb.top < toggle.bottom) || toggle.top >= cb.bottom)
+            } else rule.onNodeWithTag("panel_media_toggle").assertDoesNotExist()
             if (home) {
                 if (width < 840) rule.onNodeWithTag("home_sets").assertDoesNotExist()
                 else {
@@ -99,7 +108,8 @@ class LayoutMatrixTest(
                 }
             }
             val tags = if (home && width >= 840) listOf("clock", "home_sets", "home_player", "dock")
-                else listOf("clock", "media_card", "icon_grid", "dock")
+                else if (mediaVisible) listOf("clock", "media_card", "icon_grid", "dock")
+                else listOf("clock", "icon_grid", "dock")
             fun checkDisjoint() {
                 val bounds = tags.map { rule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
                 for (i in bounds.indices) for (j in i + 1 until bounds.size) {
@@ -110,14 +120,15 @@ class LayoutMatrixTest(
                 }
             }
             checkDisjoint()
-            for (tag in if (home && width >= 840) emptyList() else listOf("media_card", "icon_grid")) {
+            for (tag in if (home && width >= 840) emptyList() else if (mediaVisible) listOf("media_card", "icon_grid") else listOf("icon_grid")) {
                 rule.onNodeWithTag(tag).performScrollTo()
                 checkDisjoint()
             }
             val clickCount = rule.onAllNodes(hasClickAction()).fetchSemanticsNodes().size
             for (index in 0 until clickCount) {
                 val target = rule.onAllNodes(hasClickAction())[index]
-                if (home && width >= 840 && target.fetchSemanticsNode().config
+                if (target.fetchSemanticsNode().config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { "" } == "panel_media_toggle") target.assertIsDisplayed()
+                else if (home && width >= 840 && target.fetchSemanticsNode().config
                         .getOrElse(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { "" } in
                         listOf("player_idle_app", "permission_banner")) target.assertIsDisplayed()
                 else target.performScrollTo().assertIsDisplayed()
