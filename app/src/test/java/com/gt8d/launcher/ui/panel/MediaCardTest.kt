@@ -34,6 +34,18 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MediaCardTest {
+    @Test fun artTap_launchesPlayerApp() {
+        val launches = mutableListOf<String>()
+        val now = NowPlaying("music", "Song", "Artist", null, 120000L, true, false)
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(now = now, idleApp = null, positionMs = 0L,
+                    onAction = {}, onSeek = {}, onLaunch = { launches.add(it) })
+            }
+        }
+        rule.onNodeWithTag("artwork").performClick()
+        assertEquals(listOf(now.pkg), launches)
+    }
 
     @Test fun longTitle_isOneLine() {
         rule.setContent {

@@ -68,6 +68,7 @@ fun MediaCard(
                 positionMs = positionMs,
                 onAction = onAction,
                 onSeek = onSeek,
+                onLaunch = onLaunch,
             )
         }
     }
@@ -140,6 +141,7 @@ private fun ActiveMediaContent(
     positionMs: Long,
     onAction: (MediaAction) -> Unit,
     onSeek: (Long) -> Unit,
+    onLaunch: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -151,23 +153,22 @@ private fun ActiveMediaContent(
             modifier = Modifier.fillMaxWidth(),
         ) {
             val bitmap = now.artwork
+            val artModifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClickLabel = "再生中のアプリを開く") { onLaunch(now.pkg) }
+                .testTag("artwork")
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = now.title,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .testTag("artwork"),
+                    modifier = artModifier,
                 )
             } else {
                 Image(
                     painter = painterResource(id = R.drawable.artwork_placeholder),
                     contentDescription = now.title,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .testTag("artwork"),
+                    modifier = artModifier,
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))

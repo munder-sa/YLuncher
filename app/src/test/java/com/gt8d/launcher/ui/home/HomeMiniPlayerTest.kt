@@ -29,15 +29,60 @@ class HomeMiniPlayerTest {
     private val song = NowPlaying("music", "長い曲名".repeat(30), "アーティスト", null, 120000L, true, true)
     private val idle = AppInfo("idle", "音楽アプリ", null, true)
     private fun host(now: NowPlaying? = song, height: Int = 800, idleApp: AppInfo = idle,
+                     installed: Boolean = true,
                      onAction: (MediaAction) -> Unit = {}, onSeek: (Long) -> Unit = {}, onLaunch: (String) -> Unit = {}) {
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
-            HomeMiniPlayer(now, idleApp, 30000L, { AppInfo(it, "音楽", null, true) },
+            HomeMiniPlayer(now, idleApp, 30000L, { AppInfo(it, "音楽", null, installed) },
                 onAction, onSeek, onLaunch, Modifier.size(360.dp, height.dp))
         } }
         controller.visible()
     }
     @After fun cleanup() { if (::controller.isInitialized) controller.pause().stop().destroy() }
+    @Test fun artTap_launchesPlayerApp() {
+        val launches = mutableListOf<String>()
+        host(onLaunch = { launches.add(it) })
+        rule.onNodeWithTag("player_art").performClick()
+        assertEquals(listOf("music"), launches)
+    }
+    @Test fun artTap_uninstalled_doesNotLaunchPlayerApp() {
+        val launches = mutableListOf<String>()
+        host(installed = false, onLaunch = { launches.add(it) })
+        rule.onNodeWithTag("player_art").assertIsNotEnabled()
+            .performTouchInput { click() }
+        assertEquals(emptyList<String>(), launches)
+    }
+    @Test fun padding_titleStarts40dpInsidePlayer() {
+        host()
+        val player = rule.onNodeWithTag("home_player").fetchSemanticsNode().boundsInRoot
+        val title = rule.onNodeWithTag("player_title").fetchSemanticsNode().boundsInRoot
+        val density = rule.density.density
+        assertEquals(40f * density, title.left - player.left, 1f * density)
+    }
+    @Test fun height480_keepsAllElementsInsidePlayer() {
+        host(height = 480)
+        val player = rule.onNodeWithTag("home_player").fetchSemanticsNode().boundsInRoot
+        listOf("player_title", "player_prev", "player_play", "player_next", "player_fav").forEach {
+            val child = rule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            assertTrue("$it top", child.top >= player.top)
+            assertTrue("$it bottom", child.bottom <= player.bottom)
+        }
+        val absent = mutableListOf<String>()
+        listOf("player_art", "player_artist", "player_seek", "player_times").forEach { tag ->
+            val nodes = rule.onAllNodesWithTag(tag).fetchSemanticsNodes()
+            if (nodes.isEmpty()) {
+                absent.add(tag)
+            } else {
+                nodes.forEach { node ->
+                    val child = node.boundsInRoot
+                    assertTrue("$tag top", child.top >= player.top)
+                    assertTrue("$tag bottom", child.bottom <= player.bottom)
+                }
+            }
+        }
+        println("height480 absent elements: $absent")
+        rule.onNodeWithTag("player_play").assertWidthIsAtLeast(96.dp).assertHeightIsAtLeast(96.dp)
+    }
     @Test fun paused_showsPlayerWithPlayIcon() {
         host(song.copy(playing = false))
         rule.onNodeWithTag("player_title").assertIsDisplayed()

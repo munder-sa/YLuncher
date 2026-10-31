@@ -44,7 +44,7 @@ fun HomeMiniPlayer(
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier.testTag("home_player"), shape = RoundedCornerShape(32.dp), color = Palette.Panel) {
-        BoxWithConstraints(Modifier.fillMaxSize().padding(32.dp)) {
+        BoxWithConstraints(Modifier.fillMaxSize().padding(start = 40.dp, top = 40.dp, end = 40.dp, bottom = 32.dp)) {
             if (now == null) {
                 if (idleApp != null) {
                     Column(Modifier.fillMaxWidth().align(Alignment.Center)
@@ -58,6 +58,7 @@ fun HomeMiniPlayer(
                     }
                 }
             } else {
+                val app = appInfo(now.pkg)
                 val density = LocalDensity.current
                 val measurer = rememberTextMeasurer()
                 val textStyle = LocalTextStyle.current
@@ -93,7 +94,6 @@ fun HomeMiniPlayer(
                 val restartKey = now.pkg to now.title to now.artist
                 Column(Modifier.fillMaxSize()) {
                     if (showDetails) {
-                        val app = appInfo(now.pkg)
                         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             AppImage(app, Modifier.size(36.dp))
@@ -103,7 +103,10 @@ fun HomeMiniPlayer(
                     if (artSize > 0.dp) {
                         Spacer(Modifier.height(gaps.beforeArt))
                         val artwork = now.artwork
-                        val artModifier = Modifier.size(artSize).align(Alignment.CenterHorizontally).clip(RoundedCornerShape(16.dp)).testTag("player_art")
+                        val artModifier = Modifier.size(artSize).align(Alignment.CenterHorizontally)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(enabled = app.installed, onClickLabel = "${app.label}を開く") { onLaunch(now.pkg) }
+                            .testTag("player_art")
                         if (artwork == null) Image(painterResource(R.drawable.artwork_placeholder), null, artModifier)
                         else Image(artwork.asImageBitmap(), null, artModifier)
                     }
