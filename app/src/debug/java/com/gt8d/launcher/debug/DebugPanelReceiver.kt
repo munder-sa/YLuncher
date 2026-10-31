@@ -71,6 +71,18 @@ class DebugPanelReceiver : BroadcastReceiver() {
                     }
                 }
             }
+            intent.hasExtra("cancel") -> {
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.Main.immediate).launch {
+                    try {
+                        val opening = AppGraph.runner.opening.value != null
+                        DiagLog.d("DebugPanel", "cancel opening=$opening")
+                        if (opening) AppGraph.runner.cancelOpening()
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
             intent.hasExtra("open") -> {
                 val index = intent.getIntExtra("open", 0)
                 val pending = goAsync()
