@@ -128,12 +128,15 @@ class PanelActivity : ComponentActivity() {
                         onLaunchComponent = { component ->
                             val succeeded = launchComponent(component, isInMultiWindowMode)
                             AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
+                            if (succeeded && isInMultiWindowMode) AppGraph.runner.panelLaunched(component.packageName)
                         },
                         onLaunchApp = { pkg ->
+                            val succeeded = launchApp(pkg, isInMultiWindowMode)
                             AppGraph.warm.recordAppLaunch(
                                 pkg,
-                                launchApp(pkg, isInMultiWindowMode),
+                                succeeded,
                             )
+                            if (succeeded && isInMultiWindowMode) AppGraph.runner.panelLaunched(pkg)
                         },
                     )
                 }

@@ -29,8 +29,54 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.*
+import com.gt8d.launcher.split.PanelPlacement
 
 class SetRunnerTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun placement_wiring() = runTest {
+        val e = TestEnv(scope = this)
+        e.runner.open(1); resumePanelApp(e, "youtube")
+        e.runner.onPanelPlacementChanged(PanelPlacement.Left); advanceUntilIdle()
+        assertEquals(Slot.Panel, e.config.screenSets.first().left)
+        assertEquals("com.gt8d.launcher.panel" to "youtube", e.runner.lastOpenedPair)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun panelLaunched_forwardsPartner() = runTest {
+        val e = TestEnv(scope = this)
+        e.runner.open(1); resumePanelApp(e, "youtube")
+        e.runner.panelLaunched("maps")
+        e.runner.onPanelPlacementChanged(PanelPlacement.Left); advanceUntilIdle()
+        assertEquals(Slot.App("youtube"), e.config.screenSets.first().left)
+        assertEquals("maps" to "com.gt8d.launcher.panel", e.runner.lastOpenedPair)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun session_beginOnReady_endOnHomeNextLinkFailSafety() = runTest {
+        for (action in listOf<(TestEnv) -> Unit>(
+            { it.runner.home() }, { it.runner.open(2) },
+            { it.runner.openForLink("youtube", "maps", {}, {}) },
+            { it.vendor.result = LaunchResult.Failed(FailReason.EntryMissing); it.runner.open(1) },
+            { it.runner.open(1); it.scheduler.advanceBy(4000) },
+        )) {
+            val e = TestEnv(scope = this)
+            e.config = e.config.copy(screenSets = e.config.screenSets.mapIndexed { i, s ->
+                if (i == 0) ScreenSet(s.id, Slot.Panel, Slot.App("youtube"), SplitRatio.R4_6) else s
+            })
+            e.runner.open(1)
+            e.runner.onPanelPlacementChanged(PanelPlacement.Right); advanceUntilIdle()
+            assertEquals(Slot.Panel, e.config.screenSets.first().left)
+            resumePanelApp(e, "youtube"); advanceUntilIdle()
+            assertEquals(Slot.Panel, e.config.screenSets.first().right)
+            e.events.events.clear()
+            action(e)
+            e.runner.onPanelPlacementChanged(PanelPlacement.Left); advanceUntilIdle()
+            assertEquals(Slot.Panel, e.config.screenSets.first().right)
+        }
+    }
     private fun leftPanelEnv() = TestEnv().apply {
         config = config.copy(screenSets = listOf(ScreenSet("s", Slot.Panel, Slot.App("y"), SplitRatio.R4_6)))
         installed.add("y")
@@ -1034,6 +1080,7 @@ class SetRunnerTest {
         watcherAvailable: Boolean = true,
         ownTaskExists: () -> Boolean = { true },
         var loading: Boolean = false,
+        scope: CoroutineScope? = null,
     ) {
         val ownPkg = "com.gt8d.launcher"
         var config = LauncherConfig(
@@ -1083,6 +1130,8 @@ class SetRunnerTest {
                 labelFor = { it },
                 startHome = { startHomeCount++ },
                 messenger = messenger,
+                scope = scope,
+                updateConfig = { f -> config = f(config) },
             ),
         )
     }

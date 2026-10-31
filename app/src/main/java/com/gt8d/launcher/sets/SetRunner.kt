@@ -25,6 +25,9 @@ import com.gt8d.launcher.time.Cancellable
 import com.gt8d.launcher.time.Clock
 import com.gt8d.launcher.time.Scheduler
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
+import com.gt8d.launcher.config.appPkgAt
+import com.gt8d.launcher.split.PanelPlacement
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -57,9 +60,18 @@ data class SetRunnerDeps(
     val startHome: () -> Unit,
     val messenger: Messenger,
     val panelHostPkg: String = OwnPackages.PANEL_HOST,
+    val updateConfig: suspend ((LauncherConfig) -> LauncherConfig) -> Unit = {},
+    val scope: CoroutineScope? = null,
 )
 
 class SetRunner(private val d: SetRunnerDeps) {
+    private val saver = d.scope?.let { scope ->
+        PanelSwapSaver(scope, d.config, d.updateConfig, {
+            lastOpenedPair = lastOpenedPair?.let { it.second to it.first }
+        })
+    }
+
+    fun onPanelPlacementChanged(p: PanelPlacement?) { saver?.placementChanged(p) }
     private enum class WaitKind {
         None,
         Single,
@@ -239,13 +251,20 @@ class SetRunner(private val d: SetRunnerDeps) {
             else -> return
         }
         DiagLog.d("SetRunner", "panelLaunched pkg=$pkg pair=$lastOpenedPair")
+        saver?.partnerChanged(pkg)
     }
 
     private fun onSetReady(set: ScreenSet) {
+        val side = set.panelSide
+        if (side != null) {
+            val appPkg = set.appPkgAt(if (side == Side.Left) Side.Right else Side.Left)
+            if (appPkg != null) saver?.begin(set, appPkg)
+        }
         DiagLog.d("SetRunner", "session ready id=${set.id}")
     }
 
     private fun onSetEnded(reason: String) {
+        saver?.end(reason)
         DiagLog.d("SetRunner", "session ended reason=$reason")
     }
 
