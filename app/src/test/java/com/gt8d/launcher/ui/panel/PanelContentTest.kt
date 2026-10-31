@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -45,76 +46,60 @@ import org.robolectric.annotation.TextLayoutMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
 class PanelContentTest {
-    @Test fun panel_mediaToggle_defaultAndHiddenAndPlayingBadge() {
-        var visible by mutableStateOf(true)
-        var playing by mutableStateOf(false)
-        var clicks = 0
+    @Test fun panel_viewSegment_defaultsAndSelection() {
+        val selections = mutableListOf<com.gt8d.launcher.config.PanelView>()
         rule.setContent {
             LauncherTheme {
                 Box(Modifier.size(516.dp, 800.dp)) {
-                    PanelContent(
-                        PanelState(NowPlaying("music", "Song", "Artist", null, 180000L, playing, false),
-                            null, 0L, emptyList(), emptyList(), DockStatus(true, null), false, false,
-                            mediaVisible = visible),
-                        emptyActions().copy(onToggleMedia = { clicks++; visible = !visible }),
-                    )
+                    PanelContent(PanelState(null, null, 0L, emptyList(), emptyList(),
+                        DockStatus(true, null), false, false),
+                        emptyActions().copy(onSelectView = { selections.add(it) }))
                 }
             }
         }
-        val toggle = rule.onNodeWithTag("panel_media_toggle").assertIsDisplayed()
-        val bounds = toggle.getBoundsInRoot()
-        assertTrue(bounds.width >= 72.dp && bounds.height >= 72.dp)
+        rule.onNodeWithTag("panel_view_segment").assertIsDisplayed()
+        rule.onNodeWithTag("panel_view_apps").assertIsSelected().performClick()
+        assertTrue(selections.isEmpty())
         rule.onNodeWithTag("media_card").assertExists()
-        rule.onNodeWithTag("panel_media_playing_badge", useUnmergedTree = true).assertDoesNotExist()
-        val originalTop = rule.onNodeWithTag("icon_grid").getBoundsInRoot().top
-        toggle.performClick()
-        assertEquals(1, clicks)
-        rule.onNodeWithTag("media_card").assertDoesNotExist()
-        assertTrue(rule.onNodeWithTag("icon_grid").getBoundsInRoot().top < originalTop)
-        rule.onNodeWithTag("panel_media_playing_badge", useUnmergedTree = true).assertDoesNotExist()
-        rule.runOnIdle {
-            playing = true
-            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.onNodeWithTag("icon_grid").assertExists()
+        for (tag in listOf("panel_view_apps", "panel_view_sets")) {
+            val bounds = rule.onNodeWithTag(tag).getBoundsInRoot()
+            assertTrue(bounds.width >= 72.dp && bounds.height >= 72.dp)
         }
-        rule.onNodeWithTag("panel_media_playing_badge", useUnmergedTree = true).assertExists()
-        rule.runOnIdle {
-            visible = true
-            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        rule.onNodeWithTag("panel_view_sets").performClick()
+        assertEquals(listOf(com.gt8d.launcher.config.PanelView.Sets), selections)
+    }
+
+    @Test fun panel_sets_cardsAndCallbacks() {
+        val opened = mutableListOf<Int>()
+        var added = 0
+        var selected = 0
+        val sets = (1..3).map {
+            com.gt8d.launcher.config.ScreenSet("s$it", com.gt8d.launcher.config.Slot.App("a$it"),
+                com.gt8d.launcher.config.Slot.Panel)
         }
-        rule.onNodeWithTag("panel_media_playing_badge", useUnmergedTree = true).assertDoesNotExist()
-    }
-
-    @Test fun panel_mediaToggle_inlineAt516dp() {
-        assertTogglePlacement(516, inline = true)
-    }
-
-    @Test fun panel_mediaToggle_belowClockAt240dp() {
-        assertTogglePlacement(240, inline = false)
-    }
-
-    private fun assertTogglePlacement(width: Int, inline: Boolean) {
         rule.setContent {
             LauncherTheme {
-                Box(Modifier.size(width.dp, 800.dp)) {
-                    PanelContent(
-                        PanelState(null, null, 0L, emptyList(), emptyList(),
-                            DockStatus(true, null), false, false), emptyActions(),
-                    )
+                Box(Modifier.size(360.dp, 400.dp)) {
+                    PanelContent(PanelState(null, null, 0L, emptyList(), emptyList(),
+                        DockStatus(true, null), false, true,
+                        view = com.gt8d.launcher.config.PanelView.Sets, sets = sets),
+                        emptyActions().copy(onOpenSet = { opened.add(it) }, onNewSet = { added++ },
+                            onSelectView = { selected++ }))
                 }
             }
         }
-        val clock = rule.onNodeWithTag("clock").getBoundsInRoot()
-        val toggle = rule.onNodeWithTag("panel_media_toggle").assertIsDisplayed().getBoundsInRoot()
-        assertTrue(toggle.width >= 72.dp && toggle.height >= 72.dp)
-        assertTrue(toggle.left >= 0.dp && toggle.right <= width.dp)
-        if (inline) {
-            assertTrue(toggle.top < clock.bottom && clock.top < toggle.bottom)
-            assertTrue(toggle.left >= clock.right)
-        } else {
-            assertTrue(toggle.top >= clock.bottom)
-        }
+        rule.onNodeWithTag("panel_view_sets").assertIsSelected().performClick()
+        assertEquals(0, selected)
+        rule.onNodeWithTag("media_card").assertDoesNotExist()
+        rule.onNodeWithTag("icon_grid").assertDoesNotExist()
+        assertTrue(rule.onNodeWithTag("home_sets").performScrollTo().getBoundsInRoot().height >= 136.dp)
+        rule.onNodeWithTag("permission_banner").performScrollTo().assertIsDisplayed()
+        for (i in 1..3) rule.onNodeWithTag("home_set_s$i").performScrollTo().assertIsDisplayed().performClick()
+        assertEquals(listOf(1, 2, 3), opened)
+        rule.onNodeWithTag("home_set_add").performScrollTo().assertIsDisplayed().performClick()
+        assertEquals(1, added)
     }
-
 
     @Test
     fun panel_clockShownWhileIdleAndPlaying() {
@@ -270,6 +255,7 @@ class PanelContentTest {
         assertTrue(permissionsOpened)
 
         needsPermission = false
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
         rule.waitForIdle()
         rule.onNodeWithTag("permission_banner").assertDoesNotExist()
     }

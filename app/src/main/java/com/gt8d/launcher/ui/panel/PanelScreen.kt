@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.LauncherConfig
+import com.gt8d.launcher.config.PanelView
 import com.gt8d.launcher.ui.home.HomeClockHeader
 import com.gt8d.launcher.ui.home.HomeMiniPlayer
 import com.gt8d.launcher.ui.home.HomeSetCards
@@ -61,11 +62,11 @@ fun PanelScreen(
     val context = LocalContext.current
     val latestConfig by AppGraph.latestConfig.collectAsState()
     val config = homeConfig ?: latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
-    var pending by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var pending by rememberSaveable { mutableStateOf<PanelView?>(null) }
     val scope = rememberCoroutineScope()
-    val mediaSaveMutex = remember { Mutex() }
-    LaunchedEffect(config.panelMediaVisible, pending) {
-        if (pending == config.panelMediaVisible) pending = null
+    val viewSaveMutex = remember { Mutex() }
+    LaunchedEffect(config.panelView, pending) {
+        if (pending == config.panelView) pending = null
     }
     val now by MediaWatcher.nowPlaying.collectAsState()
     var showAppList by rememberSaveable { mutableStateOf(false) }
@@ -168,22 +169,25 @@ fun PanelScreen(
         HomeWideContent(state, actions, config, { catalog.info(it, installedPkgs) }, currentIndex,
             onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet)
     } else {
-        PanelContent(state = state.copy(mediaVisible = pending ?: config.panelMediaVisible),
-            actions = actions.copy(onToggleMedia = {
-                val visible = !(pending ?: config.panelMediaVisible)
-                pending = visible
+        val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
+        PanelContent(state = state.copy(view = pending ?: config.panelView,
+            sets = config.screenSets, currentSetIndex = currentIndex,
+            setAppInfo = { catalog.info(it, installedPkgs) }),
+            actions = actions.copy(onSelectView = { view ->
+                pending = view
                 scope.launch {
                     try {
-                        mediaSaveMutex.withLock {
-                            AppGraph.config.update { it.copy(panelMediaVisible = visible) }
+                        viewSaveMutex.withLock {
+                            AppGraph.config.update { it.copy(panelView = view) }
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        DiagLog.d("Panel", "media visibility save failed: $e")
+                        DiagLog.d("Panel", "panel view save failed: $e")
                     }
                 }
-            }))
+            }, onOpenSet = { if (AppGraph.runner.opening.value == null) AppGraph.runner.open(it) },
+                onNewSet = { if (AppGraph.runner.opening.value == null) onNewSet() }))
     }
 }
 
