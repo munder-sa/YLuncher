@@ -1407,4 +1407,20 @@ class SetRunnerTest {
         assertEquals(1, env.runner.readyCount)
         assertNull(env.runner.opening.value)
     }
+
+    @Test
+    fun lastReadyAt_setOnReady_clearedOnNextOpen() {
+        val env = TestEnv()
+        assertNull(env.runner.lastReadyAtMs)
+        env.runner.open(2)
+        env.events.events.add(ResumeEvent("youtube", 100L))
+        env.events.events.add(ResumeEvent("applemusic", 120L))
+        env.scheduler.advanceBy(200L)
+        assertEquals(200L, env.runner.lastReadyAtMs)
+
+        env.runner.open(1)
+        assertNull(env.runner.lastReadyAtMs)
+        resumePanelApp(env, "youtube")
+        assertEquals(400L, env.runner.lastReadyAtMs)
+    }
 }

@@ -50,6 +50,8 @@ class LinkEntryActivityTest {
     private var savedPanelAt: Long? = null
     private var savedPlacement: PanelPlacement? = null
     private var savedPair: Pair<String, String>? = null
+    private var savedReadyAt: Long? = null
+    private val readyAtField get() = AppGraph.runner.javaClass.getDeclaredField("lastReadyAtMs").apply { isAccessible = true }
     private val pairField get() = AppGraph.runner.javaClass.getDeclaredField("lastOpenedPair").apply { isAccessible = true }
     private lateinit var savedDeps: SetRunnerDeps
     private lateinit var savedMode: SplitModeState
@@ -66,6 +68,8 @@ class LinkEntryActivityTest {
         savedPanelAt = AppGraph.panelSplitPausedAtMs
         savedPlacement = AppGraph.panelPlacement.value
         savedPair = AppGraph.runner.lastOpenedPair
+        savedReadyAt = AppGraph.runner.lastReadyAtMs
+        readyAtField.set(AppGraph.runner, null)
         AppGraph.reportPanelPlacement(null)
         pairField.set(AppGraph.runner, null)
         AppGraph.configFlowForHomeTest = flow
@@ -93,6 +97,7 @@ class LinkEntryActivityTest {
         AppGraph.panelSplitPausedAtMs = savedPanelAt
         AppGraph.reportPanelPlacement(savedPlacement)
         pairField.set(AppGraph.runner, savedPair)
+        readyAtField.set(AppGraph.runner, savedReadyAt)
     }
 
     private fun open(url: String, referrer: String = "com.example.mail"): LinkEntryActivity {
@@ -388,5 +393,47 @@ class LinkEntryActivityTest {
         assertNull(shadowOf(app).nextStartedActivity)
         assertEquals(0, openForLinkCalls)
         assertTrue(activity.isFinishing)
+    }
+
+    @Test fun transientStockLauncherBeforeReady_isIgnored() {
+        assertStockLauncherBeforeReady(realOtherApp = false)
+    }
+
+    @Test fun transientStockLauncherBeforeReady_otherAppAfterReady_stillCounts() {
+        assertStockLauncherBeforeReady(realOtherApp = true)
+    }
+
+    private fun assertStockLauncherBeforeReady(realOtherApp: Boolean) {
+        flow.value = Defaults.build(emptySet())
+        val fixture = splitFixture()
+        val eventsField = AppGraph.watcher.javaClass.getDeclaredField("events").apply {
+            isAccessible = true
+        }
+        val savedEvents = eventsField.get(AppGraph.watcher)
+        try {
+            assertTrue(AppGraph.runner.openForLink("com.android.chrome", "y", {}, {}))
+            fixture.events.add(ResumeEvent("com.android.launcher3", 50L))
+            fixture.events.add(ResumeEvent("com.android.chrome", 100L))
+            fixture.events.add(ResumeEvent("y", 120L))
+            fixture.scheduler.advanceBy(200L)
+            assertEquals(0L, AppGraph.runner.lastOpenedAtMs)
+            assertEquals(200L, AppGraph.runner.lastReadyAtMs)
+            if (realOtherApp) fixture.events.add(ResumeEvent("maps", 250L))
+            fixture.scheduler.advanceBy(100L)
+            eventsField.set(AppGraph.watcher, object : ForegroundEvents {
+                override fun available() = true
+                override fun resumedSince(sinceMs: Long) = fixture.events.filter {
+                    it.timeMs in sinceMs..fixture.scheduler.nowMs()
+                }
+            })
+            val activity = open("https://example.com", referrer = "y")
+            val expectedPair = if (realOtherApp) "y" to "com.android.chrome"
+                else "com.android.chrome" to "y"
+            assertEquals(listOf("com.android.chrome" to "y", expectedPair), fixture.calls)
+            assertNull(shadowOf(app).nextStartedActivity)
+            assertTrue(activity.isFinishing)
+        } finally {
+            eventsField.set(AppGraph.watcher, savedEvents)
+        }
     }
 }

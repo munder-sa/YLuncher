@@ -98,6 +98,9 @@ class SetRunner(private val d: SetRunnerDeps) {
     var lastOpenedAtMs: Long? = null
         private set
 
+    var lastReadyAtMs: Long? = null
+        private set
+
     private var linkFallback: (() -> Unit)? = null
     private var linkReady: (() -> Unit)? = null
     private var linkWaitBoth = false
@@ -168,6 +171,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         d.lastIndex.lastSetIndex = SetNavigator.HOME
         lastOpenedPair = null
         lastOpenedAtMs = null
+        lastReadyAtMs = null
         d.curtain.show(targetFor(SetNavigator.HOME, cfg), WarmTracker.WARM_MS, d.watcher.available())
         d.startHome()
         d.curtain.ready()
@@ -209,6 +213,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             d.lastIndex.lastSetIndex = SetNavigator.HOME
             lastOpenedPair = null
             lastOpenedAtMs = null
+            lastReadyAtMs = null
             d.startHome()
             return
         }
@@ -229,6 +234,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         d.lastIndex.lastSetIndex = SetNavigator.HOME
         lastOpenedPair = null
         lastOpenedAtMs = null
+        lastReadyAtMs = null
         _opening.value = null
         d.startHome()
     }
@@ -308,6 +314,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 d.lastIndex.lastSetIndex = SetNavigator.HOME
                 lastOpenedPair = null
                 lastOpenedAtMs = null
+                lastReadyAtMs = null
                 d.startHome()
             }
             return
@@ -344,6 +351,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         _opening.value = Opening(left, right, startMs)
         lastOpenedPair = left to right
         lastOpenedAtMs = startMs
+        lastReadyAtMs = null
 
         if (useCurtain) {
             d.curtain.show(target, expectedDelayMs, monitoringAvailable)
@@ -482,6 +490,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
                 if (ready) {
                     DiagLog.d("SetRunner", "waitBoth ready left=$left right=$right")
+                    lastReadyAtMs = d.clock.nowMs()
                     waitKind = WaitKind.None
                     cancelTimers()
                     readyCount++

@@ -40,7 +40,7 @@ class LinkEntryActivity : ComponentActivity() {
             url = incoming
             val ref = LinkRouter.referrerPackage(referrer?.toString())
             val pair = AppGraph.runner.lastOpenedPair
-            val startedAt = AppGraph.runner.lastOpenedAtMs
+            val startedAt = AppGraph.runner.lastReadyAtMs ?: AppGraph.runner.lastOpenedAtMs
             val other = pair != null && startedAt != null &&
                 AppGraph.watcher.foregroundPkgsSince(startedAt).any {
                     it != pair.first && it != pair.second && !OwnPackages.isOwn(it) &&
