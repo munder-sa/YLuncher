@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.text.TextLayoutResult
@@ -14,6 +16,7 @@ import androidx.compose.ui.unit.height
 import com.gt8d.launcher.config.*
 import com.gt8d.launcher.ui.panel.AppInfo
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.theme.Palette
 import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
@@ -174,6 +177,47 @@ class HomeSetCardsTest {
             .fetchSemanticsNode().boundsInRoot
         val last = rule.onNodeWithTag("home_set_s4").fetchSemanticsNode().boundsInRoot
         assertEquals(with(rule.density) { 24.dp.toPx() }, add.top - last.bottom, 1f)
+    }
+    @Test fun fiveSets_addOccupiesNextCellAndFitsWideHomeArea() {
+        // 1920x1080 / (238/160) から、外側余白・プレイヤー・ドック・時計を除く。
+        // 利用可能領域を小さい側の整数 dp に丸める。
+        host(width = 708, height = 525, count = 5)
+        val area = rule.onNodeWithTag("area").fetchSemanticsNode().boundsInRoot
+        val last = rule.onNodeWithTag("home_set_s5").fetchSemanticsNode().boundsInRoot
+        val add = rule.onNodeWithTag("home_set_add").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertEquals(last.top, add.top, 0f)
+        assertEquals(last.width, add.width, 1f)
+        assertEquals(last.height, add.height, 0f)
+        assertEquals(with(rule.density) { 24.dp.toPx() }, add.left - last.right, 1f)
+        assertTrue(add.right <= area.right)
+        assertTrue(add.bottom <= area.bottom)
+        rule.onNodeWithTag("home_set_s1").assertHeightIsEqualTo(159.dp)
+    }
+    @Test fun sixSets_addIs72dpFullWidthBelowLastCard() {
+        host(count = 6)
+        val add = rule.onNodeWithTag("home_set_add")
+            .assertHeightIsEqualTo(72.dp).assertWidthIsEqualTo(700.dp)
+            .fetchSemanticsNode().boundsInRoot
+        val last = rule.onNodeWithTag("home_set_s6").fetchSemanticsNode().boundsInRoot
+        assertEquals(with(rule.density) { 24.dp.toPx() }, add.top - last.bottom, 1f)
+    }
+    @Test fun oneColumnThreeSets_addIs72dpFullWidthBelowLastCard() {
+        host(width = 600, count = 3)
+        val add = rule.onNodeWithTag("home_set_add")
+            .assertHeightIsEqualTo(72.dp).assertWidthIsEqualTo(600.dp)
+            .fetchSemanticsNode().boundsInRoot
+        val last = rule.onNodeWithTag("home_set_s3").fetchSemanticsNode().boundsInRoot
+        assertEquals(with(rule.density) { 24.dp.toPx() }, add.top - last.bottom, 1f)
+    }
+    @Test fun add_hasMutedLabelAndButtonDescription() {
+        host()
+        rule.onNodeWithTag("home_set_add").assertContentDescriptionEquals("セットを追加")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        rule.onNodeWithText("＋ セットを追加").assertDoesNotExist()
+        val layouts = mutableListOf<TextLayoutResult>()
+        rule.onNodeWithText("セットを追加", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(Palette.Muted, layouts.single().layoutInput.style.color)
     }
     @Test fun fourSets_cardHeightExcludesAddRow() {
         host(height = 420, count = 4)

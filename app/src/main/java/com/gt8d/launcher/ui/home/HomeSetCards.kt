@@ -9,15 +9,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -51,8 +50,9 @@ fun HomeSetCards(
         val columns = PanelLayout.homeSetColumns(maxWidth.value)
         val areaHeight = maxHeight
         val rows = (sets.size + columns - 1) / columns
+        val addInGrid = sets.size % columns != 0
         val cardHeight = if (rows == 0) null else
-            ((areaHeight - 72.dp - 24.dp - 24.dp * (rows - 1)) / rows).coerceIn(136.dp, 160.dp)
+            ((areaHeight - (if (addInGrid) 0.dp else 96.dp) - 24.dp * (rows - 1)) / rows).coerceIn(136.dp, 160.dp)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Column(Modifier.fillMaxWidth().heightIn(min = areaHeight),
                 verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically)) {
@@ -87,20 +87,29 @@ fun HomeSetCards(
                                 }
                             }
                         }
-                        if (row.size < columns) Spacer(Modifier.weight(1f))
+                        if (row.size < columns) {
+                            AddSetCard(onAdd, Modifier.weight(1f).height(requireNotNull(cardHeight)))
+                        }
                     }
                 }
-                Box(Modifier.fillMaxWidth().height(72.dp).clip(RoundedCornerShape(28.dp)).drawBehind {
-                    val stroke = 2.dp.toPx()
-                    drawRoundRect(Color.White,
-                        topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
-                        size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
-                        cornerRadius = CornerRadius(28.dp.toPx()),
-                        style = Stroke(stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))))
-                }.clickable(onClick = onAdd).testTag("home_set_add"), contentAlignment = Alignment.Center) {
-                    OneLineText("＋ セットを追加", color = Color.White, fontSize = Dims.BodyText)
+                if (!addInGrid) {
+                    AddSetCard(onAdd, Modifier.fillMaxWidth().height(72.dp))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AddSetCard(onAdd: () -> Unit, modifier: Modifier) {
+    val shape = RoundedCornerShape(28.dp)
+    Box(modifier.clip(shape).border(1.dp, Palette.Control, shape)
+        .clickable(role = Role.Button, onClick = onAdd)
+        .semantics { contentDescription = "セットを追加" }
+        .testTag("home_set_add"), contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(24.dp), tint = Palette.Muted)
+            OneLineText("セットを追加", color = Palette.Muted, fontSize = Dims.BodyText)
         }
     }
 }
