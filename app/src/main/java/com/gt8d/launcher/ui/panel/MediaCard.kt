@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,7 +45,8 @@ import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.layout.OneLineText
 import com.gt8d.launcher.ui.layout.MarqueeText
-import com.gt8d.launcher.ui.layout.PanelLayout
+
+val MediaControlBackground = SemanticsPropertyKey<Color>("MediaControlBackground")
 
 @Composable
 fun MediaCard(
@@ -172,7 +174,7 @@ private fun ActiveMediaContent(
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).testTag("media_metadata")) {
                 val restartKey = now.pkg to now.title to now.artist
                 MarqueeText(
                     text = now.title,
@@ -192,25 +194,24 @@ private fun ActiveMediaContent(
                     )
                 }
             }
+            if (now.hasFavorite) {
+                Spacer(Modifier.width(8.dp))
+                MediaControl(MediaAction.Favorite, onAction)
+            }
         }
 
         SeekBar(now.durationMs, positionMs, onSeek)
 
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val controls = listOf(MediaAction.Prev, if (now.playing) MediaAction.Pause else MediaAction.Play, MediaAction.Next) +
-                if (now.hasFavorite) listOf(MediaAction.Favorite) else emptyList()
-            val rows = PanelLayout.controlRows(maxWidth.value, controls.size)
-            val perRow = if (rows == 1) controls.size else (controls.size + 1) / 2
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (row in controls.chunked(perRow)) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        for (action in row) MediaControl(action, onAction)
-                    }
-                }
+            val gap = ((maxWidth - 216.dp) / 2).coerceIn(0.dp, 8.dp)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MediaControl(MediaAction.Prev, onAction)
+                MediaControl(if (now.playing) MediaAction.Pause else MediaAction.Play, onAction)
+                MediaControl(MediaAction.Next, onAction)
             }
         }
     }
@@ -225,7 +226,12 @@ private fun MediaControl(action: MediaAction, onAction: (MediaAction) -> Unit) {
         MediaAction.Next -> Triple(Icons.Default.SkipNext, "次へ", "btn_next")
         MediaAction.Favorite -> Triple(Icons.Default.StarBorder, "お気に入り", "btn_favorite")
     }
-    IconButton(onClick = { onAction(action) }, modifier = Modifier.size(72.dp).testTag(tag)) {
-        Icon(icon, description, tint = Palette.PanelAccent, modifier = Modifier.size(36.dp))
+    val isPlayPause = action == MediaAction.Play || action == MediaAction.Pause
+    val background = if (isPlayPause) Palette.PanelAccent else Color.Transparent
+    IconButton(onClick = { onAction(action) }, modifier = Modifier.size(72.dp)
+        .background(background, CircleShape)
+        .semantics { this[MediaControlBackground] = background }.testTag(tag)) {
+        Icon(icon, description, tint = if (isPlayPause) Palette.Background0 else Palette.PanelAccent,
+            modifier = Modifier.size(36.dp))
     }
 }

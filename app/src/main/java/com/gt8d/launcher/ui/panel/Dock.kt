@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material.icons.filled.SignalWifi0Bar
 import androidx.compose.material.icons.filled.SignalWifi4Bar
@@ -131,8 +130,8 @@ fun Dock(
             )
 
             DockIconButton(
-                icon = Icons.Default.ViewColumn,
-                contentDescription = "分割",
+                icon = SetAddIcon,
+                contentDescription = "セットを追加",
                 tag = "dock_split",
                 onClick = onSplit,
             )

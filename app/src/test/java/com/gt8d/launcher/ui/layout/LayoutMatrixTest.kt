@@ -136,6 +136,19 @@ class LayoutMatrixTest(
                 }
             }
             checkDisjoint()
+            if (playing && view == PanelView.Apps && !(home && width >= 840)) {
+                rule.onNodeWithTag("btn_playpause").performScrollTo()
+                val controls = listOf("btn_prev", "btn_playpause", "btn_next").map {
+                    rule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                }
+                for (control in controls) {
+                    assertEquals(controls.first().center.y, control.center.y, 1f)
+                    assertTrue(control.width >= 72 * pixelsPerDp && control.height >= 72 * pixelsPerDp)
+                    assertTrue(control.left >= root.left && control.right <= root.right &&
+                        control.top >= root.top && control.bottom <= root.bottom)
+                }
+                assertTrue(controls[0].right <= controls[1].left && controls[1].right <= controls[2].left)
+            }
             val dock = rule.onNodeWithTag("dock").fetchSemanticsNode().boundsInRoot
             assertTrue(dock.width >= 72 * pixelsPerDp)
             assertTrue(dock.left >= root.left && dock.right <= root.right && dock.top >= root.top && dock.bottom <= root.bottom)

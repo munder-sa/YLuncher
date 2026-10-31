@@ -10,6 +10,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -23,6 +26,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -34,6 +38,40 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MediaCardTest {
+    @Test fun favorite_isRightOfMetadata_andControlsStayInOneRow() {
+        var favorite by mutableStateOf(true)
+        var playing by mutableStateOf(true)
+        val actions = mutableListOf<MediaAction>()
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(NowPlaying("music", "Song", "Artist", null, 120000L, playing, favorite),
+                    null, 0L, { actions.add(it) }, {}, {})
+            }
+        }
+        fun bounds(tag: String) = rule.onNodeWithTag(tag, useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        val metadata = bounds("media_metadata")
+        val star = bounds("btn_favorite")
+        assertTrue(star.left >= metadata.right)
+        assertTrue(star.center.y >= bounds("title").top && star.center.y <= bounds("artist").bottom)
+        val prev = bounds("btn_prev")
+        assertEquals(prev.center.y, bounds("btn_playpause").center.y, 1f)
+        assertEquals(prev.center.y, bounds("btn_next").center.y, 1f)
+        rule.onNodeWithTag("btn_favorite").performClick()
+        assertEquals(listOf(MediaAction.Favorite), actions)
+        fun assertWhite() = rule.onNodeWithTag("btn_playpause")
+            .assert(SemanticsMatcher.expectValue(MediaControlBackground, Color.White))
+        assertWhite()
+        rule.runOnIdle { playing = false }
+        assertWhite()
+        rule.runOnIdle { favorite = false }
+        rule.onNodeWithTag("btn_favorite").assertDoesNotExist()
+        val expanded = bounds("media_metadata")
+        assertEquals(star.right, expanded.right, 1f)
+        assertEquals(metadata.left, expanded.left, 1f)
+        assertTrue(expanded.width > metadata.width)
+    }
+
     @Test fun artTap_launchesPlayerApp() {
         val launches = mutableListOf<String>()
         val now = NowPlaying("music", "Song", "Artist", null, 120000L, true, false)
