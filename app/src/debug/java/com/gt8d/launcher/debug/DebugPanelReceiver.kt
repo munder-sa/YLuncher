@@ -6,7 +6,11 @@ import android.content.Context
 import android.content.Intent
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.config.PanelView
+import com.gt8d.launcher.config.ScreenSet
+import com.gt8d.launcher.config.Slot
+import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.diag.DiagLog
+import com.gt8d.launcher.split.AndroidActivityLauncher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -15,6 +19,38 @@ class DebugPanelReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         AppGraph.init(context.applicationContext as Application)
         when {
+            intent.hasExtra("launch") -> {
+                val pkg = intent.getStringExtra("launch") ?: return
+                val succeeded = AndroidActivityLauncher(context.applicationContext)
+                    .startApp(pkg, adjacent = true)
+                AppGraph.warm.recordAppLaunch(pkg, succeeded)
+                if (succeeded) AppGraph.runner.panelLaunched(pkg)
+                DiagLog.d("DebugPanel", "launch $pkg ${if (succeeded) "ok" else "failed"}")
+            }
+            intent.hasExtra("addLeftPanelSet") || intent.hasExtra("removeSet") -> {
+                val pkg = intent.getStringExtra("addLeftPanelSet")
+                val id = intent.getStringExtra("removeSet")
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        var index = 0
+                        AppGraph.config.update { config ->
+                            if (pkg != null) {
+                                val sets = config.screenSets.filterNot { it.id == "scenario-left" } +
+                                    ScreenSet("scenario-left", Slot.Panel, Slot.App(pkg), SplitRatio.R4_6)
+                                index = sets.size
+                                config.copy(screenSets = sets)
+                            } else {
+                                config.copy(screenSets = config.screenSets.filterNot { it.id == id })
+                            }
+                        }
+                        if (pkg != null) DiagLog.d("DebugPanel", "addLeftPanelSet index=$index")
+                        else DiagLog.d("DebugPanel", "removeSet $id")
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
             intent.hasExtra("view") -> {
                 val view = when (intent.getStringExtra("view")) {
                     "apps" -> PanelView.Apps

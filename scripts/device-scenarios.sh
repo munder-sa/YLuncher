@@ -7,6 +7,8 @@ with_home=0
 only=''
 browser=com.android.chrome
 names=(link_cold_noTasks link_browserTaskPresent link_warm_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel set_panelCard_switch link_appPanelFront)
+left_names=(set_leftPanel_cold set_leftPanel_warm leftPanel_launchApp leftPanel_dividerSwap leftPanel_link leftPanel_link_twice set_leftToRightPanel)
+names+=("${left_names[@]}")
 while (($#)); do
     case "$1" in
         --with-ylauncher-home) with_home=1; shift ;;
@@ -27,6 +29,8 @@ failed=0
 active=''
 home_saved=0
 browser_saved=0
+config_saved=0
+left_index=''
 original_home=''
 original_browser=''
 row() {
@@ -54,6 +58,16 @@ cleanup() {
         row "${active##*/}" FAIL '途中終了。終了時点のログと画面を保存'
         failed=1
     fi
+    if ((config_saved)); then
+        if adb shell "run-as com.gt8d.launcher sh -c 'cat files/config-scenario-backup.json > files/config.json'" &&
+            adb shell am force-stop com.gt8d.launcher &&
+            adb shell run-as com.gt8d.launcher rm files/config-scenario-backup.json; then
+            config_saved=0
+        else
+            row cleanup FAIL "設定の復元に失敗(退避: files/config-scenario-backup.json、$out/config-backup.json)"
+            failed=1
+        fi
+    fi
     if ((home_saved)); then
         if ! adb shell cmd role add-role-holder android.app.role.HOME "$original_home" 0; then
             row cleanup FAIL '既定のホームの復元コマンドが失敗'; failed=1
@@ -80,6 +94,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+adb shell am force-stop com.gt8d.launcher || exit 1
+if ! adb shell "run-as com.gt8d.launcher sh -c 'if [ -f files/config-scenario-backup.json ]; then cat files/config-scenario-backup.json > files/config.json && rm files/config-scenario-backup.json; fi'"; then
+    row setup FAIL '前回の設定の復元に失敗(退避: files/config-scenario-backup.json)'; exit 1
+fi
+adb exec-out run-as com.gt8d.launcher cat files/config.json > "$out/config-backup.json" || { row setup FAIL '設定の退避に失敗'; exit 1; }
+adb shell "run-as com.gt8d.launcher sh -c 'cat files/config.json > files/config-scenario-backup.json'" || { row setup FAIL '端末内の設定の退避に失敗'; exit 1; }
+config_saved=1
 original_home=$(adb shell cmd role get-role-holders android.app.role.HOME) || exit 1
 original_home=${original_home//$'\r'/}
 [[ $original_home =~ ^[a-zA-Z0-9_.]+$ ]] || { row setup FAIL '現在の既定ホームを単一パッケージとして取得できない'; exit 1; }
@@ -173,7 +194,11 @@ no_safety() { if grep -Fq 'reason=Safety' "$active/logcat.txt"; then reasons+=('
 left_is() {
     local expected=$1 actual
     actual=$(awk '$1=="LEFT" {print $2}' "$active/slots.txt")
-    [[ $actual == "$expected/"* ]] || reasons+=("左の最前面が $expected でない: ${actual:-枠なし}")
+    if [[ $expected == com.gt8d.launcher.panel ]]; then
+        [[ $actual == com.gt8d.launcher/.ui.panel.PanelActivity || $actual == com.gt8d.launcher/com.gt8d.launcher.ui.panel.PanelActivity ]] || reasons+=("左の最前面が PanelActivity でない: ${actual:-枠なし}")
+    else
+        [[ $actual == "$expected/"* ]] || reasons+=("左の最前面が $expected でない: ${actual:-枠なし}")
+    fi
 }
 view_pattern() {
     printf 'START u0 \\{[^}]*act=android\\.intent\\.action\\.VIEW[^}]*pkg=%s([[:space:]}]|$)' "${browser//./\\.}"
@@ -211,10 +236,106 @@ home_task_ids() {
         for (i=1;i<=NF;i++) if ($i ~ /^#[0-9]+$/) {sub(/^#/, "", $i); print $i}
     }' "$1"
 }
+panel() { adb shell am broadcast -n com.gt8d.launcher/.debug.DebugPanelReceiver -a com.gt8d.launcher.debug.PANEL "$@"; }
+open_left() { panel --ei open "$left_index" && sleep 10; }
+check_swap_config() {
+    local side=$1 file=$2
+    # JSON の文字列と括弧の深さを追い、screenSets の各オブジェクトだけを取り出す。
+    awk -v side="$side" '
+    {text=text $0}
+    END {
+        for(i=1;i<=length(text);i++) {
+            c=substr(text,i,1)
+            if(depth>=2) obj=obj c
+            if(quoted) {if(escaped) escaped=0; else if(c=="\\") escaped=1; else if(c=="\"") quoted=0; continue}
+            if(c=="\"") {quoted=1; continue}
+            if(c=="{") {depth++; if(depth==2) obj="{"}
+            if(c=="}") {
+                if(depth==2 && obj ~ /"id"[[:space:]]*:[[:space:]]*"scenario-left"/) {
+                    gsub(/[[:space:]]/,"",obj)
+                    panel="\\{\"type\":\"com.gt8d.launcher.config.Slot.Panel\"\\}"
+                    app="\\{\"type\":\"com.gt8d.launcher.config.Slot.App\",\"pkg\":\"com.google.android.youtube\"\\}"
+                    left=(side=="Right" ? app : panel); right=(side=="Right" ? panel : app)
+                    ratio=(side=="Right" ? "R6_4" : "R4_6")
+                    if(obj ~ ("\"left\":" left) && obj ~ ("\"right\":" right) && obj ~ ("\"ratio\":\"" ratio "\"")) ok=1
+                }
+                depth--
+            }
+        }
+        exit !ok
+    }' "$file"
+}
+double_tap() {
+    local label=$1 attempt coords x y
+    for attempt in 1 2; do
+        adb shell dumpsys activity activities > "$active/$label-bounds-$attempt.txt" || return 1
+        coords=$(awk '
+        function indent(s) {match(s,/[^ ]/); return RSTART-1}
+        {
+            depth=indent($0)
+            if(slot && depth<=slotdepth && /[^[:space:]]/) slot=0
+            if(/\* Task\{/ && /type=undefined/ && /mode=multi-window/ && / visible=true([[:space:]}]|$)/) {slot=1; slotdepth=depth; next}
+            if(slot && /mBounds=Rect\(/) {
+                s=$0; sub(/^.*mBounds=Rect\(/,"",s); gsub(/[^0-9]+/," ",s); split(s,b,/ +/)
+                if(b[1]+0==0) {lr=b[3]; top=b[2]; bottom=b[4]; l=1}
+                else {rl=b[1]; r=1}
+                slot=0
+            }
+        }
+        END {if(l && r) print int((lr+rl)/2), int((top+bottom)/2)}' "$active/$label-bounds-$attempt.txt")
+        read -r x y <<< "$coords"
+        [[ $x =~ ^[0-9]+$ && $y =~ ^[0-9]+$ ]] || return 1
+        adb logcat -c || return 1
+        adb shell "input tap $x $y; input tap $x $y" || return 1
+        sleep 3
+        adb logcat -d -v time > "$active/$label-full-$attempt.txt" || return 1
+        if grep -Fq onDoubleTappedDivider "$active/$label-full-$attempt.txt"; then return 0; fi
+    done
+    reasons+=('ダブルタップが効かない')
+    return 1
+}
+swap_round() {
+    local side=$1 label=$2
+    double_tap "$label" || return 1
+    adb logcat -d -v time GT8D:D '*:S' > "$active/$label-logcat.txt" || return 1
+    grep -Fq "[SetRunner] swapSaved id=scenario-left panel=$side" "$active/$label-logcat.txt" || reasons+=("swapSaved panel=$side がない")
+    grep -Fq "[Panel] placement=$side" "$active/$label-logcat.txt" || reasons+=("placement=$side がない")
+    adb exec-out run-as com.gt8d.launcher cat files/config.json > "$active/$label-config.json" || return 1
+    check_swap_config "$side" "$active/$label-config.json" || reasons+=("入れ替え後の設定が不一致: panel=$side")
+}
 judge() {
     local name=$1 right left id top
     parse_slots "$active/activities.txt" > "$active/slots.txt"
     case "$name" in
+        set_leftPanel_cold|set_leftPanel_warm|set_leftToRightPanel)
+            expect_log '\[SetRunner\] waitBoth ready'
+            no_safety; split_shown
+            if [[ $name == set_leftToRightPanel ]]; then
+                expect_log 'openSplit left=com\.google\.android\.youtube right=com\.gt8d\.launcher\.panel([[:space:]]|$)'
+                expect_log '\[Panel\] placement=Right'
+                left_is com.google.android.youtube; right_is com.gt8d.launcher.panel
+            else
+                expect_log 'openSplit left=com\.gt8d\.launcher\.panel right=com\.google\.android\.youtube([[:space:]]|$)'
+                expect_log '\[Panel\] placement=Left'
+                left_is com.gt8d.launcher.panel; right_is com.google.android.youtube
+            fi
+            ;;
+        leftPanel_launchApp)
+            split_shown; left_is com.gt8d.launcher.panel; right_is com.google.android.apps.maps
+            expect_log '\[SetRunner\] panelLaunched pkg=com\.google\.android\.apps\.maps([[:space:]]|$)'
+            ;;
+        leftPanel_dividerSwap) ;; # 往復それぞれのログと設定は操作直後に検証する。
+        leftPanel_link|leftPanel_link_twice)
+            if [[ $name == leftPanel_link ]]; then
+                expect_log '\[Link\] front=AppPanel\(app=com\.google\.android\.youtube, panelSide=Left\)'
+            else
+                expect_log '\[Link\] front=AppBrowser\(app=com\.google\.android\.youtube, browserSide=Left\)'
+            fi
+            expect_log 'route=SplitWithBrowser\(app=com\.google\.android\.youtube, browserSide=Left\)'
+            expect_log '\[SetRunner\] waitBoth ready'
+            no_safety; split_shown; left_is "$browser"; right_is com.google.android.youtube
+            view_sent; view_after_ready
+            ;;
         set_panelCard_switch)
             expect_log '\[DebugPanel\] view=Sets saved'
             expect_log '\[DebugPanel\] open index=2'
@@ -230,8 +351,8 @@ judge() {
             [[ $right == com.apple.android.music ]] || reasons+=("openSplit の右が Apple Music でない: ${right:-取得できない}")
             ;;
         link_appPanelFront)
-            expect_log '\[Link\] front=AppPanel\(left=com\.google\.android\.youtube\)'
-            expect_log 'route=SplitWithBrowser\(left=com\.google\.android\.youtube\)'
+            expect_log '\[Link\] front=AppPanel\(app=com\.google\.android\.youtube, panelSide=Right\)'
+            expect_log 'route=SplitWithBrowser\(app=com\.google\.android\.youtube, browserSide=Right\)'
             expect_log '\[SetRunner\] waitBoth ready'
             no_safety
             split_shown
@@ -275,7 +396,7 @@ judge() {
             else
                 expect_log '\[Link\] front=Fullscreen\(pkg=com\.openai\.chatgpt\)'
             fi
-            expect_log 'route=SplitWithBrowser\(left=com\.openai\.chatgpt\)'
+            expect_log 'route=SplitWithBrowser\(app=com\.openai\.chatgpt, browserSide=Right\)'
             expect_log '\[SetRunner\] waitBoth ready'
             no_safety
             split_shown
@@ -287,8 +408,28 @@ judge() {
     esac
 }
 prepare_and_run() {
-    local name=$1
+    local name=$1 attempt
     case "$name" in
+        set_leftPanel_cold)
+            adb logcat -c || return 1
+            panel --es addLeftPanelSet com.google.android.youtube || return 1
+            left_index=''
+            for attempt in 1 2 3 4 5; do
+                adb logcat -d -v time GT8D:D '*:S' > "$active/add-set-logcat.txt" || return 1
+                left_index=$(sed -n 's/.*\[DebugPanel\] addLeftPanelSet index=\([0-9]*\).*/\1/p' "$active/add-set-logcat.txt" | tail -n 1)
+                [[ $left_index =~ ^[1-9][0-9]*$ ]] && break
+                sleep 1
+            done
+            [[ $left_index =~ ^[1-9][0-9]*$ ]] || return 1
+            reset cold || return 1
+            ;;
+        set_leftPanel_warm)
+            adb shell input keyevent KEYCODE_HOME || return 1
+            adb logcat -c && adb logcat -b events -c || return 1
+            ;;
+        leftPanel_launchApp|leftPanel_dividerSwap|leftPanel_link|leftPanel_link_twice|set_leftToRightPanel)
+            adb logcat -c && adb logcat -b events -c || return 1
+            ;;
         link_cold_noTasks) reset cold || return 1 ;;
         set_panelCard_switch) adb logcat -c && adb logcat -b events -c || return 1 ;;
         link_appPanelFront)
@@ -322,6 +463,14 @@ prepare_and_run() {
             ;;
     esac
     case "$name" in
+        set_leftPanel_cold|set_leftPanel_warm) open_left || return 1 ;;
+        leftPanel_launchApp) panel --es launch com.google.android.apps.maps && sleep 5 || return 1 ;;
+        leftPanel_dividerSwap)
+            swap_round Right swap-right || return 1
+            swap_round Left swap-left || return 1
+            ;;
+        leftPanel_link|leftPanel_link_twice) link com.google.android.youtube && sleep 10 || return 1 ;;
+        set_leftToRightPanel) panel --ei open 1 && sleep 10 || return 1 ;;
         set_panelCard_switch)
             adb shell am broadcast -n com.gt8d.launcher/.debug.DebugPanelReceiver -a com.gt8d.launcher.debug.PANEL --es view sets || return 1
             sleep 3
@@ -345,7 +494,16 @@ run() {
         link_browserTaskPresent) prerequisite=link_cold_noTasks ;;
         set_panelCard_switch) prerequisite=set_strip_coldPanel ;;
         link_appPanelFront) prerequisite=set_panelCard_switch ;;
+        set_leftPanel_warm) prerequisite=set_leftPanel_cold ;;
+        leftPanel_launchApp|leftPanel_dividerSwap|leftPanel_link|set_leftToRightPanel) prerequisite=set_leftPanel_warm ;;
+        leftPanel_link_twice) prerequisite=leftPanel_link ;;
     esac
+    # 左パネルの前提は状態を変更する場面の後にも開き直す。--only も同じ経路。
+    if [[ $name == set_leftPanel_warm || $name == leftPanel_* || $name == set_leftToRightPanel ]]; then
+        if [[ -n $prerequisite ]] && [[ $last_name != "$prerequisite" || $last_suffix != "$version" || $last_pass != 1 ]]; then
+            run "$prerequisite" "@prerequisite$suffix" "$version"
+        fi
+    fi
     if [[ -n $prerequisite ]] && [[ $last_name != "$prerequisite" || $last_suffix != "$version" || $last_pass != 1 ]]; then
         row "$name$suffix" SKIP "前提の $prerequisite が不合格"
         failed=1
@@ -365,12 +523,18 @@ run() {
     else
         last_pass=1
         case "$name" in
+            set_leftPanel_cold|set_leftPanel_warm) row "$name$suffix" PASS 'openSplit 左 panel、右 YouTube、waitBoth ready、Safety なし、左最前面 PanelActivity、右最前面 YouTube、placement=Left' ;;
+            leftPanel_launchApp) row "$name$suffix" PASS '左 PanelActivity、右最前面 Maps、panelLaunched pkg=com.google.android.apps.maps' ;;
+            leftPanel_dividerSwap) row "$name$suffix" PASS '往復の onDoubleTappedDivider、swapSaved、placement、設定の左右と比率が一致' ;;
+            leftPanel_link) row "$name$suffix" PASS 'front=AppPanel(app=com.google.android.youtube, panelSide=Left)、route=SplitWithBrowser(app=com.google.android.youtube, browserSide=Left)、左ブラウザ、右 YouTube、VIEW は分割成立後' ;;
+            leftPanel_link_twice) row "$name$suffix" PASS 'front=AppBrowser(app=com.google.android.youtube, browserSide=Left)、左ブラウザ、右 YouTube、VIEW は分割成立後' ;;
+            set_leftToRightPanel) row "$name$suffix" PASS 'openSplit 左 YouTube、右 panel、waitBoth ready、Safety なし、placement=Right、右最前面 PanelActivity' ;;
             set_panelCard_switch) row "$name$suffix" PASS 'open index=2、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Apple Music、openSplit の左右も一致' ;;
-            link_appPanelFront) row "$name$suffix" PASS 'front=AppPanel(left=com.google.android.youtube)、route=SplitWithBrowser(left=com.google.android.youtube)、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Chrome、VIEW は分割成立後、ホーム affinity のタスク増加なし' ;;
+            link_appPanelFront) row "$name$suffix" PASS 'front=AppPanel(app=com.google.android.youtube, panelSide=Right)、route=SplitWithBrowser(app=com.google.android.youtube, browserSide=Right)、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Chrome、VIEW は分割成立後、ホーム affinity のタスク増加なし' ;;
             link_fromYlHome) row "$name$suffix" PASS 'front=Home、route=FullscreenBrowser、ブラウザへの VIEW あり、分割枠なし、最前面 Chrome' ;;
             set_strip_coldPanel) row "$name$suffix" PASS 'next base=0 -> 1、waitBoth ready、openSplit の左 YouTube、右 com.gt8d.launcher.panel、右最前面 PanelActivity、Safety なし' ;;
-            link_browserTaskPresent) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt) または AppApp(left=com.openai.chatgpt, …)、route=SplitWithBrowser(left=com.openai.chatgpt)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
-            *) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt)、route=SplitWithBrowser(left=com.openai.chatgpt)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
+            link_browserTaskPresent) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt) または AppApp(left=com.openai.chatgpt, …)、route=SplitWithBrowser(app=com.openai.chatgpt, browserSide=Right)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
+            *) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt)、route=SplitWithBrowser(app=com.openai.chatgpt, browserSide=Right)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
         esac
     fi
     if [[ $name == set_panelCard_switch ]]; then
@@ -408,7 +572,7 @@ for name in "${names[@]}"; do
 done
 if ((with_home)); then
     switch_home com.gt8d.launcher || { row setup FAIL 'YLuncher ホームへの切り替えに失敗'; exit 1; }
-    for name in link_cold_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel set_panelCard_switch link_appPanelFront; do
+    for name in link_cold_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel set_panelCard_switch link_appPanelFront "${left_names[@]}"; do
         [[ -z $only || $only == "$name" ]] || continue
         if [[ -n $only ]]; then
             case "$name" in
