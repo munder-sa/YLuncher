@@ -1,0 +1,8 @@
+write app/src/debug/java/com/gt8d/launcher/debug/DebugPanelReceiver.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write scripts/device-scenarios.sh
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+command bash -n scripts/device-scenarios.sh
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.*'
+command /home/munde/tools/gradle-run.sh assembleDebug
