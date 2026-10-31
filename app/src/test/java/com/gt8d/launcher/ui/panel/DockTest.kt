@@ -40,6 +40,17 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class DockTest {
 
+    @Test fun dock_setAdd_descriptionAndCallback() {
+        var calls = 0
+        rule.setContent {
+            LauncherTheme {
+                Dock(DockStatus(true, null), emptyList(), false, {}, { calls++ }, {}, {}, {}, {})
+            }
+        }
+        rule.onNodeWithTag("dock_split").assertContentDescriptionEquals("セットを追加").performClick()
+        assertEquals(1, calls)
+    }
+
     @get:Rule(order = 0)
     val registerActivityRule = object : ExternalResource() {
         override fun before() {
