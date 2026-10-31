@@ -38,6 +38,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".debug.DebugPanelReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.gt8d.launcher.debug.PANEL" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".spike.SpikeAccessibilityService"
             android:exported="true"

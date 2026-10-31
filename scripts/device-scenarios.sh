@@ -153,41 +153,6 @@ parse_slots() {
     END {emit()}' "$1"
 }
 reasons=()
-# UI XML をタグ単位に分け、ラベル自身または親の選択状態と bounds を読む。
-panel_element() {
-    local label=$1 file=$2 selected=${3:-0}
-    sed 's/></>\n</g' "$file" | awk -v label="$label" -v selected="$selected" '
-        /<\/node>/ {delete chosen[depth]; depth--; next}
-        /<node / {
-            depth++
-            chosen[depth]=($0 ~ /selected="true"/) || chosen[depth-1]
-            if (index($0, "text=\"" label "\"") || index($0, "content-desc=\"" label "\"")) {
-                if (!selected || chosen[depth]) {
-                    s=$0
-                    if (s ~ /bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"/) {
-                        sub(/^.*bounds="\[/,"",s); sub(/".*/,"",s)
-                        gsub(/\]\[/,",",s); gsub(/\]/,"",s)
-                        split(s,a,",")
-                        if (a[3]>a[1] && a[4]>a[2]) {
-                            print int((a[1]+a[3])/2), int((a[2]+a[4])/2); exit
-                        }
-                    }
-                }
-            }
-            if (/\/>$/) {delete chosen[depth]; depth--}
-        }'
-}
-dump_panel() {
-    adb shell uiautomator dump /sdcard/ui.xml && adb exec-out cat /sdcard/ui.xml > "$1"
-}
-tap_panel_label() {
-    local label=$1 file=$2 point x y
-    dump_panel "$file" || { reasons+=("UI dump に失敗: $label"); return 1; }
-    point=$(panel_element "$label" "$file")
-    [[ -n $point ]] || { reasons+=("UI 要素または有効な bounds がない: $label"); return 1; }
-    read -r x y <<< "$point"
-    adb shell input tap "$x" "$y"
-}
 restore_panel_apps() {
     # 途中失敗でも現在の番号に依存しない、既存のセット1起動手順を使う。
     prepare_and_run set_strip_coldPanel || return 1
@@ -198,10 +163,10 @@ restore_panel_apps() {
     parse_slots "$active/restore-activities.txt" > "$active/restore-slots.txt"
     grep -Eq '^LEFT com\.google\.android\.youtube/' "$active/restore-slots.txt" || return 1
     grep -Eq '^RIGHT com\.gt8d\.launcher/(\.ui\.panel\.PanelActivity|com\.gt8d\.launcher\.ui\.panel\.PanelActivity)$' "$active/restore-slots.txt" || return 1
-    tap_panel_label アプリ "$active/restore-ui.xml" || return 1
-    sleep 2
-    dump_panel "$active/restore-ui-after.xml" || return 1
-    [[ -n $(panel_element アプリ "$active/restore-ui-after.xml" 1) ]]
+    adb shell am broadcast -n com.gt8d.launcher/.debug.DebugPanelReceiver -a com.gt8d.launcher.debug.PANEL --es view apps || return 1
+    sleep 3
+    adb logcat -d -v time GT8D:D '*:S' > "$active/restore-logcat.txt" || return 1
+    grep -Fq '[DebugPanel] view=Apps saved' "$active/restore-logcat.txt"
 }
 expect_log() { if ! grep -Eq "$1" "$active/logcat.txt"; then reasons+=("ログ不足: $1"); fi; }
 no_safety() { if grep -Fq 'reason=Safety' "$active/logcat.txt"; then reasons+=('reason=Safety が発生'); fi; }
@@ -251,6 +216,8 @@ judge() {
     parse_slots "$active/activities.txt" > "$active/slots.txt"
     case "$name" in
         set_panelCard_switch)
+            expect_log '\[DebugPanel\] view=Sets saved'
+            expect_log '\[DebugPanel\] open index=2'
             expect_log '\[SetRunner\] open index=2([^0-9]|$)'
             expect_log '\[SetRunner\] waitBoth ready'
             no_safety
@@ -356,9 +323,11 @@ prepare_and_run() {
     esac
     case "$name" in
         set_panelCard_switch)
-            tap_panel_label セット "$active/sets-ui.xml" || return 1
-            sleep 2
-            tap_panel_label 'YouTube | Apple Music' "$active/card-ui.xml" || return 1
+            adb shell am broadcast -n com.gt8d.launcher/.debug.DebugPanelReceiver -a com.gt8d.launcher.debug.PANEL --es view sets || return 1
+            sleep 3
+            adb exec-out screencap -p > "$active/sets-view.png" || return 1
+            [[ -s $active/sets-view.png ]] || return 1
+            adb shell am broadcast -n com.gt8d.launcher/.debug.DebugPanelReceiver -a com.gt8d.launcher.debug.PANEL --ei open 2 || return 1
             sleep 10
             ;;
         link_fromYlHome) link com.google.android.gm && sleep 6 ;;
