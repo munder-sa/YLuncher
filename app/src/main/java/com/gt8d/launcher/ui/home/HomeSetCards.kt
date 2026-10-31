@@ -79,7 +79,9 @@ fun HomeSetCards(
                                         SetBlock(left, Modifier.weight(ratio[0]).fillMaxHeight())
                                         SetBlock(right, Modifier.weight(ratio[1]).fillMaxHeight())
                                     }
-                                    OneLineText("${left.label} | ${right?.label ?: "パネル"}")
+                                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                        OneLineText("${left.label} | ${right?.label ?: "パネル"}")
+                                    }
                                 }
                             }
                         }
@@ -94,11 +96,10 @@ fun HomeSetCards(
 @Composable
 private fun SetBlock(app: AppInfo?, modifier: Modifier) {
     val shape = RoundedCornerShape(12.dp)
-    Box(modifier.clip(shape).background(Palette.Background0)
-        .then(if (app == null) Modifier.border(2.dp, Palette.PanelAccent, shape) else Modifier),
+    Box(modifier.clip(shape).background(Palette.Background0),
         contentAlignment = Alignment.Center) {
         if (app == null) {
-            OneLineText("パネル", color = Palette.PanelAccent)
+            PanelIcon(Modifier.size(56.dp))
         } else {
             val description = app.label + if (app.installed) "" else "(アプリが見つかりません)"
             Box(Modifier.size(56.dp).semantics { contentDescription = description }, contentAlignment = Alignment.Center) {

@@ -5,8 +5,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.*
 import com.gt8d.launcher.ui.panel.AppInfo
@@ -28,11 +30,12 @@ class HomeSetCardsTest {
         ScreenSet("s$it", Slot.App("left"), if (it == 1) Slot.Panel else Slot.App("right"), SplitRatio.R6_4)
     }
     private fun host(width: Int = 700, height: Int = 800, count: Int = 1,
-                     current: Int = 0, onOpen: (Int) -> Unit = {}, onAdd: () -> Unit = {}) {
+                     current: Int = 0, onOpen: (Int) -> Unit = {}, onAdd: () -> Unit = {},
+                     leftLabel: String = "左アプリ") {
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
             Box(Modifier.size(width.dp, height.dp).testTag("area")) {
-                HomeSetCards(sets(count), { AppInfo(it, if (it == "left") "左アプリ" else "右アプリ", null, true) },
+                HomeSetCards(sets(count), { AppInfo(it, if (it == "left") leftLabel else "右アプリ", null, true) },
                     current, onOpen, onAdd, Modifier.fillMaxSize())
             }
         } }
@@ -44,6 +47,36 @@ class HomeSetCardsTest {
         rule.onNodeWithText("左アプリ | パネル").assertExists()
         rule.onNodeWithText("左アプリ | 右アプリ").assertExists()
         rule.onAllNodesWithContentDescription("左アプリ", useUnmergedTree = true).assertCountEquals(2)
+    }
+    @Test fun panel_shows56dpIcon_withoutStandaloneText() {
+        host()
+        rule.onNodeWithContentDescription("パネル", useUnmergedTree = true)
+            .assertExists().assertWidthIsEqualTo(56.dp).assertHeightIsEqualTo(56.dp)
+        rule.onNodeWithText("パネル", useUnmergedTree = true).assertDoesNotExist()
+    }
+    @Test fun shortName_isCenteredInCard() {
+        host()
+        val card = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
+        val name = rule.onNodeWithText("左アプリ | パネル", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertEquals(card.center.x, name.center.x, with(rule.density) { 1.dp.toPx() })
+    }
+    @Test fun longName_isOneLineAndFitsInCard() {
+        val label = "長".repeat(40)
+        host(leftLabel = label)
+        val card = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
+        val name = rule.onNodeWithText("$label | パネル", useUnmergedTree = true)
+        val layouts = mutableListOf<TextLayoutResult>()
+        name.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1, layouts.size)
+        assertEquals(1, layouts.single().lineCount)
+        val bounds = name.fetchSemanticsNode().boundsInRoot
+        val innerWidth = card.width - with(rule.density) { 32.dp.toPx() }
+        assertTrue(bounds.width <= innerWidth)
+        assertTrue(bounds.left >= card.left)
+        assertTrue(bounds.right <= card.right)
+        assertTrue(bounds.top >= card.top)
+        assertTrue(bounds.bottom <= card.bottom)
     }
     @Test fun currentSet_isSelected_withAccentBorder() {
         host(count = 2, current = 2)

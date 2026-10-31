@@ -1,4 +1,4 @@
-create app/src/main/java/com/gt8d/launcher/ui/home/PanelIcon.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/PanelIcon.kt
 write app/src/main/java/com/gt8d/launcher/ui/home/HomeSetCards.kt
 write app/src/test/java/com/gt8d/launcher/ui/home/HomeSetCardsTest.kt
 command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.ui.layout.*'
