@@ -1,0 +1,2 @@
+create build/mock/panel-icon-mock.html
+command "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=3000 --window-size=1200,700 --screenshot=F:\YLuncher\build\mock\panel-icon-mock.png F:\YLuncher\build\mock\panel-icon-mock.html
