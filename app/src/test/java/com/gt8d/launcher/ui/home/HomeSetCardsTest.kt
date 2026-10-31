@@ -31,11 +31,11 @@ class HomeSetCardsTest {
     }
     private fun host(width: Int = 700, height: Int = 800, count: Int = 1,
                      current: Int = 0, onOpen: (Int) -> Unit = {}, onAdd: () -> Unit = {},
-                     leftLabel: String = "左アプリ") {
+                     leftLabel: String = "左アプリ", screenSets: List<ScreenSet> = sets(count)) {
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
             Box(Modifier.size(width.dp, height.dp).testTag("area")) {
-                HomeSetCards(sets(count), { AppInfo(it, if (it == "left") leftLabel else "右アプリ", null, true) },
+                HomeSetCards(screenSets, { AppInfo(it, if (it == "left") leftLabel else "右アプリ", null, true) },
                     current, onOpen, onAdd, Modifier.fillMaxSize())
             }
         } }
@@ -53,6 +53,33 @@ class HomeSetCardsTest {
         rule.onNodeWithContentDescription("パネル", useUnmergedTree = true)
             .assertExists().assertWidthIsEqualTo(56.dp).assertHeightIsEqualTo(56.dp)
         rule.onNodeWithText("パネル", useUnmergedTree = true).assertDoesNotExist()
+    }
+    @Test fun leftPanelSet_showsPanelIconOnLeft() {
+        host(screenSets = listOf(ScreenSet("s1", Slot.Panel, Slot.App("right"), SplitRatio.R4_6)))
+        val card = rule.onNodeWithTag("home_set_s1").fetchSemanticsNode().boundsInRoot
+        val panel = rule.onNodeWithContentDescription("パネル", useUnmergedTree = true)
+            .assertWidthIsEqualTo(56.dp).assertHeightIsEqualTo(56.dp)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(panel.center.x < card.center.x)
+        rule.onNodeWithText("パネル | 右アプリ").assertExists()
+    }
+    @Test fun panelIcon_mirroredOnlyOnLeft() {
+        host(screenSets = listOf(
+            ScreenSet("s1", Slot.Panel, Slot.App("right"), SplitRatio.R4_6),
+            ScreenSet("s2", Slot.App("left"), Slot.Panel, SplitRatio.R6_4),
+        ))
+        rule.onNode(hasContentDescription("パネル") and hasAnyAncestor(hasTestTag("home_set_s1")),
+            useUnmergedTree = true).assert(SemanticsMatcher.expectValue(PanelIconMirrored, true))
+        rule.onNode(hasContentDescription("パネル") and hasAnyAncestor(hasTestTag("home_set_s2")),
+            useUnmergedTree = true).assert(SemanticsMatcher.expectValue(PanelIconMirrored, false))
+    }
+    @Test fun leftPanelSet_ratioWidths() {
+        host(screenSets = listOf(ScreenSet("s1", Slot.Panel, Slot.App("right"), SplitRatio.R4_6)))
+        val leftBlock = rule.onNodeWithTag("home_set_s1_left", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        val rightBlock = rule.onNodeWithTag("home_set_s1_right", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(leftBlock.width < rightBlock.width)
     }
     @Test fun shortName_isCenteredInCard() {
         host()

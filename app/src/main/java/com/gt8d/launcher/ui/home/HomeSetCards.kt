@@ -22,7 +22,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.ScreenSet
+import com.gt8d.launcher.config.Side
 import com.gt8d.launcher.config.Slot
+import com.gt8d.launcher.config.slotAt
 import com.gt8d.launcher.ui.layout.OneLineText
 import com.gt8d.launcher.ui.layout.PanelLayout
 import com.gt8d.launcher.ui.panel.AppInfo
@@ -65,8 +67,8 @@ fun HomeSetCards(
                                 }
                             } else {
                                 val set = sets[index]
-                                val left = (set.left as? Slot.App)?.let { appInfo(it.pkg) }
-                                val right = (set.right as? Slot.App)?.let { appInfo(it.pkg) }
+                                val left = (set.slotAt(Side.Left) as? Slot.App)?.let { appInfo(it.pkg) }
+                                val right = (set.slotAt(Side.Right) as? Slot.App)?.let { appInfo(it.pkg) }
                                 val highlight = currentIndex == index + 1
                                 Column(Modifier.weight(1f).height(cardHeight).clip(shape).background(Palette.Background1)
                                     .then(if (highlight) Modifier.border(4.dp, Palette.PanelAccent, shape) else Modifier)
@@ -76,8 +78,8 @@ fun HomeSetCards(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     val ratio = set.ratio.label.split(':').map { it.toFloat() }
                                     Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        SetBlock(left, Modifier.weight(ratio[0]).fillMaxHeight())
-                                        SetBlock(right, Modifier.weight(ratio[1]).fillMaxHeight())
+                                        SetBlock(left, Modifier.weight(ratio[0]).fillMaxHeight().testTag("home_set_${set.id}_left"), Side.Left)
+                                        SetBlock(right, Modifier.weight(ratio[1]).fillMaxHeight().testTag("home_set_${set.id}_right"), Side.Right)
                                     }
                                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                                         OneLineText("${left?.label ?: "パネル"} | ${right?.label ?: "パネル"}")
@@ -94,12 +96,12 @@ fun HomeSetCards(
 }
 
 @Composable
-private fun SetBlock(app: AppInfo?, modifier: Modifier) {
+private fun SetBlock(app: AppInfo?, modifier: Modifier, side: Side) {
     val shape = RoundedCornerShape(12.dp)
     Box(modifier.clip(shape).background(Palette.Background0),
         contentAlignment = Alignment.Center) {
         if (app == null) {
-            PanelIcon(Modifier.size(56.dp))
+            PanelIcon(Modifier.size(56.dp), mirrored = (side == Side.Left))
         } else {
             val description = app.label + if (app.installed) "" else "(アプリが見つかりません)"
             Box(Modifier.size(56.dp).semantics { contentDescription = description }, contentAlignment = Alignment.Center) {

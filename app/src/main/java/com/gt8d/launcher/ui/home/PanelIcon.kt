@@ -5,9 +5,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
+
+val PanelIconMirrored = SemanticsPropertyKey<Boolean>("PanelIconMirrored")
 
 val PanelIconVector: ImageVector = ImageVector.Builder(
     name = "PanelIcon",
@@ -59,6 +64,8 @@ val PanelIconVector: ImageVector = ImageVector.Builder(
 }.build()
 
 @Composable
-fun PanelIcon(modifier: Modifier = Modifier) {
-    Image(PanelIconVector, contentDescription = "パネル", modifier = modifier)
+fun PanelIcon(modifier: Modifier = Modifier, mirrored: Boolean = false) {
+    Image(PanelIconVector, contentDescription = "パネル", modifier = modifier
+        .then(if (mirrored) Modifier.graphicsLayer(scaleX = -1f) else Modifier)
+        .semantics { this[PanelIconMirrored] = mirrored })
 }
