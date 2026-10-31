@@ -229,10 +229,12 @@ judge() {
             [[ $top == "$browser/"* ]] || reasons+=("最前面が $browser でない: ${top:-取得できない}")
             ;;
         set_strip_coldPanel)
+            expect_log '\[SetRunner\] next base=0 -> 1'
             expect_log '\[SetRunner\] waitBoth ready'
             left=$(sed -n 's/.*openSplit left=\([^ ]*\) right=.*/\1/p' "$active/logcat.txt" | tail -n 1)
             [[ $left == com.google.android.youtube ]] || reasons+=("openSplit の左が com.google.android.youtube でない: ${left:-取得できない}")
             right=$(sed -n 's/.*openSplit left=[^ ]* right=\([^ ]*\).*/\1/p' "$active/logcat.txt" | tail -n 1)
+            [[ $right == com.gt8d.launcher.panel ]] || reasons+=("openSplit の右が com.gt8d.launcher.panel でない: ${right:-取得できない}")
             if [[ $right =~ ^[a-zA-Z0-9_.]+$ ]]; then
                 right_is "$right"
                 [[ $right != com.gt8d.launcher && $right != com.gt8d.launcher.panel ]] || no_safety
@@ -284,6 +286,8 @@ prepare_and_run() {
         set_strip_coldPanel)
             reset cold || return 1
             adb shell "run-as com.gt8d.launcher sh -c 'mkdir -p /data/data/com.gt8d.launcher/files && echo 0 > /data/data/com.gt8d.launcher/files/last_set_index.txt'" || return 1
+            adb shell am force-stop com.gt8d.launcher || return 1
+            adb shell am force-stop com.gt8d.launcher.panel || return 1
             home_activity && chatgpt || return 1
             ;;
     esac
@@ -324,7 +328,7 @@ run() {
         case "$name" in
             link_appPanelFront) row "$name$suffix" PASS 'front=AppPanel(left=com.google.android.youtube)、route=SplitWithBrowser(left=com.google.android.youtube)、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Chrome、VIEW は分割成立後、ホーム affinity のタスク増加なし' ;;
             link_fromYlHome) row "$name$suffix" PASS 'front=Home、route=FullscreenBrowser、ブラウザへの VIEW あり、分割枠なし、最前面 Chrome' ;;
-            set_strip_coldPanel) row "$name$suffix" PASS 'waitBoth ready、openSplit の左 YouTube、右パッケージと右最前面が一致（YLuncher なら PanelActivity、Safety なし）' ;;
+            set_strip_coldPanel) row "$name$suffix" PASS 'next base=0 -> 1、waitBoth ready、openSplit の左 YouTube、右 com.gt8d.launcher.panel、右最前面 PanelActivity、Safety なし' ;;
             link_browserTaskPresent) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt) または AppApp(left=com.openai.chatgpt, …)、route=SplitWithBrowser(left=com.openai.chatgpt)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
             *) row "$name$suffix" PASS 'front=Fullscreen(pkg=com.openai.chatgpt)、route=SplitWithBrowser(left=com.openai.chatgpt)、waitBoth ready、Safety なし、分割枠2つ、左 ChatGPT、右 Chrome、VIEW は分割成立後' ;;
         esac
