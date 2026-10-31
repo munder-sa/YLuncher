@@ -1,0 +1,12 @@
+write app/src/main/java/com/gt8d/launcher/config/Model.kt
+write app/src/main/java/com/gt8d/launcher/config/ConfigCodec.kt
+write app/src/main/java/com/gt8d/launcher/config/ConfigRepository.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/settings/SetsEdit.kt
+write app/src/main/java/com/gt8d/launcher/settings/SetsScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeSetCards.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigCodecTest.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigRepositoryTest.kt
+write app/src/test/java/com/gt8d/launcher/config/SplitRatioTest.kt
+create app/src/test/java/com/gt8d/launcher/config/ScreenSetSidesTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.config.*' --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.ui.home.*'
