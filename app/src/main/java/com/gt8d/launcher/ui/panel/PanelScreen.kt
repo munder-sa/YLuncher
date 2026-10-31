@@ -11,6 +11,12 @@ import com.gt8d.launcher.config.PanelView
 import com.gt8d.launcher.ui.home.HomeClockHeader
 import com.gt8d.launcher.ui.home.HomeMiniPlayer
 import com.gt8d.launcher.ui.home.HomeSetCards
+import com.gt8d.launcher.ui.home.HomeHintStore
+import androidx.compose.material3.Text
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
+import com.gt8d.launcher.ui.theme.Dims
+import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.layout.PanelLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -187,6 +193,10 @@ internal fun HomeWideContent(
     onOpen: (Int) -> Unit,
     onNewSet: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val hintStore = remember(context) { HomeHintStore(context) }
+    val showHint = remember { hintStore.shouldShow() }
+    LaunchedEffect(Unit) { hintStore.recordShown() }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val playerWidth = PanelLayout.homePlayerWidthDp(maxWidth.value)
         Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -197,6 +207,16 @@ internal fun HomeWideContent(
                         PermissionBanner(state.missingPermissions, actions.onOpenPermissions)
                     }
                     HomeClockHeader(clockHeight)
+                    if (showHint) {
+                        Text(
+                            "端からスワイプでセットを切り替え・長押しでホーム",
+                            modifier = Modifier.fillMaxWidth().testTag("home_hint"),
+                            fontSize = Dims.BodyText,
+                            color = Palette.Muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     HomeSetCards(config.screenSets, appInfo, currentIndex, onOpen, onNewSet,
                         Modifier.fillMaxWidth().weight(1f))
                 }
