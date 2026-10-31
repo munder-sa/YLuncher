@@ -204,6 +204,7 @@ object MediaWatcher {
             speed = speed,
             playing = playing,
             hasFavoriteAction = hasFavoriteAction,
+            paused = state?.state == PlaybackState.STATE_PAUSED,
         )
     }
 

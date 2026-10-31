@@ -1,6 +1,7 @@
 package com.gt8d.launcher.ui.home
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -31,6 +32,7 @@ import com.gt8d.launcher.ui.panel.AppInfo
 import com.gt8d.launcher.ui.panel.MediaAction
 import com.gt8d.launcher.ui.panel.SeekBar
 import com.gt8d.launcher.ui.theme.Palette
+import com.gt8d.launcher.ui.theme.Dims
 
 @Composable
 fun HomeMiniPlayer(
@@ -47,14 +49,26 @@ fun HomeMiniPlayer(
         BoxWithConstraints(Modifier.fillMaxSize().padding(start = 40.dp, top = 40.dp, end = 40.dp, bottom = 32.dp)) {
             if (now == null) {
                 if (idleApp != null) {
-                    Column(Modifier.fillMaxWidth().align(Alignment.Center)
-                        .then(if (idleApp.installed) Modifier.clickable { onLaunch(idleApp.pkg) } else Modifier)
-                        .testTag("player_idle_app"),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        AppImage(idleApp, Modifier.size(160.dp))
-                        OneLineText(idleApp.label)
-                        OneLineText(if (idleApp.installed) "タップで開く" else "アプリが見つかりません", color = Palette.Muted)
+                    Column(Modifier.fillMaxWidth().align(Alignment.TopStart).testTag("player_idle_app")) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AppImage(idleApp, Modifier.size(72.dp).testTag("player_idle_icon"))
+                            Spacer(Modifier.width(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                OneLineText(idleApp.label, Modifier.testTag("player_idle_name"))
+                                OneLineText(if (idleApp.installed) "再生情報はありません" else "アプリが見つかりません",
+                                    Modifier.testTag("player_idle_status"), color = Palette.Muted)
+                            }
+                        }
+                        if (idleApp.installed) {
+                            Spacer(Modifier.height(24.dp))
+                            OutlinedButton(onClick = { onLaunch(idleApp.pkg) },
+                                modifier = Modifier.sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                                    .testTag("player_idle_open"),
+                                shape = RoundedCornerShape(36.dp), border = BorderStroke(2.dp, Color.White),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
+                                OneLineText("${idleApp.label}を開く", Modifier.testTag("player_idle_open_text"))
+                            }
+                        }
                     }
                 }
             } else {

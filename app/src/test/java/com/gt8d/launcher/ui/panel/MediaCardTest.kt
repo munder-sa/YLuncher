@@ -9,6 +9,11 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.SemanticsMatcher
@@ -38,6 +43,35 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MediaCardTest {
+    @Test fun idle_innerWidthBoundary_andMissingApp() {
+        var innerWidth by mutableStateOf(299)
+        var installed by mutableStateOf(true)
+        val launches = mutableListOf<String>()
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.width((innerWidth + 16).dp)) {
+                    MediaCard(null, AppInfo("idle", "音楽アプリ", null, installed), 0L,
+                        {}, {}, { launches.add(it) })
+                }
+            }
+        }
+        rule.onNodeWithTag("idle_name").assertDoesNotExist()
+        rule.onNodeWithTag("idle_status").assertDoesNotExist()
+        rule.onNodeWithTag("idle_open").assertIsDisplayed().assertHeightIsAtLeast(72.dp).performClick()
+        assertEquals(listOf("idle"), launches)
+        rule.onNodeWithTag("idle_app").assertHasNoClickAction()
+        rule.runOnIdle { innerWidth = 300 }
+        rule.onNodeWithTag("idle_name").assertIsDisplayed()
+        rule.onNodeWithText("再生情報はありません").assertIsDisplayed()
+        rule.onNodeWithTag("idle_open").assertIsDisplayed()
+        rule.runOnIdle { installed = false }
+        rule.onNodeWithTag("idle_open").assertDoesNotExist()
+        rule.onNodeWithText("アプリが見つかりません").assertIsDisplayed()
+        rule.runOnIdle { innerWidth = 299 }
+        rule.onNodeWithText("アプリが見つかりません").assertIsDisplayed()
+        rule.onNodeWithTag("idle_open").assertDoesNotExist()
+        rule.onNodeWithTag("idle_app").assertHasNoClickAction()
+    }
     @Test fun favorite_isRightOfMetadata_andControlsStayInOneRow() {
         var favorite by mutableStateOf(true)
         var playing by mutableStateOf(true)
@@ -194,7 +228,10 @@ class MediaCardTest {
         }
 
         rule.onNodeWithText("Apple Music").assertIsDisplayed()
-        rule.onNodeWithTag("idle_app").performClick()
+        rule.onNodeWithText("再生情報はありません").assertIsDisplayed()
+        rule.onNodeWithTag("idle_app").assertHasNoClickAction()
+        rule.onNodeWithTag("idle_open").assertHeightIsAtLeast(72.dp).assertWidthIsAtLeast(72.dp)
+            .assert(hasContentDescription("Apple Musicを開く")).performClick()
         assertEquals("com.apple.android.music", launchedPkg)
     }
 

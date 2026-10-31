@@ -1,6 +1,9 @@
 package com.gt8d.launcher.ui.panel
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -92,13 +95,9 @@ private fun IdleMediaContent(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
+                    .fillMaxWidth()
                     .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
                     .semantics { contentDescription = idleApp.label }
-                    .clickable {
-                        if (idleApp.installed) {
-                            onLaunch(idleApp.pkg)
-                        }
-                    }
                     .padding(horizontal = 12.dp, vertical = 8.dp)
                     .testTag("idle_app"),
             ) {
@@ -106,14 +105,14 @@ private fun IdleMediaContent(
                     Image(
                         bitmap = idleApp.icon,
                         contentDescription = idleApp.label,
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(72.dp).testTag("idle_icon"),
                     )
                 } else {
                     val initial = idleApp.label.firstOrNull()?.toString() ?: "?"
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(72.dp).testTag("idle_icon")
                             .semantics { contentDescription = idleApp.label }
                             .clip(CircleShape)
                             .background(Palette.Background1),
@@ -127,10 +126,23 @@ private fun IdleMediaContent(
                 }
                 if (showName || !idleApp.installed) {
                     Spacer(modifier = Modifier.width(12.dp))
-                    OneLineText(
-                        text = if (idleApp.installed) idleApp.label else "アプリが見つかりません",
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
+                    Column(Modifier.weight(1f)) {
+                        OneLineText(idleApp.label, Modifier.testTag("idle_name"))
+                        OneLineText(if (idleApp.installed) "再生情報はありません" else "アプリが見つかりません",
+                            Modifier.testTag("idle_status"), color = Palette.Muted)
+                    }
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                if (idleApp.installed) {
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { onLaunch(idleApp.pkg) },
+                        modifier = Modifier.sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                            .semantics { contentDescription = "${idleApp.label}を開く" }.testTag("idle_open"),
+                        border = BorderStroke(2.dp, Color.White),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
+                        OneLineText("開く")
+                    }
                 }
             }
         }

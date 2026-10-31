@@ -166,7 +166,7 @@ class LayoutMatrixTest(
                 if (target.fetchSemanticsNode().config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { "" } in listOf("panel_view_apps", "panel_view_sets")) target.assertIsDisplayed()
                 else if (home && width >= 840 && target.fetchSemanticsNode().config
                         .getOrElse(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { "" } in
-                        listOf("player_idle_app", "permission_banner")) target.assertIsDisplayed()
+                        listOf("player_idle_open", "permission_banner")) target.assertIsDisplayed()
                 else target.performScrollTo().assertIsDisplayed()
                 val node = target.fetchSemanticsNode()
                 assertTrue("click width ${node.size}", node.size.width >= 72 * pixelsPerDp)
@@ -174,6 +174,26 @@ class LayoutMatrixTest(
                 assertTrue(node.boundsInRoot.left >= root.left && node.boundsInRoot.right <= root.right)
             }
             val oneLine = SemanticsMatcher.expectValue(OneLineKey, true)
+            if (!playing && ((home && width >= 840) || view == PanelView.Apps)) {
+                val wide = home && width >= 840
+                val buttonTag = if (wide) "player_idle_open" else "idle_open"
+                if (!wide) rule.onNodeWithTag(buttonTag).performScrollTo()
+                val button = rule.onNodeWithTag(buttonTag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                assertTrue(button.left >= root.left && button.right <= root.right &&
+                    button.top >= root.top && button.bottom <= root.bottom)
+                val parts = (if (wide) listOf("player_idle_icon", "player_idle_name", "player_idle_status", buttonTag)
+                    else listOf("idle_icon", "idle_name", "idle_status", buttonTag)).flatMap { tag ->
+                    rule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+                }
+                for (i in parts.indices) for (j in i + 1 until parts.size) {
+                    val a = parts[i]; val b = parts[j]
+                    assertFalse("idle parts overlap: $a / $b", a.left < b.right && b.left < a.right &&
+                        a.top < b.bottom && b.top < a.bottom)
+                }
+                for (part in parts) assertTrue(part.left >= root.left && part.right <= root.right &&
+                    part.top >= root.top && part.bottom <= root.bottom)
+                checkDisjoint()
+            }
             val texts = rule.onAllNodes(oneLine, useUnmergedTree = true)
             assertTrue(texts.fetchSemanticsNodes().isNotEmpty())
             for (i in texts.fetchSemanticsNodes().indices) assertEquals(1, texts[i].textLayout().lineCount)
