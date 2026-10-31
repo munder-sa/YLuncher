@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.MAX_PANEL_APPS
 import com.gt8d.launcher.config.PanelView
 import com.gt8d.launcher.config.ScreenSet
-import com.gt8d.launcher.ui.home.HomeSetCards
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
@@ -120,16 +119,10 @@ fun PanelContent(
                         FitClock(clockText, clockHeight)
                         PanelViewSegment(state, actions)
                         if (state.view == PanelView.Sets) {
-                            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-                                val cardsHeight = (maxHeight - if (state.needsPermission) 80.dp else 0.dp)
-                                    .coerceAtLeast(136.dp)
-                                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (state.needsPermission) PermissionBanner(state.missingPermissions, actions.onOpenPermissions)
-                                    HomeSetCards(state.sets, state.setAppInfo, state.currentSetIndex,
-                                        actions.onOpenSet, actions.onNewSet,
-                                        Modifier.fillMaxWidth().height(cardsHeight))
-                                }
+                            PanelSetCards(state.sets, state.setAppInfo, state.currentSetIndex,
+                                actions.onOpenSet, actions.onNewSet,
+                                Modifier.fillMaxWidth().weight(1f)) {
+                                if (state.needsPermission) PermissionBanner(state.missingPermissions, actions.onOpenPermissions)
                             }
                         } else {
                             Column(

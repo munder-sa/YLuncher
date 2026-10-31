@@ -45,7 +45,7 @@ fun HomeMiniPlayer(
     onLaunch: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(modifier.testTag("home_player"), shape = RoundedCornerShape(32.dp), color = Palette.Panel) {
+    Surface(modifier.testTag("home_player"), shape = RoundedCornerShape(24.dp), color = Palette.Panel) {
         BoxWithConstraints(Modifier.fillMaxSize().padding(start = 40.dp, top = 40.dp, end = 40.dp, bottom = 32.dp)) {
             if (now == null) {
                 if (idleApp != null) {
@@ -120,7 +120,7 @@ fun HomeMiniPlayer(
                         Spacer(Modifier.height(gaps.beforeArt))
                         val artwork = now.artwork
                         val artModifier = Modifier.size(artSize).align(Alignment.CenterHorizontally)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .clickable(enabled = app.installed, onClickLabel = "${app.label}を開く") { onLaunch(now.pkg) }
                             .testTag("player_art")
                         if (artwork == null) Image(painterResource(R.drawable.artwork_placeholder), null, artModifier)

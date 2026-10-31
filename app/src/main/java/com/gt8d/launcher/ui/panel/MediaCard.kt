@@ -62,7 +62,7 @@ fun MediaCard(
 ) {
     Surface(
         color = Palette.Panel,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         modifier = Modifier.fillMaxWidth().testTag("media_card"),
     ) {
         if (now == null) {

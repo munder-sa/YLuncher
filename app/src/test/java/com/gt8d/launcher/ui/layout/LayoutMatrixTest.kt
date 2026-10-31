@@ -61,12 +61,12 @@ class LayoutMatrixTest(
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         WindowCompat.setDecorFitsSystemWindows(controller.get().window, false)
         val apps = (1..5).map { AppInfo("app$it", "長いアプリケーション名 $it", null, true) }
-        val state = PanelState(
+        var state by mutableStateOf(PanelState(
             if (playing) NowPlaying("music", "長い曲名のテスト", "長いアーティスト名", null, 180000L, true, true) else null,
             AppInfo("idle", "Apple Music", null, true), 10000L, apps, apps.take(4),
             DockStatus(true, true), true, true, view = view, sets = Defaults.build(emptySet()).screenSets,
             placement = if (leftPlacement) com.gt8d.launcher.split.PanelPlacement.Left else null,
-        )
+        ))
         val actions = PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
         var pixelsPerDp = 0f
         try {
@@ -106,10 +106,24 @@ class LayoutMatrixTest(
                 if (view == PanelView.Sets) {
                     rule.onNodeWithTag("media_card").assertDoesNotExist()
                     rule.onNodeWithTag("icon_grid").assertDoesNotExist()
-                    rule.onNodeWithTag("home_sets").assertExists()
-                    assertTrue(rule.onNodeWithTag("home_sets").fetchSemanticsNode().size.height >= 136 * pixelsPerDp)
-                    for (set in state.sets) rule.onNodeWithTag("home_set_${set.id}").performScrollTo().assertIsDisplayed()
-                    rule.onNodeWithTag("home_set_add").performScrollTo().assertIsDisplayed()
+                    rule.onNodeWithTag("panel_sets").assertExists()
+                    rule.onNodeWithTag("home_sets").assertDoesNotExist()
+                    val segment = rule.onNodeWithTag("panel_view_segment").fetchSemanticsNode().boundsInRoot
+                    val dockBounds = rule.onNodeWithTag("dock").fetchSemanticsNode().boundsInRoot
+                    val cardTags = state.sets.map { "panel_set_${it.id}" } + "panel_set_add"
+                    val viewportHeight = rule.onNodeWithTag("panel_sets").fetchSemanticsNode().boundsInRoot.height
+                    for (tag in cardTags) {
+                        val card = rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                        val expectedHeight = if (tag == "panel_set_add") 72 * pixelsPerDp
+                            else viewportHeight.coerceAtMost(104 * pixelsPerDp).coerceAtLeast(72 * pixelsPerDp)
+                        assertEquals(expectedHeight, card.height, 0.5f)
+                        assertTrue(card.left >= root.left && card.right <= root.right && card.top >= segment.bottom && card.bottom <= root.bottom)
+                        assertTrue(card.right <= dockBounds.left || card.left >= dockBounds.right)
+                        for (other in cardTags.filter { it != tag }) {
+                            val b = rule.onNodeWithTag(other).fetchSemanticsNode().boundsInRoot
+                            assertFalse(card.left < b.right && b.left < card.right && card.top < b.bottom && b.top < card.bottom)
+                        }
+                    }
                 }
             } else rule.onNodeWithTag("panel_view_segment").assertDoesNotExist()
             if (home) {
@@ -125,7 +139,7 @@ class LayoutMatrixTest(
             }
             val tags = if (home && width >= 840) listOf("clock", "home_sets", "home_player", "dock")
                 else if (view == PanelView.Apps) listOf("clock", "panel_view_segment", "media_card", "icon_grid", "dock")
-                else listOf("clock", "panel_view_segment", "home_sets", "dock")
+                else listOf("clock", "panel_view_segment", "panel_sets", "dock")
             fun checkDisjoint() {
                 val bounds = tags.map { rule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
                 for (i in bounds.indices) for (j in i + 1 until bounds.size) {
@@ -197,6 +211,26 @@ class LayoutMatrixTest(
             val texts = rule.onAllNodes(oneLine, useUnmergedTree = true)
             assertTrue(texts.fetchSemanticsNodes().isNotEmpty())
             for (i in texts.fetchSemanticsNodes().indices) assertEquals(1, texts[i].textLayout().lineCount)
+            if (view == PanelView.Sets && !(home && width >= 840)) {
+                val oneSet = state.sets.take(1)
+                for (sets in listOf(emptyList(), oneSet)) {
+                    rule.runOnIdle { state = state.copy(sets = sets); Snapshot.sendApplyNotifications() }
+                    val banner = rule.onNodeWithTag("permission_banner").performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                    val area = rule.onNodeWithTag("panel_sets").fetchSemanticsNode().boundsInRoot
+                    assertEquals(area.top, banner.top, 0f)
+                    val unscrolledFirst = rule.onNodeWithTag(if (sets.isEmpty()) "panel_set_add" else "panel_set_${sets.single().id}")
+                        .fetchSemanticsNode().boundsInRoot
+                    assertEquals(banner.bottom + 8 * pixelsPerDp, unscrolledFirst.top, 0.5f)
+                    val firstTag = if (sets.isEmpty()) "panel_set_add" else "panel_set_${sets.single().id}"
+                    val first = rule.onNodeWithTag(firstTag).performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                    assertTrue(first.left >= root.left && first.right <= root.right && first.top >= root.top && first.bottom <= root.bottom)
+                    val add = rule.onNodeWithTag("panel_set_add").performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                    assertTrue(add.left >= root.left && add.right <= root.right && add.top >= root.top && add.bottom <= root.bottom)
+                    if (sets.isEmpty()) rule.onNodeWithTag("panel_set_${oneSet.single().id}").assertDoesNotExist()
+                    else assertTrue(rule.onNodeWithTag(firstTag).fetchSemanticsNode().boundsInRoot.bottom <= add.top)
+                    checkDisjoint()
+                }
+            }
         } finally {
             controller.pause().stop().destroy()
         }
