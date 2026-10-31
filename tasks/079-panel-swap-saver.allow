@@ -1,0 +1,7 @@
+create app/src/main/java/com/gt8d/launcher/sets/PanelSwapSaver.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+create app/src/test/java/com/gt8d/launcher/sets/PanelSwapSaverTest.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.boot.*'
