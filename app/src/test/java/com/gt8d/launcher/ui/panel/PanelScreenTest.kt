@@ -50,6 +50,26 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun wideHome_appsAreBelowSetsAtBottomOfLeftColumn() {
+        val config = Defaults.build(emptySet()).copy(panelApps = listOf(pkg))
+        rule.setContent {
+            LauncherTheme { PanelScreen(false, homeWide = true, homeConfig = config, onLaunchApp = {}) }
+        }
+        val apps = rule.onNodeWithTag("home_apps").assertIsDisplayed().getBoundsInRoot()
+        val sets = rule.onNodeWithTag("home_sets").getBoundsInRoot()
+        val player = rule.onNodeWithTag("home_player").getBoundsInRoot()
+        assertTrue(apps.top >= sets.bottom)
+        assertEquals(sets.left, apps.left)
+        assertEquals(sets.right, apps.right)
+        assertEquals(player.bottom, apps.bottom)
+    }
+    @Test fun wideHome_emptyPanelAppsHasNoAppRow() {
+        rule.setContent {
+            LauncherTheme { PanelScreen(false, homeWide = true,
+                homeConfig = Defaults.build(emptySet()).copy(panelApps = emptyList()), onLaunchApp = {}) }
+        }
+        rule.onNodeWithTag("home_apps").assertDoesNotExist()
+    }
     // ホームの操作の案内はユーザーの判断で出さない(2026-10-31、シンプルに)。
     @Test fun panelScreen_wideHome_showsNoHint() {
         rule.setContent {

@@ -137,7 +137,7 @@ class LayoutMatrixTest(
                     rule.onNodeWithTag("icon_grid").assertDoesNotExist()
                 }
             }
-            val tags = if (home && width >= 840) listOf("clock", "home_sets", "home_player", "dock")
+            val tags = if (home && width >= 840) listOf("clock", "home_sets", "home_apps", "home_player", "dock")
                 else if (view == PanelView.Apps) listOf("clock", "panel_view_segment", "media_card", "icon_grid", "dock")
                 else listOf("clock", "panel_view_segment", "panel_sets", "dock")
             fun checkDisjoint() {
@@ -233,6 +233,88 @@ class LayoutMatrixTest(
             }
         } finally {
             controller.pause().stop().destroy()
+        }
+    }
+}
+
+@RunWith(org.robolectric.RobolectricTestRunner::class)
+@Config(sdk = [35])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
+class HomeAppLayoutMatrixTest {
+    @get:Rule val rule = createEmptyComposeRule()
+
+    @Test fun wideHome_cardsAndAppsStayInsideTheirViewports() {
+        data class Case(val width: Int, val height: Int, val scale: Float,
+                        val banner: Boolean, val sets: Int, val apps: Int)
+        val cases = listOf(
+            Case(1291, 726, 1f, false, 5, 5),
+            Case(1291, 726, 1.3f, false, 5, 5),
+            Case(1291, 726, 1.3f, true, 8, 1),
+            Case(840, 600, 1f, true, 6, 0),
+            Case(840, 600, 1.3f, true, 8, 5),
+            Case(840, 600, 1f, false, 5, 1),
+        )
+        for (case in cases) {
+            RuntimeEnvironment.setQualifiers("w${case.width}dp-h${case.height}dp")
+            val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+            WindowCompat.setDecorFitsSystemWindows(controller.get().window, false)
+            val config = Defaults.build(emptySet()).copy(screenSets = (1..case.sets).map {
+                com.gt8d.launcher.config.ScreenSet("s$it", com.gt8d.launcher.config.Slot.App("a"),
+                    com.gt8d.launcher.config.Slot.Panel)
+            })
+            val apps = (1..case.apps).map { AppInfo("a$it", "名前$it", null, true) }
+            val state = PanelState(null, AppInfo("idle", "Music", null, true), 0L, apps, emptyList(),
+                DockStatus(true, true), false, case.banner)
+            try {
+                controller.get().setContent { LauncherTheme {
+                    CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, case.scale)) {
+                        Box(Modifier.fillMaxSize().testTag("wide_root")) {
+                            HomeWideContent(state, PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}),
+                                config, { AppInfo(it, "長い名前".repeat(20), null, true) }, 0, {}, {})
+                        }
+                    }
+                } }
+                controller.visible()
+                val root = rule.onNodeWithTag("wide_root").getBoundsInRoot()
+                val tags = listOf("clock", "home_sets", "home_player", "dock") +
+                    if (case.apps > 0) listOf("home_apps") else emptyList()
+                val regions = tags.map { rule.onNodeWithTag(it).getBoundsInRoot() }
+                fun inside(b: androidx.compose.ui.unit.DpRect) {
+                    assertTrue("$case: $b outside $root", b.left >= root.left + 16.dp &&
+                        b.right <= root.right - 16.dp && b.top >= root.top + 16.dp && b.bottom <= root.bottom - 16.dp)
+                }
+                for (b in regions) inside(b)
+                for (i in regions.indices) for (j in i + 1 until regions.size) {
+                    val a = regions[i]; val b = regions[j]
+                    assertFalse("$case: ${tags[i]} overlaps ${tags[j]}",
+                        a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom)
+                }
+                val setsArea = rule.onNodeWithTag("home_sets").getBoundsInRoot()
+                for (tag in config.screenSets.map { "home_set_${it.id}" } + "home_set_add") {
+                    val node = rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+                    val b = node.getBoundsInRoot()
+                    inside(b)
+                    assertTrue(b.top >= setsArea.top && b.bottom <= setsArea.bottom)
+                    if (tag != "home_set_add") node.assertHeightIsEqualTo(104.dp)
+                }
+                if (case.apps == 0) rule.onNodeWithTag("home_apps").assertDoesNotExist()
+                else {
+                    val row = rule.onNodeWithTag("home_apps").getBoundsInRoot()
+                    assertEquals(rule.onNodeWithTag("home_player").getBoundsInRoot().bottom, row.bottom)
+                    for (app in apps) {
+                        val node = rule.onNodeWithTag("home_app_${app.pkg}")
+                        if (case.width == 1291 && !case.banner && case.apps == 5) {
+                            val before = node.assertIsDisplayed().getBoundsInRoot()
+                            assertTrue(before.left >= row.left && before.right <= row.right)
+                            node.assertWidthIsEqualTo(96.dp)
+                        }
+                        val b = node.performScrollTo().assertIsDisplayed().getBoundsInRoot()
+                        inside(b)
+                        assertTrue(b.left >= row.left && b.right <= row.right && b.top >= row.top && b.bottom <= row.bottom)
+                    }
+                }
+            } finally { controller.pause().stop().destroy() }
         }
     }
 }

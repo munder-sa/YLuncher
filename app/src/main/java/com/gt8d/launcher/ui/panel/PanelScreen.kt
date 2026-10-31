@@ -204,6 +204,11 @@ internal fun HomeWideContent(
                     HomeClockHeader(clockHeight)
                     HomeSetCards(config.screenSets, appInfo, currentIndex, onOpen, onNewSet,
                         Modifier.fillMaxWidth().weight(1f))
+                    if (state.panelApps.isNotEmpty()) {
+                        com.gt8d.launcher.ui.home.HomeAppRow(
+                            state.panelApps.take(com.gt8d.launcher.config.MAX_PANEL_APPS), actions.onLaunch,
+                            Modifier.fillMaxWidth())
+                    }
                 }
             }
             HomeMiniPlayer(state.now, state.idleApp, state.positionMs, appInfo, actions.onMediaAction,

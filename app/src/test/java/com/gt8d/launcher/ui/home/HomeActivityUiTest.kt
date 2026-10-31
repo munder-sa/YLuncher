@@ -148,6 +148,16 @@ class HomeActivityUiTest {
         assertEquals(com.gt8d.launcher.settings.SettingsActivity::class.java.name, intent?.component?.className)
         assertTrue(intent!!.getBooleanExtra("open_new_set", false))
     }
+    @Test fun homeAppRow_launchesAppWithoutAdjacentFlags() {
+        install()
+        flow.value = flow.value!!.copy(panelApps = listOf(pkg))
+        host()
+        rule.onNodeWithTag("home_app_$pkg").performClick()
+        val intent = requireNotNull(shadowOf(controller!!.get()).nextStartedActivity)
+        assertEquals(component, intent.component)
+        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+    }
     @Test fun longPressAppList_startsSettingsActivity() {
         host()
         rule.onNodeWithTag("dock_applist").performScrollTo().performTouchInput { longClick() }
@@ -193,7 +203,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { install() }
         broadcast(Intent.ACTION_PACKAGE_ADDED)
         rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("1  Home App | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  Home App | パネル"))
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
         assertOpen()
@@ -206,7 +216,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { shadowOf(app.packageManager).removePackage(pkg) }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
         rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("1  $pkg | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  $pkg | パネル"))
         assertOpen()
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
@@ -219,7 +229,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { install("Changed Home") }
         broadcast(Intent.ACTION_PACKAGE_CHANGED)
         rule.onNodeWithContentDescription("Changed Home", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("1  Changed Home | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  Changed Home | パネル"))
         assertSame(config, flow.value)
         assertEquals(listOf(pkg), flow.value!!.homeApps)
         assertSame(media, MediaWatcher.nowPlaying.value)
@@ -232,7 +242,7 @@ class HomeActivityUiTest {
         rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
         rule.runOnIdle { controller!!.pause(); install(); controller!!.resume() }
         rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("1  Home App | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  Home App | パネル"))
         assertSame(activity, controller!!.get())
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
