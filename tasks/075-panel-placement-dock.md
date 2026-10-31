@@ -42,3 +42,9 @@ v1.5(設計書 `docs/superpowers/specs/2026-10-31-v1.5-left-panel-design.md` §4
 
 ## 報告
 変更点、テストの結果(件数)、**決めたこと**。
+
+## 補足(点検の反映)
+1. `PanelActivityTest.kt` も変更してよい(allow に追加)。テスト `placement_reportedAndClearedOnStop`: 分割状態にした PanelActivity で `AppGraph.panelPlacement` に値が届き(Robolectric で窓の座標が取れない場合は、座標の取得を差し替えられる口を Activity に設けてよい。設けたら報告)、`onStop` の後は null。
+2. 状態保持のテストの手順: 「セット」を選ぶ → セット一覧(スクロール領域)を 0 でない位置までスクロール → placement を Left→Right → セットが選ばれたまま・スクロール位置が同じ。アプリ表示の側でも同様に1つ。
+3. 位置の監視は STARTED の間だけ: `onStart` でリスナーを登録して計算、`onStop` でリスナーを外してから null を報告。
+4. 幅 0 以下(`windowRight - windowLeft <= 0`)または `screenWidth <= 0` は `null`。テスト (0,0,1920,true)→null を足す。

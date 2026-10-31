@@ -38,3 +38,10 @@ v1.5(設計書 `docs/superpowers/specs/2026-10-31-v1.5-left-panel-design.md` §4
 
 ## 報告
 変更点、テストの結果(件数)、`onSetReady`・`onSetEnded` を呼ぶ場所の一覧、**決めたこと**。
+
+## 補足(点検の反映)
+1. `onSetReady` は `curtain.ready()` を呼ぶ**前**に呼ぶ(ready のコールバックの中で次のセットが始まることがあるため。連続スワイプの既存テスト SetRunnerTest:940 付近が通ること)。起動時(boot、幕なし)の成功でも呼ぶ。
+2. ホーム・無効な番号の予告はセットが無いので今のまま。左右対応は有効なセットの予告だけ。
+3. `panelLaunched` の条件: 「今のセットが分割で成立している」こと = 最後の `waitBoth` が ready で終わり、その後 `onSetEnded` が呼ばれていない、かつ `lastOpenedPair` の片方が `d.panelHostPkg`。全画面への逃がし先・失敗の後は更新しない。テスト `panelLaunched_ignoredAfterFallback` を足す。
+4. `onSetEnded` は、実際に次の操作が**始まった**ときだけ呼ぶ(`openForLink` が false を返した・保留になっただけでは呼ばない)。ホームへは `home()` の実行時。
+5. テストを足す: 左パネルで右のアプリの Resume だけ(パネルの合図なし)では未成立・パネルの合図だけでも未成立、中継の resize 判定の免除、呼び直しの時に同じ左右・比率で `open` が再度呼ばれる(左パネル)。`retrySkipped` の対応先は既存の右パネルの retry のテスト(無ければ両方アプリの `retrySkipped_whenLeftResumed` を左パネル版にしたもの)。

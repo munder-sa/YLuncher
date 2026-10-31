@@ -27,3 +27,7 @@ v1.5(設計書 `docs/superpowers/specs/2026-10-31-v1.5-left-panel-design.md` §5
 
 ## 報告
 変更点、テストの結果(件数)、**決めたこと**。
+
+## 補足(点検の反映)
+1. パネルのマスは `PanelIcon(Modifier.size(56.dp), mirrored = …)`(56dp を保つ)。左パネルのアイコンが 56dp であることもテストする。
+2. `leftPanelSet_ratioWidths`: R4_6 の左パネルのセットで、左マスの幅 < 右マスの幅。
