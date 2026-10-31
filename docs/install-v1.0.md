@@ -201,3 +201,31 @@
 - 前面化・初期値・帯：同ディレクトリの `AppGraph.kt`、`foreground/UsageStatsForegroundEvents.kt`、`config/Defaults.kt`、`config/Model.kt`、`edge/EdgeStripService.kt`、`media/MediaWatcher.kt`、`ui/panel/MediaCard.kt`。
 - ビルド：`.codex.conf`、`app/build.gradle.kts`、`panelhost/build.gradle.kts`。
 - 場面テストと既知事項：`scripts/device-scenarios.sh`、`tasks/071-debug-panel-hook.md`、`tasks/072-scenario-only-prereq.md`、`tasks/073-install-guide-v1.0.md`。
+
+## 9. v1.5 から v1.0 に戻す
+
+v1.5 は初回起動で旧設定を版3に移し、移行前の設定を `files/config-v2-backup.json` に残す。v1.0 は版3を読めず既定値になるので、**v1.0 を入れる前に、v1.5 が入っている状態でバックアップを復元する**。移行の後に v1.5 で変えた内容と、左パネルのセットは失われる。以下は debug 版用のコマンド例で、今回実機では実行していない。接続先は現在の IP・ポートに置き換える。
+
+1. v1.0 の本体・中継 APK を §2 に従い同じ署名鍵で用意する。まだインストールしない。
+2. バックアップを読み出せることを確かめる。存在しない、または読めない場合は復元できないため、ここで止める。
+
+   ```sh
+   adb.exe -s 192.168.137.248:5555 shell run-as com.gt8d.launcher cat files/config-v2-backup.json
+   ```
+
+3. **既定のホームを純正に戻しておく**(YLuncher が既定のホームのままだと、停止の直後にシステムが YLuncher を起こし直し、v1.5 が書き戻した設定をもう一度版3に移して上書きする)。
+
+   ```sh
+   adb.exe -s 192.168.137.248:5555 shell cmd role add-role-holder android.app.role.HOME com.android.launcher3 0
+   ```
+
+4. 次の順に、設定を復元 → 本体を停止 → v1.0 の APK を本体・中継の順で上書きする。復元後、インストールが終わるまで YLuncher を開かない。`-d` は版を下げる指定。
+
+   ```sh
+   adb.exe -s 192.168.137.248:5555 shell run-as com.gt8d.launcher cp files/config-v2-backup.json files/config.json
+   adb.exe -s 192.168.137.248:5555 shell am force-stop com.gt8d.launcher
+   adb.exe -s 192.168.137.248:5555 install -r -d "$(wslpath -w "$PWD/app/build/outputs/apk/debug/app-debug.apk")"
+   adb.exe -s 192.168.137.248:5555 install -r -d "$(wslpath -w "$PWD/panelhost/build/outputs/apk/debug/panelhost-debug.apk")"
+   ```
+
+5. §3 のホーム起動で v1.0 を開き(YLuncher を既定のホームにする場合はこの後で)、移行前の設定と §4 の許可を確認する。
