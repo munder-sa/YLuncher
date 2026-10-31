@@ -29,3 +29,9 @@
 
 ## 報告
 変更点、テストの結果、**決めたこと**。
+
+## 補足(点検の反映)
+- 未インストール時に押せなくするのは **HomeMiniPlayer だけ**。MediaCard は常に押せる(インストール状態を知る引数を足さない。起動に失敗したときの扱いは今の launchApp に任せる)。
+- MediaCard の実画像あり・代替画像の両方の分岐に同じ clickable を付ける(Modifier を共通化してよい)。テストは代替画像(artwork = null)で1回呼ばれることを確かめれば足りる。
+- 余白のテストは `player_title` の左端で測る(`player_art` は中央寄せで縮むため使わない)。許容は 1dp を px に換算した値。
+- `HomeMiniPlayerTest` に足す: 未インストール(appInfo の installed = false)では `player_art` を押しても `onLaunch` が呼ばれない。高さ 480 で、全要素が `home_player` の中に縦方向で収まり、`player_play` が 96dp 以上。
