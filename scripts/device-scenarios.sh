@@ -142,6 +142,9 @@ fi
 adb exec-out run-as com.gt8d.launcher cat files/config.json > "$out/config-backup.json" || { row setup FAIL '設定の退避に失敗'; exit 1; }
 adb shell "run-as com.gt8d.launcher sh -c 'cat files/config.json > files/config-scenario-backup.json'" || { row setup FAIL '端末内の設定の退避に失敗'; exit 1; }
 config_saved=1
+# リンクの行き先の期待値は、端末の設定のブラウザ(link.browserPkg)に合わせる。無ければ Chrome。
+configured_browser=$(sed -n 's/.*"browserPkg":"\([a-zA-Z0-9_.]*\)".*/\1/p' "$out/config-backup.json" | head -n 1)
+[[ -n $configured_browser ]] && browser=$configured_browser
 original_home=$(adb shell cmd role get-role-holders android.app.role.HOME) || exit 1
 original_home=${original_home//$'\r'/}
 [[ $original_home =~ ^[a-zA-Z0-9_.]+$ ]] || { row setup FAIL '現在の既定ホームを単一パッケージとして取得できない'; exit 1; }
