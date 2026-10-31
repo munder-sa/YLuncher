@@ -55,7 +55,7 @@ class SetsScreenTest {
             SettingsHost(SettingsActions({}, {}, { false }, {}, { false }), { exits++ }, {},
                 initialRoute = route, onOpenSet = { opened += it }, setsStore = store,
                 labelFor = { if (it == "alpha") "アルファ" else "ベータ" },
-                launchablePackages = { listOf("beta", activity.packageName, "alpha", "alpha") })
+                launchablePackages = { listOf("beta", activity.packageName, com.gt8d.launcher.apps.OwnPackages.PANEL_HOST, "alpha", "alpha") })
         } }
     }
     private fun click(tag: String) {
@@ -63,16 +63,41 @@ class SetsScreenTest {
         if (!tag.startsWith("settings_")) node.performScrollTo()
         node.performClick()
     }
-    private fun chooseLeft() { click("set_left"); click("set_pick_alpha") }
-    @Test fun sets_editRightSlot_canChoosePanel_leftCannot() {
-        host(SettingsRoute.SetEdit(null)); click("set_left")
+    private fun chooseLeft() { click("set_left_app"); click("set_pick_alpha") }
+    @Test fun sets_editSlots_canChoosePanelOnEitherSide() {
+        host(SettingsRoute.SetEdit(null)); click("set_left_app")
         rule.onNodeWithTag("set_pick_${activity.packageName}").assertDoesNotExist()
+        rule.onNodeWithTag("set_pick_${com.gt8d.launcher.apps.OwnPackages.PANEL_HOST}").assertDoesNotExist()
         rule.onNodeWithTag("set_right_panel").assertDoesNotExist()
         rule.onAllNodesWithTag("set_pick_alpha").assertCountEquals(1)
         val alphaY = rule.onNodeWithTag("set_pick_alpha").fetchSemanticsNode().positionInRoot.y
         assertTrue(alphaY < rule.onNodeWithTag("set_pick_beta").fetchSemanticsNode().positionInRoot.y)
         click("set_pick_alpha"); click("set_right_app"); click("set_pick_beta"); click("set_right_panel")
         click("set_save"); rule.waitForIdle(); assertEquals(Slot.Panel, sets.value.last().right)
+    }
+    @Test fun leftPanel_selectRightApp_saves() {
+        host(SettingsRoute.SetEdit(null)); click("set_left_panel")
+        rule.onNodeWithTag("set_left_panel").assertIsSelected()
+        rule.onNodeWithTag("set_right_panel").assertIsEnabled().assertIsNotSelected()
+        rule.onNodeWithTag("set_right_label").assertTextEquals("右のアプリ: 選んでください")
+        rule.onNodeWithTag("set_save").assertIsNotEnabled()
+        click("set_right_app"); click("set_pick_beta"); click("set_save"); rule.waitForIdle()
+        val saved = sets.value.last()
+        assertEquals(ScreenSet(saved.id, Slot.Panel, Slot.App("beta"), SplitRatio.R6_4), saved)
+    }
+    @Test fun swap_exchangesAppLabelsAndRatio() {
+        host(SettingsRoute.SetEdit("b"))
+        rule.onNodeWithTag("set_left_label").assertTextEquals("左のアプリ: ベータ")
+        rule.onNodeWithTag("set_right_label").assertTextEquals("右のアプリ: アルファ")
+        rule.onNodeWithTag("set_swap").assertHeightIsAtLeast(com.gt8d.launcher.ui.theme.Dims.MinTouch)
+        click("set_swap")
+        rule.onNodeWithTag("set_left_label").assertTextEquals("左のアプリ: アルファ")
+        rule.onNodeWithTag("set_right_label").assertTextEquals("右のアプリ: ベータ")
+        rule.onNodeWithTag("set_ratio_7:3").assertIsSelected()
+    }
+    @Test fun list_leftPanel_showsActualOrder() {
+        sets.value = listOf(a.copy(left = Slot.Panel, right = Slot.App("alpha")))
+        host(); rule.onNodeWithTag("set_row_a").assertTextContains("パネル | アルファ")
     }
     @Test fun sets_ratioChoices_panelHas3_appHas5() {
         host(SettingsRoute.SetEdit(null))
@@ -148,9 +173,9 @@ class SetsScreenTest {
         rule.onNodeWithTag("set_row_a").assertDoesNotExist()
     }
     @Test fun picker_systemBack_keepsDraft() {
-        host(SettingsRoute.SetEdit(null)); click("set_left")
+        host(SettingsRoute.SetEdit(null)); click("set_left_app")
         rule.runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
-        rule.onNodeWithTag("set_left").assertTextContains("選んでください")
+        rule.onNodeWithTag("set_left_label").assertTextEquals("左のアプリ: 選んでください")
         rule.onNodeWithTag("set_save").assertIsNotEnabled()
         assertEquals(0, exits)
     }

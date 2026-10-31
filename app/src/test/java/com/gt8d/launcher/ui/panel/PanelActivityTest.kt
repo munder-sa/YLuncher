@@ -200,8 +200,8 @@ class PanelActivityTest {
     @Test fun splitButton_inSplit_opensNewSetInPanel() {
         splitPanel(); rule.onNodeWithTag("dock_split").performScrollTo().performClick()
         androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
-        rule.waitUntil(5000L) { rule.onNodeWithTag("set_left").isDisplayed() }
-        rule.onNodeWithTag("set_left").assertIsDisplayed()
+        rule.waitUntil(5000L) { rule.onNodeWithTag("set_left_app").isDisplayed() }
+        rule.onNodeWithTag("set_left_app").assertIsDisplayed()
         assertTrue(controller!!.get().settingsShown)
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
         rule.onNodeWithTag("settings_back").performClick()
@@ -220,7 +220,7 @@ class PanelActivityTest {
     @Test fun splitButton_whileOpening_doesNothing() = whileOpening {
         splitPanel(); rule.onNodeWithTag("dock_split").performScrollTo().performClick()
         androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
-        rule.onNodeWithTag("set_left").assertDoesNotExist()
+        rule.onNodeWithTag("set_left_app").assertDoesNotExist()
         assertFalse(controller!!.get().settingsShown)
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }

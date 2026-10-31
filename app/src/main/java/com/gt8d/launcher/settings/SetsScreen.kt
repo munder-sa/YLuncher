@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -165,21 +167,38 @@ fun SetsScreen(
                     SetButton("アプリの選択を戻る", "set_pick_back") { pickingLeft = null }
                     launchablePackages().distinct().filterNot { it == ownPkg || it == OwnPackages.PANEL_HOST }.sortedBy(labelFor).forEach { pkg ->
                         SettingsRow(labelFor(pkg), "set_pick_$pkg", onClick = {
-                            draft = if (pickingLeft == true) draft.copy(left = pkg) else draft.withRight(Slot.App(pkg))
+                            draft = if (pickingLeft == true) draft.withLeft(Slot.App(pkg)) else draft.withRight(Slot.App(pkg))
                             pickingLeft = null
                         })
                     }
                 } else {
-                    SetButton("左のアプリ", "set_left", Modifier.fillMaxWidth(), enabled = !busy,
-                        subtitle = draft.left?.let(labelFor) ?: "選んでください") { pickingLeft = true }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SetButton("パネル", "set_right_panel", enabled = !busy, selected = draft.right == Slot.Panel) {
-                            draft = draft.withRight(Slot.Panel)
+                    val sideEditor: @Composable (Boolean) -> Unit = { left ->
+                        val slot = if (left) draft.left else draft.right
+                        val title = if (left) "左" else "右"
+                        val tag = if (left) "set_left" else "set_right"
+                        Text(title, fontSize = Dims.BodyText)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SetButton("パネル", "${tag}_panel", enabled = !busy, selected = slot == Slot.Panel) {
+                                draft = if (left) draft.withLeft(Slot.Panel) else draft.withRight(Slot.Panel)
+                            }
+                            SetButton("アプリ", "${tag}_app", enabled = !busy, selected = slot != Slot.Panel) { pickingLeft = left }
                         }
-                        SetButton("アプリ", "set_right_app", enabled = !busy, selected = draft.right is Slot.App) { pickingLeft = false }
+                        if (slot != Slot.Panel) {
+                            OneLineText("${title}のアプリ: ${(slot as? Slot.App)?.let { labelFor(it.pkg) } ?: "選んでください"}",
+                                Modifier.testTag("${tag}_label"), fontSize = Dims.BodyText)
+                        }
                     }
-                    (draft.right as? Slot.App)?.let { OneLineText("右のアプリ: ${labelFor(it.pkg)}", fontSize = Dims.BodyText) }
-                    SplitRatio.entries.filter { it.allowedFor(Slot.App(draft.left ?: ""), draft.right) }.chunked(3).forEach { ratios ->
+                    sideEditor(true)
+                    Button(onClick = { draft = draft.swapped() }, enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = Dims.MinTouch).testTag("set_swap"),
+                        colors = ButtonDefaults.buttonColors(containerColor = com.gt8d.launcher.ui.theme.Palette.Control,
+                            contentColor = androidx.compose.ui.graphics.Color.White)) {
+                        Icon(Icons.Default.SwapHoriz, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        OneLineText("左右を入れ替える")
+                    }
+                    sideEditor(false)
+                    SplitRatio.entries.filter { it.allowedFor(draft.left ?: Slot.App(""), draft.right ?: Slot.App("")) }.chunked(3).forEach { ratios ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ratios.forEach { ratio ->
                                 SetButton(ratio.label, "set_ratio_${ratio.label}", enabled = !busy, selected = draft.ratio == ratio) {
