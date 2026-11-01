@@ -125,6 +125,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var panelResumed: Boolean = false
     private var panelSessionReady = false
     private var ownScreenSeen: Boolean = false
+    private var bothProgress: (() -> Boolean)? = null
     private var openingForBoot = false
     private var monitoringAvailable: Boolean = true
     private var expectedDelayMs: Long = WarmTracker.COLD_MS
@@ -547,6 +548,13 @@ class SetRunner(private val d: SetRunnerDeps) {
         linkWaitBoth = linkReady != null
         val appPkg = if (panelSide == Side.Left) right else left
 
+        val hasProgress = {
+            val seen = d.watcher.foregroundPkgsSince(startMs)
+            ownScreenSeen || panelResumed ||
+                appPkg in seen || (panelSide == null && right in seen) || STOCK_LAUNCHER_PKG in seen
+        }
+        bothProgress = hasProgress
+
         fun isBothReady(): Boolean {
             if (!monitoringAvailable) return false
             val resumed = if (panelSide != null) d.watcher.bothResumed(appPkg, appPkg, startMs)
@@ -601,10 +609,8 @@ class SetRunner(private val d: SetRunnerDeps) {
             val ready = isBothReady()
             if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
             if (!ready) {
-                val seen = d.watcher.foregroundPkgsSince(startMs)
+                val progressed = hasProgress()
                 if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
-                val progressed = ownScreenSeen || panelResumed ||
-                    appPkg in seen || (panelSide == null && right in seen) || STOCK_LAUNCHER_PKG in seen
                 if (progressed) {
                     DiagLog.d("SetRunner", "retry skipped: progress left=$left right=$right")
                     return@schedule
@@ -732,9 +738,14 @@ class SetRunner(private val d: SetRunnerDeps) {
             HideReason.Failed, HideReason.Safety -> fallback?.invoke()
         }
         if (monitoringAvailable && reason == HideReason.Safety && kind == WaitKind.Both) {
-            d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
+            if (bothProgress?.invoke() == true) {
+                DiagLog.d("SetRunner", "timeout not counted: progress")
+            } else {
+                d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
+            }
             d.messenger.show(Notice.Slow)
         }
+        bothProgress = null
         runPendingIfNeeded()
     }
 

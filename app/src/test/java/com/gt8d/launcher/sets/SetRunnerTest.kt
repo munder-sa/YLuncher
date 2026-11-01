@@ -1766,6 +1766,20 @@ class SetRunnerTest {
     }
 
     @Test
+    fun safety_withOneSideResumed_doesNotCountFailureAndShowsNotice() {
+        for (pkg in listOf("youtube", "applemusic")) {
+            val env = TestEnv()
+            env.selector.onFailure(FailReason.Timeout, countable = true)
+            env.runner.open(2)
+            env.events.events.add(ResumeEvent(pkg, 250L))
+            env.scheduler.advanceBy(4000L)
+            assertEquals(listOf(HideReason.Safety), env.curtainView.hiddenReasons)
+            assertEquals(1, env.selector.state.consecutiveFailures)
+            assertEquals(listOf(Notice.Slow), env.messenger.notices)
+        }
+    }
+
+    @Test
     fun watcherUnavailable_timedHide_clearsOpening_andRunsPendingTarget() {
         val env = TestEnv(watcherAvailable = false)
         env.warm.markForeground("youtube")

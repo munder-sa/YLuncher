@@ -6,11 +6,20 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Process
 import android.os.SystemClock
+import com.gt8d.launcher.diag.DiagLog
+import kotlin.math.abs
 
 class UsageStatsForegroundEvents(
     private val context: Context,
     private val queryResumed: ((Long) -> List<ResumeEvent>)? = null,
 ) : ForegroundEvents {
+    data class RawEvent(val pkg: String, val className: String?, val type: Int, val wallMs: Long)
+
+    var queryRawEvents: ((Long, Long) -> List<RawEvent>)? = null
+    var wallClock: () -> Long = System::currentTimeMillis
+    var elapsedClock: () -> Long = SystemClock::elapsedRealtime
+    private var skewMs = 0L
+    private var loggedSkewMs = 0L
 
     override fun available(): Boolean {
         return try {
@@ -28,31 +37,52 @@ class UsageStatsForegroundEvents(
     override fun resumedSince(sinceMs: Long): List<ResumeEvent> {
         return try {
             if (queryResumed != null) return queryResumed.invoke(sinceMs)
-            val manager = context.getSystemService(UsageStatsManager::class.java)
-                ?: throw ForegroundEventsUnavailableException()
-            val nowWall = System.currentTimeMillis()
-            val nowElapsed = SystemClock.elapsedRealtime()
+            val nowWall = wallClock()
+            val nowElapsed = elapsedClock()
             val wallMinusElapsed = nowWall - nowElapsed
-            val begin = nowWall - (nowElapsed - sinceMs) - 1000L
+            // 古い目印で問い合わせの範囲を広げすぎない(直前 60 秒以内だけ使い、無ければ前の補正値を使う)
+            val mark = OwnResumeClock.latest()?.takeIf { sinceMs - it.second <= MARK_WINDOW_MS }
+            val begin = minOf(sinceMs, mark?.second ?: sinceMs) + wallMinusElapsed - 3000L
             val end = nowWall + 1000L
-            val usageEvents = manager.queryEvents(begin, end) ?: throw ForegroundEventsUnavailableException()
-            val result = mutableListOf<ResumeEvent>()
-            val event = UsageEvents.Event()
-            while (usageEvents.hasNextEvent()) {
-                usageEvents.getNextEvent(event)
-                if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
-                    val pkg = event.packageName ?: continue
-                    val timeMs = event.timeStamp - wallMinusElapsed
-                    if (timeMs >= sinceMs) {
-                        result.add(ResumeEvent(pkg = pkg, timeMs = timeMs))
+            val events = queryRawEvents?.invoke(begin, end) ?: run {
+                val manager = context.getSystemService(UsageStatsManager::class.java)
+                    ?: throw ForegroundEventsUnavailableException()
+                val usageEvents = manager.queryEvents(begin, end) ?: throw ForegroundEventsUnavailableException()
+                buildList {
+                    val event = UsageEvents.Event()
+                    while (usageEvents.hasNextEvent()) {
+                        usageEvents.getNextEvent(event)
+                        val pkg = event.packageName ?: continue
+                        add(RawEvent(pkg, event.className, event.eventType, event.timeStamp))
                     }
                 }
             }
-            result
+            if (mark != null) {
+                val candidate = events.asSequence()
+                    .filter { it.type == UsageEvents.Event.ACTIVITY_RESUMED &&
+                        it.pkg == context.packageName && it.className == mark.first }
+                    .map { it.wallMs - wallMinusElapsed - mark.second }
+                    .filter { abs(it) <= 3000L }
+                    .minByOrNull { abs(it) }
+                if (candidate != null) {
+                    skewMs = candidate
+                    if (abs(skewMs - loggedSkewMs) >= 100L) {
+                        DiagLog.d("Foreground", "skew=$skewMs")
+                        loggedSkewMs = skewMs
+                    }
+                }
+            }
+            events.filter { it.type == UsageEvents.Event.ACTIVITY_RESUMED }
+                .map { ResumeEvent(it.pkg, it.wallMs - wallMinusElapsed - skewMs) }
+                .filter { it.timeMs >= sinceMs }
         } catch (error: ForegroundEventsUnavailableException) {
             throw error
         } catch (cause: Throwable) {
             throw ForegroundEventsUnavailableException(cause)
         }
+    }
+
+    private companion object {
+        const val MARK_WINDOW_MS = 60_000L
     }
 }

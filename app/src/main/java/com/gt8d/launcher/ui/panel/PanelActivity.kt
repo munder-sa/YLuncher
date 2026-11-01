@@ -198,6 +198,7 @@ class PanelActivity : ComponentActivity() {
     }
 
     override fun onResume() {
+        com.gt8d.launcher.foreground.OwnResumeClock.mark(javaClass.name)
         super.onResume()
         reportPlacement()
         AppGraph.runner.ownScreenResumed()
