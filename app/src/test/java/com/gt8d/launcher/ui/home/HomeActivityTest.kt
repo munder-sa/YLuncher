@@ -5,6 +5,9 @@ import android.content.ComponentName
 import android.os.Looper
 import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.boot.BootPhase
 import com.gt8d.launcher.config.LauncherConfig
@@ -18,6 +21,9 @@ import kotlinx.coroutines.flow.StateFlow
 import androidx.lifecycle.Lifecycle
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,6 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
@@ -34,6 +41,7 @@ import org.robolectric.android.controller.ActivityController
 @Config(sdk = [35])
 @LooperMode(LooperMode.Mode.PAUSED)
 class HomeActivityTest {
+    @get:Rule val rule = createEmptyComposeRule()
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val configFlow = MutableStateFlow<LauncherConfig?>(null)
     private var controller: ActivityController<HomeActivity>? = null
@@ -241,18 +249,51 @@ class HomeActivityTest {
         assertEquals(BootPhase.StayedHome, AppGraph.boot.phase.value)
     }
 
-    @Test
-    fun homeActivity_safetyActive_startsStockLauncher() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        SafetyGuard.clear(app)
+    private fun showSafetyHome() {
+        RuntimeEnvironment.setQualifiers("w1280dp-h1000dp")
         SafetyGuard.recordStart(app)
         SafetyGuard.recordCrash(app)
         SafetyGuard.recordCrash(app)
         SafetyGuard.recordCrash(app)
         assertTrue(SafetyGuard.isFallbackActive(app))
 
-        val activity = Robolectric.buildActivity(HomeActivity::class.java).setup().get()
-        val started = shadowOf(activity).nextStartedActivity
+        configFlow.value = loadedConfig()
+        controller = Robolectric.buildActivity(HomeActivity::class.java).setup().visible()
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun homeActivity_safetyActive_showsActionsWithoutAutomaticLaunch() {
+        showSafetyHome()
+        rule.onNodeWithText("安全のため純正ランチャーを使っています").assertIsDisplayed()
+        val stock = rule.onNodeWithTag("safety_open_stock")
+        val unlock = rule.onNodeWithTag("safety_unlock")
+        stock.assertIsDisplayed().assertTextEquals("純正ランチャーを開く").assertHeightIsAtLeast(72.dp)
+        unlock.assertIsDisplayed().assertTextEquals("安全モードを解除").assertHeightIsAtLeast(72.dp)
+        val stockBounds = stock.getUnclippedBoundsInRoot()
+        val unlockBounds = unlock.getUnclippedBoundsInRoot()
+        assertEquals(16.dp, unlockBounds.top - stockBounds.bottom)
+        assertEquals(360.dp, stockBounds.right - stockBounds.left)
+        assertEquals(360.dp, unlockBounds.right - unlockBounds.left)
+        repeat(2) { attempt ->
+            if (attempt > 0) {
+                controller!!.pause().resume()
+                rule.waitForIdle()
+            }
+            assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+            assertNull(shadowOf(app).nextStartedService)
+            assertFalse(AppGraph.bootHandled)
+            assertEquals(BootPhase.Idle, AppGraph.boot.phase.value)
+            assertEquals("4", indexFile.readText())
+        }
+    }
+
+    @Test
+    fun homeActivity_safetyOpenStock_opensStockLauncher() {
+        showSafetyHome()
+        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+        rule.onNodeWithTag("safety_open_stock").performClick()
+        val started = shadowOf(controller!!.get()).nextStartedActivity
 
         assertEquals(
             ComponentName(
@@ -261,5 +302,24 @@ class HomeActivityTest {
             ),
             started.component,
         )
+    }
+
+    @Test
+    fun homeActivity_safetyUnlock_recreatesNormalHomeWithoutBootRestore() {
+        showSafetyHome()
+        val old = controller!!.get()
+        rule.onNodeWithTag("safety_unlock").performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        rule.waitForIdle()
+        assertFalse(SafetyGuard.isFallbackActive(app))
+        assertNotSame(old, controller!!.get())
+        rule.onNodeWithText("安全のため純正ランチャーを使っています").assertDoesNotExist()
+        rule.onNodeWithTag("safety_open_stock").assertDoesNotExist()
+        rule.onNodeWithTag("safety_unlock").assertDoesNotExist()
+        rule.onNodeWithTag("dock_applist").assertIsDisplayed()
+        assertTrue(AppGraph.bootHandled)
+        assertEquals(BootPhase.Idle, AppGraph.boot.phase.value)
+        assertEquals("4", indexFile.readText())
+        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }
 }

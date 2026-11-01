@@ -9,7 +9,15 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -23,6 +31,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -34,6 +43,69 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MediaCardTest {
+    @Test fun idle_innerWidthBoundary_andMissingApp() {
+        var innerWidth by mutableStateOf(299)
+        var installed by mutableStateOf(true)
+        val launches = mutableListOf<String>()
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.width((innerWidth + 16).dp)) {
+                    MediaCard(null, AppInfo("idle", "音楽アプリ", null, installed), 0L,
+                        {}, {}, { launches.add(it) })
+                }
+            }
+        }
+        rule.onNodeWithTag("idle_name").assertDoesNotExist()
+        rule.onNodeWithTag("idle_status").assertDoesNotExist()
+        rule.onNodeWithTag("idle_open").assertIsDisplayed().assertHeightIsAtLeast(72.dp).performClick()
+        assertEquals(listOf("idle"), launches)
+        rule.onNodeWithTag("idle_app").assertHasNoClickAction()
+        rule.runOnIdle { innerWidth = 300 }
+        rule.onNodeWithTag("idle_name").assertIsDisplayed()
+        rule.onNodeWithText("再生情報はありません").assertIsDisplayed()
+        rule.onNodeWithTag("idle_open").assertIsDisplayed()
+        rule.runOnIdle { installed = false }
+        rule.onNodeWithTag("idle_open").assertDoesNotExist()
+        rule.onNodeWithText("アプリが見つかりません").assertIsDisplayed()
+        rule.runOnIdle { innerWidth = 299 }
+        rule.onNodeWithText("アプリが見つかりません").assertIsDisplayed()
+        rule.onNodeWithTag("idle_open").assertDoesNotExist()
+        rule.onNodeWithTag("idle_app").assertHasNoClickAction()
+    }
+    @Test fun favorite_isRightOfMetadata_andControlsStayInOneRow() {
+        var favorite by mutableStateOf(true)
+        var playing by mutableStateOf(true)
+        val actions = mutableListOf<MediaAction>()
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(NowPlaying("music", "Song", "Artist", null, 120000L, playing, favorite),
+                    null, 0L, { actions.add(it) }, {}, {})
+            }
+        }
+        fun bounds(tag: String) = rule.onNodeWithTag(tag, useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        val metadata = bounds("media_metadata")
+        val star = bounds("btn_favorite")
+        assertTrue(star.left >= metadata.right)
+        assertTrue(star.center.y >= bounds("title").top && star.center.y <= bounds("artist").bottom)
+        val prev = bounds("btn_prev")
+        assertEquals(prev.center.y, bounds("btn_playpause").center.y, 1f)
+        assertEquals(prev.center.y, bounds("btn_next").center.y, 1f)
+        rule.onNodeWithTag("btn_favorite").performClick()
+        assertEquals(listOf(MediaAction.Favorite), actions)
+        fun assertWhite() = rule.onNodeWithTag("btn_playpause")
+            .assert(SemanticsMatcher.expectValue(MediaControlBackground, Color.White))
+        assertWhite()
+        rule.runOnIdle { playing = false }
+        assertWhite()
+        rule.runOnIdle { favorite = false }
+        rule.onNodeWithTag("btn_favorite").assertDoesNotExist()
+        val expanded = bounds("media_metadata")
+        assertEquals(star.right, expanded.right, 1f)
+        assertEquals(metadata.left, expanded.left, 1f)
+        assertTrue(expanded.width > metadata.width)
+    }
+
     @Test fun artTap_launchesPlayerApp() {
         val launches = mutableListOf<String>()
         val now = NowPlaying("music", "Song", "Artist", null, 120000L, true, false)
@@ -65,6 +137,38 @@ class MediaCardTest {
 
     @Test
     fun mediaCard_pointerSeek_commitsEndOnceOnRelease() = pointerSeek(0L, true, 120000L)
+
+    @Test fun seek_tapAndBelowSlopRestoreDisplay_dragCommitsOnce_andNextTapDoesNotCommit() {
+        val seeks = mutableListOf<Long>()
+        var slop = 0f
+        rule.setContent {
+            slop = androidx.compose.ui.platform.LocalViewConfiguration.current.touchSlop
+            LauncherTheme { androidx.compose.foundation.layout.Column {
+                SeekBar(120000L, 30000L, { seeks.add(it) })
+            } }
+        }
+        val progress = rule.onNodeWithTag("progress")
+        fun assertRestored() {
+            rule.onNodeWithText("0:30").assertExists()
+            rule.onNodeWithText("-1:30").assertExists()
+        }
+        progress.performTouchInput { click(center) }
+        assertEquals(emptyList<Long>(), seeks)
+        assertRestored()
+        progress.performTouchInput { down(center); moveTo(center + Offset(slop * 0.5f, 0f)); up() }
+        assertEquals(emptyList<Long>(), seeks)
+        assertRestored()
+        progress.performTouchInput { down(center); moveTo(center + Offset(slop + 1f, 0f)) }
+        assertEquals(emptyList<Long>(), seeks)
+        rule.onNodeWithText("0:30").assertDoesNotExist()
+        progress.performTouchInput { up() }
+        assertEquals(1, seeks.size)
+        assertTrue(seeks.single() > 30000L)
+        assertRestored()
+        progress.performTouchInput { click(center) }
+        assertEquals(1, seeks.size)
+        assertRestored()
+    }
 
     @Test
     fun mediaCard_pointerSeek_commitsStartOnceOnRelease() = pointerSeek(60000L, false, 0L)
@@ -156,7 +260,10 @@ class MediaCardTest {
         }
 
         rule.onNodeWithText("Apple Music").assertIsDisplayed()
-        rule.onNodeWithTag("idle_app").performClick()
+        rule.onNodeWithText("再生情報はありません").assertIsDisplayed()
+        rule.onNodeWithTag("idle_app").assertHasNoClickAction()
+        rule.onNodeWithTag("idle_open").assertHeightIsAtLeast(72.dp).assertWidthIsAtLeast(72.dp)
+            .assert(hasContentDescription("Apple Musicを開く")).performClick()
         assertEquals("com.apple.android.music", launchedPkg)
     }
 

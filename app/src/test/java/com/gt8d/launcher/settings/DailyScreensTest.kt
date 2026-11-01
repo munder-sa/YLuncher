@@ -28,6 +28,24 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w516dp-h1000dp")
 class DailyScreensTest {
+    @Test fun lists_hiddenExcludedOnlyFromDockRowsAndPicker() {
+        val hidden = com.gt8d.launcher.apps.HiddenApps.packages
+        config = config.copy(dockApps = hidden.toList() + "a")
+        hostDock(hidden.map { com.gt8d.launcher.apps.FrequentApp(it, 99) }, true)
+        hidden.forEach { rule.onNodeWithTag("lists_dock_auto_row_$it").assertDoesNotExist() }
+        rule.onNodeWithTag("lists_dock_auto_row_a").assertExists()
+        click("lists_dock_mode_manual")
+        hidden.forEach { rule.onNodeWithTag("lists_dock_row_$it").assertDoesNotExist() }
+        click("lists_dock_add")
+        hidden.forEach { rule.onNodeWithTag("lists_dock_pick_$it").assertDoesNotExist() }
+        rule.onNodeWithTag("lists_dock_pick_b").assertExists()
+        click("lists_dock_pick_back")
+        click("lists_panel_add")
+        hidden.forEach { rule.onNodeWithTag("lists_panel_pick_$it").assertExists() }
+        click("lists_panel_pick_back")
+        click("lists_idle_change")
+        hidden.forEach { rule.onNodeWithTag("lists_idle_pick_$it").assertExists() }
+    }
     @get:Rule(order = 0) val register = object : ExternalResource() {
         override fun before() {
             val app = ApplicationProvider.getApplicationContext<Application>()
@@ -55,8 +73,61 @@ class DailyScreensTest {
         } } }
     }
     private fun click(tag: String) { rule.onNodeWithTag(tag).performScrollTo().performClick() }
+    private fun hostDock(frequent: List<com.gt8d.launcher.apps.FrequentApp>?, available: Boolean,
+                         settings: com.gt8d.launcher.ui.panel.AppInfo? = com.gt8d.launcher.ui.panel.AppInfo("settings", "設定", null, true)) {
+        rule.setContent { LauncherTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+            ListsScreen(config, update, { it }, { listOf("a", "b", "c", "d", "settings") + com.gt8d.launcher.apps.HiddenApps.packages },
+                frequent, available, settings)
+        } } }
+    }
+    @Test fun lists_dockSegmentsSaveAndManualReordersRemoves() {
+        config = config.copy(dockApps = listOf("a", "b"))
+        hostDock(emptyList(), true)
+        click("lists_dock_mode_manual")
+        assertEquals(DockMode.Manual, config.dockMode)
+        click("lists_dock_down_a"); assertEquals(listOf("b", "a"), config.dockApps)
+        click("lists_dock_up_a"); assertEquals(listOf("a", "b"), config.dockApps)
+        click("lists_dock_remove_a"); assertEquals(listOf("b"), config.dockApps)
+        click("lists_dock_mode_auto")
+        assertEquals(DockMode.Auto, config.dockMode)
+        assertEquals(5, writes)
+    }
+    @Test fun lists_dockAutoCountsFallbackAndFixedSettings() {
+        config = config.copy(dockApps = listOf("b", "settings"))
+        hostDock(listOf(com.gt8d.launcher.apps.FrequentApp("a", 7)), true)
+        rule.onNodeWithTag("lists_dock_auto_row_a").assertExists()
+        rule.onNodeWithText("7日で 7 回").assertExists()
+        rule.onNodeWithTag("lists_dock_auto_row_b").assertExists()
+        rule.onNodeWithText("記録なし").assertExists()
+        rule.onNodeWithTag("lists_dock_auto_row_settings").assertDoesNotExist()
+        rule.onNodeWithTag("lists_dock_settings_row").assertExists()
+        rule.onNodeWithText("固定").assertExists()
+        rule.onNodeWithTag("lists_dock_add").assertDoesNotExist()
+        rule.onNodeWithTag("lists_dock_remove_b").assertDoesNotExist()
+        rule.onNodeWithText("使用状況へのアクセスを許可すると、よく使うアプリが並びます").assertDoesNotExist()
+    }
+    @Test fun lists_dockPermissionNoticeOnlyWithoutPermission() {
+        config = config.copy(dockApps = listOf("a"))
+        var available by mutableStateOf(false)
+        rule.setContent { LauncherTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+            ListsScreen(config, update, { it }, { listOf("a") }, null, available, null)
+        } } }
+        rule.onNodeWithText("使用状況へのアクセスを許可すると、よく使うアプリが並びます").assertExists()
+        rule.onNodeWithText("記録なし").assertExists()
+        rule.onNodeWithTag("lists_dock_settings_row").assertDoesNotExist()
+        rule.runOnIdle { available = true }
+        rule.onNodeWithText("使用状況へのアクセスを許可すると、よく使うアプリが並びます").assertDoesNotExist()
+        rule.onNodeWithText("記録なし").assertExists()
+    }
+    @Test fun lists_dockManualPickerExcludesSettings() {
+        config = config.copy(dockMode = DockMode.Manual)
+        hostDock(null, false)
+        click("lists_dock_add")
+        rule.onNodeWithTag("lists_dock_pick_settings").assertDoesNotExist()
+        rule.onNodeWithTag("lists_dock_pick_a").assertExists()
+    }
     @Test fun lists_addToDock_disabledAt4() {
-        config = config.copy(dockApps = listOf("a", "b", "c", "d")); host(SettingsRoute.Lists)
+        config = config.copy(dockMode = DockMode.Manual, dockApps = listOf("a", "b", "c", "d")); host(SettingsRoute.Lists)
         rule.onNodeWithTag("lists_dock_add").performScrollTo().assertIsNotEnabled()
         rule.onNodeWithText("最大 4 個まで").assertExists()
         assertEquals(0, writes)
@@ -157,5 +228,24 @@ class DailyScreensTest {
         rule.onNodeWithTag("boot_wait_car").assertIsNotEnabled().assertIsOn()
         rule.onNodeWithTag("boot_wait_car_note").assertTextEquals("車での確認の後に使えるようになります")
         assertTrue(config.boot.waitForCar); assertEquals(0, writes)
+    }
+
+    @Test fun autoSaveNote_onAllImmediateScreens_andListsPicker() {
+        var route by mutableStateOf<SettingsRoute>(SettingsRoute.Gesture)
+        rule.setContent { LauncherTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+            when (route) {
+                SettingsRoute.Gesture -> GestureScreen(config, update)
+                SettingsRoute.Boot -> BootSettingsScreen(config, update)
+                SettingsRoute.Link -> LinkScreen(config, update)
+                SettingsRoute.Lists -> ListsScreen(config, update, { it }, { listOf("a") })
+                else -> Unit
+            }
+        } } }
+        listOf(SettingsRoute.Gesture, SettingsRoute.Boot, SettingsRoute.Link, SettingsRoute.Lists).forEach {
+            rule.runOnIdle { route = it }
+            rule.onNodeWithText("変更は自動で保存されます").performScrollTo().assertIsDisplayed()
+        }
+        click("lists_panel_add")
+        rule.onNodeWithText("変更は自動で保存されます").performScrollTo().assertIsDisplayed()
     }
 }

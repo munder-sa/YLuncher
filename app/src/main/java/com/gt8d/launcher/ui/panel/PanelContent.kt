@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.MAX_PANEL_APPS
 import com.gt8d.launcher.config.PanelView
 import com.gt8d.launcher.config.ScreenSet
-import com.gt8d.launcher.ui.home.HomeSetCards
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
@@ -74,6 +73,9 @@ data class PanelState(
     val currentSetIndex: Int = 0,
     val setAppInfo: (String) -> AppInfo = { AppInfo(it, it, null, false) },
     val placement: PanelPlacement? = null,
+    val missingPermissions: List<MissingPermission> = emptyList(),
+    val settingsApp: AppInfo? = null,
+    val homeEntries: List<com.gt8d.launcher.ui.apps.AppListEntry> = emptyList(),
 )
 
 data class PanelActions(
@@ -90,6 +92,8 @@ data class PanelActions(
     val onSelectView: (PanelView) -> Unit = {},
     val onOpenSet: (Int) -> Unit = {},
     val onNewSet: () -> Unit = {},
+    val onSettings: () -> Unit = {},
+    val onLaunchEntry: (com.gt8d.launcher.ui.apps.AppListEntry) -> Unit = {},
 )
 
 @Composable
@@ -119,23 +123,17 @@ fun PanelContent(
                         FitClock(clockText, clockHeight)
                         PanelViewSegment(state, actions)
                         if (state.view == PanelView.Sets) {
-                            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-                                val cardsHeight = (maxHeight - if (state.needsPermission) 80.dp else 0.dp)
-                                    .coerceAtLeast(136.dp)
-                                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (state.needsPermission) PermissionBanner(actions.onOpenPermissions)
-                                    HomeSetCards(state.sets, state.setAppInfo, state.currentSetIndex,
-                                        actions.onOpenSet, actions.onNewSet,
-                                        Modifier.fillMaxWidth().height(cardsHeight))
-                                }
+                            PanelSetCards(state.sets, state.setAppInfo, state.currentSetIndex,
+                                actions.onOpenSet, actions.onNewSet,
+                                Modifier.fillMaxWidth().weight(1f)) {
+                                if (state.needsPermission) PermissionBanner(state.missingPermissions, actions.onOpenPermissions)
                             }
                         } else {
                             Column(
                                 modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                if (state.needsPermission) PermissionBanner(actions.onOpenPermissions)
+                                if (state.needsPermission) PermissionBanner(state.missingPermissions, actions.onOpenPermissions)
 
                                 MediaCard(
                                     now = state.now,
@@ -168,6 +166,8 @@ fun PanelContent(
                     onAppList = actions.onAppList,
                     onAppListLongPress = actions.onAppListLongPress,
                     onLaunch = actions.onLaunch,
+                    settingsApp = state.settingsApp,
+                    onSettings = actions.onSettings,
                 )
             }
         }
@@ -200,12 +200,21 @@ private fun PanelViewSegment(state: PanelState, actions: PanelActions) {
 }
 
 @Composable
-private fun PermissionBanner(onClick: () -> Unit) {
+internal fun PermissionBanner(missingPermissions: List<MissingPermission>, onClick: () -> Unit) {
+    val text = when (missingPermissions.size) {
+        0 -> "許可が必要"
+        1 -> when (missingPermissions.single()) {
+            MissingPermission.Notification -> "再生情報の表示に許可が必要です"
+            MissingPermission.Overlay -> "画面の端の操作に許可が必要です"
+            MissingPermission.UsageStats -> "アプリの切り替えの検知に許可が必要です"
+        }
+        else -> "許可が ${missingPermissions.size} 件足りません"
+    }
     Surface(color = Palette.Panel, shape = RoundedCornerShape(12.dp), modifier = Modifier
         .fillMaxWidth().sizeIn(minHeight = Dims.MinTouch).clickable(onClick = onClick)
         .testTag("permission_banner")) {
         Box(Modifier.fillMaxWidth().sizeIn(minHeight = Dims.MinTouch).padding(horizontal = 12.dp),
-            contentAlignment = Alignment.Center) { OneLineText("許可が必要", color = Palette.PanelAccent) }
+            contentAlignment = Alignment.Center) { OneLineText(text, color = Palette.PanelAccent, fontSize = Dims.BodyText) }
     }
 }
 

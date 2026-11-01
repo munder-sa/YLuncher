@@ -1,6 +1,8 @@
 package com.gt8d.launcher.sets
 
 import com.gt8d.launcher.apps.OwnPackages
+import com.gt8d.launcher.notice.Notice
+import com.gt8d.launcher.ui.home.numberedSetLabel
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Side
@@ -21,6 +23,7 @@ import com.gt8d.launcher.split.LaunchResult
 import com.gt8d.launcher.split.SplitLauncher
 import com.gt8d.launcher.split.SplitMode
 import com.gt8d.launcher.split.SplitModeSelector
+import com.gt8d.launcher.split.VendorBridge
 import com.gt8d.launcher.time.Cancellable
 import com.gt8d.launcher.time.Clock
 import com.gt8d.launcher.time.Scheduler
@@ -38,8 +41,7 @@ interface LastIndexStore {
 }
 
 interface Messenger {
-    fun showSplitUnavailable()
-    fun showSwitchFailed()
+    fun show(notice: Notice)
 }
 
 data class SetRunnerDeps(
@@ -62,6 +64,7 @@ data class SetRunnerDeps(
     val panelHostPkg: String = OwnPackages.PANEL_HOST,
     val updateConfig: suspend ((LauncherConfig) -> LauncherConfig) -> Unit = {},
     val scope: CoroutineScope? = null,
+    val homeVisible: () -> Boolean = { false },
 )
 
 class SetRunner(private val d: SetRunnerDeps) {
@@ -124,6 +127,40 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var monitoringAvailable: Boolean = true
     private var expectedDelayMs: Long = WarmTracker.COLD_MS
     private val activeTimers = mutableListOf<Cancellable>()
+    private var cancelGuard: Cancellable? = null
+
+    private fun stopCancelGuard() {
+        cancelGuard?.cancel()
+        cancelGuard = null
+    }
+
+    private fun startCancelGuard(opening: Opening?, cancelledAtMs: Long) {
+        stopCancelGuard()
+        if (opening == null || !d.watcher.available()) return
+        val packages = setOf(opening.left, opening.right, VendorBridge.VENDOR_PKG)
+        val deadline = cancelledAtMs + CANCEL_GUARD_MS
+        var since = cancelledAtMs
+        var returns = 0
+        fun poll() {
+            cancelGuard = d.scheduler.schedule(POLL_MS) {
+                cancelGuard = null
+                val now = d.clock.nowMs()
+                if (now >= deadline || !d.watcher.available()) return@schedule
+                val pkg = d.watcher.lastForegroundSince(since)
+                if (!d.watcher.available()) return@schedule
+                if (pkg in packages) {
+                    DiagLog.d("SetRunner", "cancel guard home pkg=$pkg")
+                    d.startHome()
+                    since = d.clock.nowMs() + 1L
+                    returns++
+                }
+                if (returns < 2) poll()
+            }
+        }
+        poll()
+    }
+
+    fun cancelOpening() { d.curtain.cancel() }
 
     init {
         d.curtain.onHidden = ::onCurtainHidden
@@ -132,6 +169,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun configForOperation(): LauncherConfig? = d.config()
 
     fun next() {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         val base = pending?.index ?: currentIndex
         val setCount = cfg.screenSets.size
@@ -144,6 +182,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     fun followIndex(index: Int) { currentIndex = index; d.lastIndex.lastSetIndex = index }
 
     fun prev() {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         val base = pending?.index ?: currentIndex
         val setCount = cfg.screenSets.size
@@ -153,6 +192,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun home() {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         home(cfg)
     }
@@ -178,6 +218,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun open(index: Int) {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         open(index, cfg)
     }
@@ -199,6 +240,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun openForBoot(index: Int) {
+        stopCancelGuard()
         val cfg = configForOperation() ?: return
         cancelLinkCallbacks()
         DiagLog.d("SetRunner", "openForBoot index=$index")
@@ -275,6 +317,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun openForLink(left: String, right: String, onReady: () -> Unit, onNotSplit: () -> Unit): Boolean {
+        stopCancelGuard()
         cancelLinkCallbacks()
         val cfg = configForOperation() ?: return false
         if (_opening.value != null) return false
@@ -360,12 +403,13 @@ class SetRunner(private val d: SetRunnerDeps) {
         val installedPkgs = d.installed()
         if (panelSide == Side.Left) {
             if (appPkg !in installedPkgs) {
+                d.messenger.show(Notice.AppMissing(appLabel(appPkg)))
                 DiagLog.d("SetRunner", "right uninstalled: $appPkg")
-                d.startHome()
-                waitSingle(d.ownPkg, startMs, useCurtain)
+                fallbackHome(startMs, useCurtain)
                 return
             }
             if (d.panelHostPkg !in installedPkgs) {
+                d.messenger.show(Notice.AppMissing("YLuncher パネル"))
                 DiagLog.d("SetRunner", "panel host missing")
                 d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
                 waitSingle(appPkg, startMs, useCurtain)
@@ -373,19 +417,20 @@ class SetRunner(private val d: SetRunnerDeps) {
             }
         }
         if (left !in installedPkgs) {
+            d.messenger.show(Notice.AppMissing(appLabel(left)))
             DiagLog.d("SetRunner", "left uninstalled: $left")
             if (panelSide == null && (forLink || right in installedPkgs)) {
                 d.warm.recordAppLaunch(right, d.apps.startApp(right, false))
                 waitSingle(right, startMs, useCurtain)
             } else {
-                d.startHome()
-                waitSingle(d.ownPkg, startMs, useCurtain)
+                fallbackHome(startMs, useCurtain)
             }
             notifyLinkNotSplit()
             return
         }
 
         if (!forLink && right !in installedPkgs) {
+            d.messenger.show(Notice.AppMissing(if (panelSide == Side.Right) "YLuncher パネル" else appLabel(right)))
             DiagLog.d("SetRunner", if (panelSide != null) "panel host missing" else "right uninstalled: $right")
             d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
             waitSingle(left, startMs, useCurtain)
@@ -397,8 +442,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         val rightResizeable = panelSide == Side.Right || d.apps.isResizeable(right)
         if (!leftResizeable || !rightResizeable) {
             DiagLog.d("SetRunner", "unresizeable left=$leftResizeable right=$rightResizeable")
-            d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
-            d.messenger.showSplitUnavailable()
+            fullscreen(appPkg, Notice.SplitUnsupported(appLabel(if (!leftResizeable) left else right)))
             waitSingle(appPkg, startMs, useCurtain)
             notifyLinkNotSplit()
             return
@@ -413,8 +457,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         if (launcher == null) {
             DiagLog.d("SetRunner", "leftOnly mode=$mode")
-            d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
-            d.messenger.showSplitUnavailable()
+            fullscreen(appPkg, Notice.SplitFailed(appLabel(appPkg)))
             waitSingle(appPkg, startMs, useCurtain)
             notifyLinkNotSplit()
             return
@@ -442,20 +485,37 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
     }
 
+    private fun fallbackHome(startMs: Long, useCurtain: Boolean) {
+        val homeVisible = d.homeVisible()
+        d.startHome()
+        if (homeVisible) {
+            if (useCurtain) d.curtain.ready() else finishWithoutCurtain()
+        } else {
+            waitSingle(d.ownPkg, startMs, useCurtain)
+        }
+    }
+
     private fun handleLaunchFailure(reason: FailReason, left: String, useCurtain: Boolean) {
         panelSessionReady = false
         onSetEnded("launch failure")
         waitKind = WaitKind.None
         cancelTimers()
         d.selector.onFailure(reason, countable = true)
-        d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
-        d.messenger.showSplitUnavailable()
+        fullscreen(left, Notice.SplitFailed(appLabel(left)))
         notifyLinkNotSplit()
         if (useCurtain) {
             d.curtain.fail()
         } else {
             finishWithoutCurtain()
         }
+    }
+
+    private fun appLabel(pkg: String): String = d.labelFor(pkg).ifBlank { pkg }
+
+    private fun fullscreen(pkg: String, success: Notice) {
+        val started = d.apps.startApp(pkg, false)
+        d.warm.recordAppLaunch(pkg, started)
+        d.messenger.show(if (started) success else Notice.OpenFailed(appLabel(pkg)))
     }
 
     private fun waitBoth(
@@ -631,14 +691,28 @@ class SetRunner(private val d: SetRunnerDeps) {
         waitKind = WaitKind.None
         cancelTimers()
         openingForBoot = false
+        val cancelledOpening = _opening.value
         _opening.value = null
         when (reason) {
+            HideReason.Cancelled -> {
+                val cancelledAtMs = d.clock.nowMs()
+                DiagLog.d("SetRunner", "opening cancelled")
+                pending = null
+                currentIndex = SetNavigator.HOME
+                d.lastIndex.lastSetIndex = SetNavigator.HOME
+                lastOpenedPair = null
+                lastOpenedAtMs = null
+                lastReadyAtMs = null
+                d.startHome()
+                startCancelGuard(cancelledOpening, cancelledAtMs)
+                return
+            }
             HideReason.Ready, HideReason.Timed -> ready?.invoke()
             HideReason.Failed, HideReason.Safety -> fallback?.invoke()
         }
         if (monitoringAvailable && reason == HideReason.Safety && kind == WaitKind.Both) {
             d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
-            d.messenger.showSwitchFailed()
+            d.messenger.show(Notice.Slow)
         }
         runPendingIfNeeded()
     }
@@ -679,6 +753,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 ratio = SplitRatio.R6_4,
                 position = 0,
                 count = count,
+                cancellable = false,
             )
         }
         val set = sets.getOrNull(index - 1) ?: return CurtainTarget(
@@ -688,6 +763,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             ratio = SplitRatio.R6_4,
             position = 0,
             count = count,
+            cancellable = false,
         )
         val leftPreview = when (val l = set.slotAt(Side.Left)) {
             is Slot.App -> SlotPreview.App(l.pkg, d.labelFor(l.pkg))
@@ -698,7 +774,7 @@ class SetRunner(private val d: SetRunnerDeps) {
             is Slot.App -> SlotPreview.App(r.pkg, d.labelFor(r.pkg))
         }
         return CurtainTarget(
-            setName = "セット$index",
+            setName = numberedSetLabel(index, set, d.labelFor),
             left = leftPreview,
             right = rightPreview,
             ratio = set.ratio,
@@ -712,5 +788,6 @@ class SetRunner(private val d: SetRunnerDeps) {
         const val POLL_MS = 200L
         const val RETRY_AT_MS = 3000L
         const val BOOT_CLEAR_MS = 10000L
+        const val CANCEL_GUARD_MS = 5000L
     }
 }

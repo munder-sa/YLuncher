@@ -1,5 +1,7 @@
 package com.gt8d.launcher.sets
 
+import com.gt8d.launcher.notice.Notice
+
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
@@ -35,6 +37,207 @@ import kotlinx.coroutines.test.*
 import com.gt8d.launcher.split.PanelPlacement
 
 class SetRunnerTest {
+    @Test fun cancelOpening_clearsStatePendingAndRetry_withoutFailureOrNotice() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.runner.next()
+        e.runner.cancelOpening()
+        assertEquals(1, e.startHomeCount)
+        assertEquals(SetNavigator.HOME, e.runner.currentIndex)
+        assertEquals(SetNavigator.HOME, e.lastIndex.lastSetIndex)
+        assertNull(e.runner.opening.value)
+        assertNull(e.runner.lastOpenedPair)
+        assertNull(e.runner.lastOpenedAtMs)
+        assertNull(e.runner.lastReadyAtMs)
+        e.scheduler.advanceBy(10000)
+        assertEquals(1, e.vendor.calls.size)
+        assertEquals(0, e.selector.state.consecutiveFailures)
+        assertTrue(e.messenger.notices.isEmpty())
+        assertEquals(listOf(HideReason.Cancelled), e.curtainView.hiddenReasons)
+    }
+
+    @Test fun cancelGuard_watchesActualLeftRightPanelAndVendor_notUnrelatedOrPending() {
+        for ((index, pkg, expected) in listOf(
+            Triple(2, "youtube", 2), Triple(2, "applemusic", 2),
+            Triple(1, "com.gt8d.launcher.panel", 2),
+            Triple(2, com.gt8d.launcher.split.VendorBridge.VENDOR_PKG, 2),
+            Triple(2, "unrelated", 1), Triple(2, "maps", 1),
+        )) {
+            val e = TestEnv()
+            e.runner.open(index)
+            e.runner.next()
+            e.runner.cancelOpening()
+            e.scheduler.advanceBy(1500)
+            e.events.events.add(ResumeEvent(pkg, e.scheduler.nowMs()))
+            e.scheduler.advanceBy(500)
+            assertEquals("pkg=$pkg", expected, e.startHomeCount)
+            e.scheduler.advanceBy(5000)
+            assertEquals(expected, e.startHomeCount)
+            assertEquals(1, e.vendor.calls.size)
+        }
+    }
+
+    @Test fun cancelGuard_fixedDeadlineAndAtMostTwoAdditionalHomes() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.runner.cancelOpening()
+        repeat(4) {
+            e.scheduler.advanceBy(500)
+            e.events.events.add(ResumeEvent("youtube", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(300)
+        }
+        assertEquals(3, e.startHomeCount)
+        val late = TestEnv()
+        late.runner.open(2)
+        late.runner.cancelOpening()
+        late.scheduler.advanceBy(4500)
+        late.events.events.add(ResumeEvent("youtube", 4500))
+        late.scheduler.advanceBy(300)
+        assertEquals(2, late.startHomeCount)
+        late.scheduler.advanceBy(300)
+        late.events.events.add(ResumeEvent("applemusic", late.scheduler.nowMs()))
+        late.scheduler.advanceBy(1000)
+        assertEquals(2, late.startHomeCount)
+    }
+
+    @Test fun cancelGuard_deadlineStartsAtCancellation_andQueryFailureStopsGuard() {
+        for (queryFails in listOf(false, true)) {
+            val e = leftPanelEnv()
+            e.runner.open(1)
+            e.scheduler.advanceBy(1000)
+            e.runner.cancelOpening()
+            if (queryFails) {
+                e.events.queryFails = true
+                e.scheduler.advanceBy(200)
+                e.events.queryFails = false
+            }
+            e.scheduler.advanceBy(4000)
+            e.events.events.add(ResumeEvent("com.gt8d.launcher.panel", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(200)
+            assertEquals(if (queryFails) 1 else 2, e.startHomeCount)
+            e.scheduler.advanceBy(1000)
+            e.events.events.add(ResumeEvent("y", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(1000)
+            assertEquals(if (queryFails) 1 else 2, e.startHomeCount)
+        }
+    }
+
+    @Test fun cancelGuard_stopsWhenMonitoringUnavailableInitiallyOrDuringGuard() {
+        for (initially in listOf(true, false)) {
+            val e = TestEnv(watcherAvailable = !initially)
+            e.runner.open(2)
+            e.runner.cancelOpening()
+            e.events.isAvailable = false
+            e.scheduler.advanceBy(200)
+            e.events.isAvailable = true
+            e.events.events.add(ResumeEvent("youtube", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(5000)
+            assertEquals(1, e.startHomeCount)
+        }
+    }
+
+    @Test fun cancelGuard_allSixOperationsStopIt_evenBeforeNullConfigReturn() {
+        val operations = listOf<(SetRunner) -> Unit>(
+            { it.open(1) }, { it.next() }, { it.prev() }, { it.home() },
+            { it.openForBoot(1) }, { it.openForLink("youtube", "maps", {}, {}) },
+        )
+        for (operation in operations) for (loading in listOf(false, true)) {
+            val e = TestEnv()
+            e.runner.open(2)
+            e.runner.cancelOpening()
+            e.loading = loading
+            operation(e.runner)
+            val homesAfterOperation = e.startHomeCount
+            e.events.events.add(ResumeEvent("youtube", 100))
+            e.scheduler.advanceBy(2000)
+            assertEquals(homesAfterOperation, e.startHomeCount)
+        }
+    }
+
+    @Test fun cancel_thenNextOpensNormally_andOldAppDoesNotReturnHome() {
+        val e = TestEnv()
+        e.runner.open(2)
+        e.runner.cancelOpening()
+        e.runner.next()
+        assertEquals(1, e.runner.currentIndex)
+        assertEquals(2, e.vendor.calls.size)
+        e.events.events.add(ResumeEvent("applemusic", 100))
+        e.scheduler.advanceBy(200)
+        assertEquals(1, e.startHomeCount)
+        resumePanelApp(e, "youtube")
+        assertEquals(1, e.runner.readyCount)
+        assertNull(e.runner.opening.value)
+    }
+
+    @Test fun cancelLink_doesNotInvokeEitherCallback() {
+        val e = TestEnv()
+        var ready = 0
+        var fallback = 0
+        assertTrue(e.runner.openForLink("youtube", "maps", { ready++ }, { fallback++ }))
+        e.runner.cancelOpening()
+        e.scheduler.advanceBy(10000)
+        assertEquals(0, ready)
+        assertEquals(0, fallback)
+        assertTrue(e.messenger.notices.isEmpty())
+    }
+
+    @Test fun target_cancellableOnlyForExistingSets() {
+        val e = TestEnv()
+        assertFalse(e.runner.targetFor(SetNavigator.HOME).cancellable)
+        assertFalse(e.runner.targetFor(99).cancellable)
+        assertTrue(e.runner.targetFor(1).cancellable)
+    }
+    @Test fun unsupported_namesFirstUnsupportedApp_andReportsFullscreenFailure() {
+        for (unsupported in listOf(setOf("youtube"), setOf("applemusic"), setOf("youtube", "applemusic"))) {
+            for (started in listOf(true, false)) {
+                val e = TestEnv()
+                e.apps.unresizeablePkgs.addAll(unsupported)
+                e.apps.startAppResult = started
+                e.runner.open(2)
+                val label = if ("youtube" in unsupported) "youtube" else "applemusic"
+                assertEquals(listOf(if (started) Notice.SplitUnsupported(label) else Notice.OpenFailed("youtube")), e.messenger.notices)
+                assertEquals(listOf(StartAppCall("youtube", false)), e.apps.startAppCalls)
+            }
+        }
+    }
+
+    @Test fun leftOnlyAndLaunchFailure_reportFullscreenResult() {
+        for (leftOnly in listOf(true, false)) for (started in listOf(true, false)) {
+            val e = TestEnv()
+            if (leftOnly) e.selector.onFailure(FailReason.EntryMissing, countable = true)
+            else e.vendor.result = LaunchResult.Failed(FailReason.Exception)
+            e.apps.startAppResult = started
+            e.runner.open(2)
+            assertEquals(listOf(if (started) Notice.SplitFailed("youtube") else Notice.OpenFailed("youtube")), e.messenger.notices)
+            assertEquals(listOf(StartAppCall("youtube", false)), e.apps.startAppCalls)
+        }
+    }
+
+    @Test fun missingApps_notifyOnlyFirst_inSlotCheckOrder() {
+        for (panel in listOf("none", "left", "right")) {
+            for (missing in listOf(setOf("app"), setOf("other"), setOf("app", "other"))) {
+                val e = if (panel == "left") leftPanelEnv() else TestEnv()
+                val app = if (panel == "left") "y" else "youtube"
+                val other = if (panel == "none") "applemusic" else "com.gt8d.launcher.panel"
+                if ("app" in missing) e.installed.remove(app)
+                if ("other" in missing) e.installed.remove(other)
+                e.runner.open(if (panel == "none") 2 else 1)
+                val label = if ("app" in missing) app else if (panel == "none") other else "YLuncher パネル"
+                assertEquals(listOf(Notice.AppMissing(label)), e.messenger.notices)
+            }
+        }
+    }
+
+    @Test fun missingApp_usesLabelOrPackageWhenLabelBlank() {
+        for (label in listOf("動画アプリ", "")) {
+            val e = TestEnv()
+            e.labels["youtube"] = label
+            e.installed.remove("youtube")
+            e.runner.open(2)
+            assertEquals(listOf(Notice.AppMissing(if (label.isBlank()) "youtube" else label)), e.messenger.notices)
+        }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun placement_wiring() = runTest {
         val e = TestEnv(scope = this)
@@ -148,6 +351,53 @@ class SetRunnerTest {
         assertTrue(e.vendor.calls.isEmpty())
     }
 
+    @Test fun missingApp_homeVisible_completesReadyBeforeSafety() {
+        for (leftPanel in listOf(true, false)) {
+            val e = TestEnv(homeVisible = { true })
+            e.config = e.config.copy(screenSets = listOf(ScreenSet("missing",
+                if (leftPanel) Slot.Panel else Slot.App("missingLeft"), Slot.App("missingRight"), SplitRatio.R5_5)))
+            e.runner.open(1)
+            assertEquals(1, e.startHomeCount)
+            assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+            assertFalse(e.curtain.isShowing)
+            assertNull(e.runner.opening.value)
+            assertEquals(listOf(Notice.AppMissing(if (leftPanel) "missingRight" else "missingLeft")), e.messenger.notices)
+            e.scheduler.advanceBy(4000)
+            assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        }
+    }
+
+    @Test fun missingApp_homeNotVisible_waitsForForeground() {
+        for (leftPanel in listOf(true, false)) {
+            val e = TestEnv(homeVisible = { false })
+            e.config = e.config.copy(screenSets = listOf(ScreenSet("missing",
+                if (leftPanel) Slot.Panel else Slot.App("missingLeft"), Slot.App("missingRight"), SplitRatio.R5_5)))
+            e.runner.open(1)
+            assertEquals(1, e.startHomeCount)
+            e.scheduler.advanceBy(200)
+            assertTrue(e.curtain.isShowing)
+            assertTrue(e.curtainView.hiddenReasons.isEmpty())
+            e.events.events.add(ResumeEvent(e.ownPkg, 250))
+            e.scheduler.advanceBy(200)
+            assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+            assertNull(e.runner.opening.value)
+            assertEquals(listOf(Notice.AppMissing(if (leftPanel) "missingRight" else "missingLeft")), e.messenger.notices)
+        }
+    }
+
+    @Test fun missingApp_homeVisible_bootCompletesWithoutCurtain() {
+        for (leftPanel in listOf(true, false)) {
+            val e = TestEnv(homeVisible = { true })
+            e.config = e.config.copy(screenSets = listOf(ScreenSet("missing",
+                if (leftPanel) Slot.Panel else Slot.App("missingLeft"), Slot.App("missingRight"), SplitRatio.R5_5)))
+            e.runner.openForBoot(1)
+            assertEquals(1, e.startHomeCount)
+            assertNull(e.runner.opening.value)
+            assertTrue(e.curtainView.shownTargets.isEmpty())
+            assertEquals(listOf(Notice.AppMissing(if (leftPanel) "missingRight" else "missingLeft")), e.messenger.notices)
+        }
+    }
+
     @Test fun leftPanel_panelHostMissing_opensAppFullscreen() {
         val e = leftPanelEnv()
         e.installed.remove("com.gt8d.launcher.panel")
@@ -162,6 +412,7 @@ class SetRunnerTest {
         e.runner.open(1)
         assertEquals(listOf(StartAppCall("y", false)), e.apps.startAppCalls)
         assertEquals(1, e.messenger.splitUnavailableCount)
+        assertEquals(listOf(Notice.SplitFailed("y")), e.messenger.notices)
         assertTrue(e.vendor.calls.isEmpty())
     }
 
@@ -193,8 +444,18 @@ class SetRunnerTest {
         val e = leftPanelEnv()
         e.runner.open(1)
         val target = e.curtainView.shownTargets.single()
+        assertEquals("1  パネル | y", target.setName)
         assertEquals(com.gt8d.launcher.curtain.SlotPreview.Panel, target.left)
         assertEquals(com.gt8d.launcher.curtain.SlotPreview.App("y", "y"), target.right)
+    }
+
+    @Test fun curtainAndBootTarget_useNumberedSetLabel() {
+        val e = TestEnv()
+        assertEquals("1  youtube | パネル", e.runner.targetFor(1).setName)
+        assertEquals("2  youtube | applemusic", e.runner.targetFor(2).setName)
+        assertEquals("ホーム", e.runner.targetFor(0).setName)
+        e.runner.open(1)
+        assertEquals("1  youtube | パネル", e.curtainView.shownTargets.single().setName)
     }
 
     @Test fun panelLaunched_updatesPartner_leftAndRight() {
@@ -291,6 +552,7 @@ class SetRunnerTest {
         assertEquals(0, env.selector.state.consecutiveFailures)
         assertEquals(0, env.messenger.splitUnavailableCount)
         assertEquals(0, env.messenger.switchFailedCount)
+        assertEquals(listOf(Notice.AppMissing("YLuncher パネル")), env.messenger.notices)
     }
 
     @Test fun panelSet_lastOpenedPair_rightIsHost() {
@@ -490,6 +752,7 @@ class SetRunnerTest {
             assertFalse(e.warm.isWarm("youtube"))
             assertEquals(0, e.messenger.splitUnavailableCount)
             assertEquals(0, e.messenger.switchFailedCount)
+            assertTrue(e.messenger.notices.isEmpty())
         }
         unchanged()
         e.scheduler.advanceBy(20000)
@@ -677,6 +940,7 @@ class SetRunnerTest {
         assertEquals(FailReason.EntryMissing, env.selector.state.lastFailure)
         assertEquals(listOf(StartAppCall("youtube", false)), env.apps.startAppCalls)
         assertEquals(1, env.messenger.splitUnavailableCount)
+        assertEquals(listOf(Notice.SplitFailed("youtube")), env.messenger.notices)
         assertNull(env.runner.opening.value)
     }
 
@@ -1065,14 +1329,10 @@ class SetRunnerTest {
     ) : LastIndexStore
 
     private class FakeMessenger : Messenger {
-        var splitUnavailableCount = 0
-        var switchFailedCount = 0
-        override fun showSplitUnavailable() {
-            splitUnavailableCount++
-        }
-        override fun showSwitchFailed() {
-            switchFailedCount++
-        }
+        val notices = mutableListOf<Notice>()
+        val splitUnavailableCount get() = notices.count { it is Notice.SplitFailed || it is Notice.SplitUnsupported }
+        val switchFailedCount get() = notices.count { it == Notice.Slow }
+        override fun show(notice: Notice) { notices.add(notice) }
     }
 
     private class TestEnv(
@@ -1081,6 +1341,7 @@ class SetRunnerTest {
         ownTaskExists: () -> Boolean = { true },
         var loading: Boolean = false,
         scope: CoroutineScope? = null,
+        homeVisible: () -> Boolean = { false },
     ) {
         val ownPkg = "com.gt8d.launcher"
         var config = LauncherConfig(
@@ -1110,6 +1371,7 @@ class SetRunnerTest {
         val curtain = CurtainController(scheduler, curtainView)
         var startHomeCount = 0
         val messenger = FakeMessenger()
+        val labels = mutableMapOf<String, String>()
 
         val runner = SetRunner(
             SetRunnerDeps(
@@ -1127,9 +1389,10 @@ class SetRunnerTest {
                 clock = scheduler,
                 ownPkg = ownPkg,
                 panelHostPkg = "com.gt8d.launcher.panel",
-                labelFor = { it },
+                labelFor = { labels[it] ?: it },
                 startHome = { startHomeCount++ },
                 messenger = messenger,
+                homeVisible = homeVisible,
                 scope = scope,
                 updateConfig = { f -> config = f(config) },
             ),
@@ -1204,6 +1467,7 @@ class SetRunnerTest {
 
         assertEquals(listOf(StartAppCall("youtube", false)), env.apps.startAppCalls)
         assertEquals(1, env.messenger.splitUnavailableCount)
+        assertEquals(listOf(Notice.SplitFailed("youtube")), env.messenger.notices)
         assertEquals(SplitMode.LeftOnly, env.selector.current())
         assertNull(env.runner.opening.value)
         assertFalse(env.curtain.isShowing)
@@ -1241,6 +1505,7 @@ class SetRunnerTest {
         assertEquals(0, env.vendor.calls.size)
         assertEquals(listOf(StartAppCall("youtube", false)), env.apps.startAppCalls)
         assertEquals(1, env.messenger.splitUnavailableCount)
+        assertEquals(listOf(Notice.SplitUnsupported("applemusic")), env.messenger.notices)
     }
 
     @Test
@@ -1297,6 +1562,7 @@ class SetRunnerTest {
         assertEquals(listOf(HideReason.Safety), envAvailable.curtainView.hiddenReasons)
         assertEquals(1, envAvailable.selector.state.consecutiveFailures)
         assertEquals(1, envAvailable.messenger.switchFailedCount)
+        assertEquals(listOf(Notice.Slow), envAvailable.messenger.notices)
 
         val envUnavailable = TestEnv(watcherAvailable = false)
         envUnavailable.runner.open(2)

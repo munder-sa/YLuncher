@@ -1,0 +1,4 @@
+write app/src/debug/java/com/gt8d/launcher/debug/DebugPanelReceiver.kt
+write scripts/device-scenarios.sh
+command bash -n scripts/device-scenarios.sh
+command /home/munde/tools/gradle-run.sh assembleDebug

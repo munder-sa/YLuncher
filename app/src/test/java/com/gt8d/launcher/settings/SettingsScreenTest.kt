@@ -52,6 +52,7 @@ class SettingsScreenTest {
     private fun click(id: String) { rule.onNodeWithTag("settings_$id").performScrollTo().performClick() }
     @Test fun root_listsItemsInSpecOrder() {
         host()
+        rule.onNodeWithText("変更は自動で保存されます").assertDoesNotExist()
         rule.onNodeWithTag("settings_item_apppair").assertDoesNotExist()
         var previous = Float.NEGATIVE_INFINITY
         items.forEach { (id, label) ->
@@ -90,7 +91,9 @@ class SettingsScreenTest {
         assertEquals(listOf("exit"), calls)
     }
     @Test fun close_inDetail_exits() {
-        host(); click("item_sets"); rule.onNodeWithTag("settings_close").performClick(); assertEquals(listOf("exit"), calls)
+        host(); click("item_sets"); rule.onNodeWithTag("settings_back").performClick()
+        rule.onNodeWithTag("settings_item_sets").assertIsDisplayed()
+        rule.onNodeWithTag("settings_back").performClick(); assertEquals(listOf("exit"), calls)
     }
     @Test @Config(qualifiers = "w516dp-h1000dp") fun narrowPanel_itemsFit() {
         host(prep = true)

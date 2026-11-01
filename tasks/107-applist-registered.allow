@@ -1,0 +1,9 @@
+write app/src/main/java/com/gt8d/launcher/config/Model.kt
+write app/src/main/java/com/gt8d/launcher/ui/apps/AppList.kt
+write app/src/main/java/com/gt8d/launcher/ui/apps/AppListScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/test/java/com/gt8d/launcher/ui/apps/AppListScreenTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/apps/AppListTest.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigCodecTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.apps.*' --tests 'com.gt8d.launcher.config.*' --tests 'com.gt8d.launcher.ui.panel.*'

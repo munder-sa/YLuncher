@@ -19,7 +19,13 @@ class SettingsActivity : ComponentActivity() {
                     })
                     finish()
                 }, initialRoute = if (intent.getBooleanExtra("open_new_set", false)) SettingsRoute.SetEdit(null, true)
-                    else if (intent.getStringExtra("open_route") == "lists") SettingsRoute.Lists else null,
+                    else when (intent.getStringExtra("open_route")) {
+                        "lists" -> SettingsRoute.Lists
+                        "permissions" -> SettingsRoute.Permissions
+                        "sets" -> SettingsRoute.Sets
+                        "link" -> SettingsRoute.Link
+                        else -> null
+                    },
                     onOpenSet = { AppGraph.runner.open(it); finish() })
             }
         }

@@ -10,6 +10,11 @@ import android.os.Looper
 import android.view.View
 import android.view.MotionEvent
 import android.view.WindowManager
+import android.view.Gravity
+import android.widget.FrameLayout
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.findViewTreeLifecycleOwner
@@ -85,6 +90,53 @@ class EdgeStripServiceTest {
     }
 
     private fun target() = CurtainTarget("test", SlotPreview.Panel, SlotPreview.Panel, SplitRatio.R5_5, 0, 1)
+
+    @Test fun strips_havePersistentWhiteHandlesAndWhiteGlow() {
+        val service = build()
+        val facade = RecordingFacade()
+        service.windowManagerFactory = { facade }
+        service.overlayAllowed = { true }
+        controller!!.create()
+        assertEquals(2, facade.added.size)
+        facade.added.forEachIndexed { index, strip ->
+            val container = strip as FrameLayout
+            assertEquals(1f, container.alpha, 0f)
+            assertEquals(2, container.childCount)
+            val glow = container.getChildAt(0)
+            assertEquals(0f, glow.alpha, 0f)
+            assertEquals(Color.argb(77, 255, 255, 255), (glow.background as ColorDrawable).color)
+            val handle = container.getChildAt(1)
+            assertEquals(View.VISIBLE, handle.visibility)
+            assertEquals(0.25f, handle.alpha, 0f)
+            val params = handle.layoutParams as FrameLayout.LayoutParams
+            assertEquals(4, params.width)
+            assertEquals(96, params.height)
+            assertEquals(Gravity.CENTER_VERTICAL or if (index == 0) Gravity.RIGHT else Gravity.LEFT, params.gravity)
+            assertEquals(if (index == 0) 8 else 0, params.rightMargin)
+            assertEquals(if (index == 0) 0 else 8, params.leftMargin)
+            val background = handle.background as GradientDrawable
+            assertEquals(Color.WHITE, background.color!!.defaultColor)
+            assertEquals(2f, background.cornerRadius, 0f)
+        }
+    }
+
+    @Test fun strips_glowDisabled_keepsHandlesVisibleOnTouch() {
+        EdgeStripService.gestureConfig = oldConfig.copy(glow = false)
+        val service = build()
+        val facade = RecordingFacade()
+        service.windowManagerFactory = { facade }
+        service.overlayAllowed = { true }
+        controller!!.create()
+        facade.added.forEach { strip ->
+            val event = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
+            try { assertTrue(strip.dispatchTouchEvent(event)) } finally { event.recycle() }
+            val container = strip as FrameLayout
+            assertEquals(1f, container.alpha, 0f)
+            assertEquals(0f, container.getChildAt(0).alpha, 0f)
+            assertEquals(0.25f, container.getChildAt(1).alpha, 0f)
+            assertEquals(View.VISIBLE, container.getChildAt(1).visibility)
+        }
+    }
 
     @Test fun ensureRunning_fallback_doesNotStartService() {
         fallback()

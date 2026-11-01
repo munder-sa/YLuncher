@@ -9,6 +9,7 @@ browser=com.android.chrome
 names=(link_cold_noTasks link_browserTaskPresent link_warm_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel set_panelCard_switch link_appPanelFront)
 left_names=(set_leftPanel_cold set_leftPanel_warm leftPanel_launchApp leftPanel_dividerSwap leftPanel_link leftPanel_link_twice set_leftToRightPanel)
 names+=("${left_names[@]}")
+names+=(set_cancel_cold set_cancel_thenOpen)
 while (($#)); do
     case "$1" in
         --with-ylauncher-home) with_home=1; shift ;;
@@ -141,6 +142,9 @@ fi
 adb exec-out run-as com.gt8d.launcher cat files/config.json > "$out/config-backup.json" || { row setup FAIL '設定の退避に失敗'; exit 1; }
 adb shell "run-as com.gt8d.launcher sh -c 'cat files/config.json > files/config-scenario-backup.json'" || { row setup FAIL '端末内の設定の退避に失敗'; exit 1; }
 config_saved=1
+# リンクの行き先の期待値は、端末の設定のブラウザ(link.browserPkg)に合わせる。無ければ Chrome。
+configured_browser=$(sed -n 's/.*"browserPkg":"\([a-zA-Z0-9_.]*\)".*/\1/p' "$out/config-backup.json" | head -n 1)
+[[ -n $configured_browser ]] && browser=$configured_browser
 original_home=$(adb shell cmd role get-role-holders android.app.role.HOME) || exit 1
 original_home=${original_home//$'\r'/}
 [[ $original_home =~ ^[a-zA-Z0-9_.]+$ ]] || { row setup FAIL '現在の既定ホームを単一パッケージとして取得できない'; exit 1; }
@@ -355,9 +359,46 @@ swap_round() {
     check_swap_config "$side" "$active/$label-config.json" || reasons+=("入れ替え後の設定が不一致: panel=$side")
 }
 judge() {
-    local name=$1 right left id top
+    local name=$1 right left id top cancelled reopened ready
     parse_slots "$active/activities.txt" > "$active/slots.txt"
     case "$name" in
+        set_cancel_cold|set_cancel_thenOpen)
+            cancel_guard_count=$(awk '/\[SetRunner\] cancel guard home/ {count++} END {print count+0}' "$active/logcat.txt")
+            cancelled=$(awk '/\[SetRunner\] opening cancelled/ {print NR; exit}' "$active/logcat.txt")
+            if [[ -z $cancelled ]]; then
+                reasons+=('opening cancelled がない')
+            elif [[ $name == set_cancel_cold ]]; then
+                if awk -v cancelled="$cancelled" 'NR>cancelled && /\[SetRunner\] waitBoth ready/ {found=1} END {exit !found}' "$active/logcat.txt"; then
+                    reasons+=('取り消し後に waitBoth ready がある')
+                fi
+                if awk -v cancelled="$cancelled" 'NR>cancelled && /\[Notice\] show/ {found=1} END {exit !found}' "$active/logcat.txt"; then
+                    reasons+=('取り消し後に通知がある')
+                fi
+            else
+                reopened=$(awk -v cancelled="$cancelled" 'NR>cancelled && /\[DebugPanel\] open index=1([^0-9]|$)/ {print NR; exit}' "$active/logcat.txt")
+                if [[ -z $reopened ]]; then
+                    reasons+=('取り消し後に open index=1 がない')
+                else
+                    ready=$(awk -v reopened="$reopened" 'NR>reopened && /\[SetRunner\] waitBoth ready/ {print NR; exit}' "$active/logcat.txt")
+                    if [[ -z $ready ]]; then
+                        reasons+=('次の open index=1 後に waitBoth ready がない')
+                    elif ! ((cancelled < reopened && reopened < ready)); then
+                        reasons+=('取り消し・次の open・ready の順序が不一致')
+                    fi
+                fi
+            fi
+            no_safety
+            if [[ $name == set_cancel_cold ]]; then
+                [[ ! -s $active/slots.txt ]] || reasons+=('分割の枠が残っている')
+                top=$(awk '/topResumedActivity=ActivityRecord\{/ {
+                    for(i=1;i<=NF;i++) if($i ~ /^[A-Za-z0-9_.]+\/[A-Za-z0-9_.$]+$/) {print $i; break}
+                    exit
+                }' "$active/activities.txt")
+                [[ $top == com.gt8d.launcher/.ui.home.HomeActivity || $top == com.gt8d.launcher/com.gt8d.launcher.ui.home.HomeActivity ]] || reasons+=("最前面が HomeActivity でない: ${top:-取得できない}")
+            else
+                split_shown; left_is com.google.android.youtube; right_is com.gt8d.launcher.panel
+            fi
+            ;;
         set_leftPanel_cold|set_leftPanel_warm|set_leftToRightPanel)
             expect_log '\[SetRunner\] waitBoth ready'
             no_safety; split_shown
@@ -461,6 +502,10 @@ judge() {
 prepare_and_run() {
     local name=$1 attempt
     case "$name" in
+        set_cancel_cold|set_cancel_thenOpen)
+            reset cold || return 1
+            adb shell am force-stop com.google.android.youtube || return 1
+            ;;
         set_leftPanel_cold)
             clear_logs || return 1
             panel --es addLeftPanelSet com.google.android.youtube || return 1
@@ -518,6 +563,18 @@ prepare_and_run() {
             ;;
     esac
     case "$name" in
+        set_cancel_cold|set_cancel_thenOpen)
+            panel --ei open 1 || return 1
+            sleep 1.2
+            panel --es cancel 1 || return 1
+            if [[ $name == set_cancel_cold ]]; then
+                sleep 7
+            else
+                sleep 2
+                panel --ei open 1 || return 1
+                sleep 10
+            fi
+            ;;
         set_leftPanel_cold|set_leftPanel_warm) open_left || return 1 ;;
         leftPanel_launchApp) panel --es launch com.google.android.apps.maps && sleep 5 || return 1 ;;
         leftPanel_dividerSwap)
@@ -548,6 +605,7 @@ declare -A scenario_failed=()
 declare -A scenario_runs=()
 run() {
     local name=$1 suffix=$2 version=${3-$2} prerequisite='' key prerequisite_key
+    local cancel_guard_count=0 cancel_guard_note=''
     key="$name$version"
     case "$name" in
         link_browserTaskPresent) prerequisite=link_cold_noTasks ;;
@@ -590,13 +648,18 @@ run() {
     esac
     capture "$active" || reasons+=('ログ・画面の保存に失敗')
     judge "$name"
+    case "$name" in
+        set_cancel_cold|set_cancel_thenOpen) cancel_guard_note="、見張りでホームへ戻した回数=$cancel_guard_count" ;;
+    esac
     last_name=$name; last_suffix=$version; last_pass=0
     if ((${#reasons[@]})); then
-        row "$name$suffix" FAIL "$(IFS=';'; echo "${reasons[*]}")"
+        row "$name$suffix" FAIL "$(IFS=';'; echo "${reasons[*]}")$cancel_guard_note"
         failed=1
     else
         last_pass=1
         case "$name" in
+            set_cancel_cold) row "$name$suffix" PASS "opening cancelled、取り消し後の ready・通知なし、分割枠なし、最前面 HomeActivity、Safety なし$cancel_guard_note" ;;
+            set_cancel_thenOpen) row "$name$suffix" PASS "opening cancelled → 次の open index=1 → waitBoth ready、分割枠2つ、左 YouTube、右 PanelActivity、Safety なし$cancel_guard_note" ;;
             set_leftPanel_cold|set_leftPanel_warm) row "$name$suffix" PASS 'openSplit 左 panel、右 YouTube、waitBoth ready、Safety なし、左最前面 PanelActivity、右最前面 YouTube、placement=Left' ;;
             leftPanel_launchApp) row "$name$suffix" PASS '左 PanelActivity、右最前面 Maps、panelLaunched pkg=com.google.android.apps.maps' ;;
             leftPanel_dividerSwap) row "$name$suffix" PASS '往復の onDoubleTappedDivider、swapSaved、placement、設定の左右と比率が一致' ;;
@@ -648,7 +711,7 @@ for name in "${names[@]}"; do
 done
 if ((with_home)); then
     switch_home com.gt8d.launcher || { row setup FAIL 'YLuncher ホームへの切り替えに失敗'; exit 1; }
-    for name in link_cold_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel set_panelCard_switch link_appPanelFront "${left_names[@]}"; do
+    for name in link_cold_noTasks link_homeTaskPresent link_fromYlHome set_strip_coldPanel set_panelCard_switch link_appPanelFront "${left_names[@]}" set_cancel_cold set_cancel_thenOpen; do
         [[ -z $only || $only == "$name" ]] || continue
         if [[ -n $only ]]; then
             case "$name" in

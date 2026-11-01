@@ -15,11 +15,14 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.width
+import androidx.compose.ui.unit.height
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -28,10 +31,75 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.assert
+import com.gt8d.launcher.ui.home.PanelIconMirrored
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CurtainContentTest {
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun whiteProgressDotsAndAppIconGeometry() {
+        val bitmap = ImageBitmap(96, 96)
+        rule.setContent {
+            CurtainContent(sampleTarget(right = SlotPreview.Panel), true,
+                iconFor = { bitmap })
+        }
+        rule.onNodeWithTag("curtain_progress").assert(SemanticsMatcher.expectValue(CurtainColor, Color.White))
+            .assert(SemanticsMatcher.expectValue(CurtainTrackColor, Color.White.copy(alpha = 0.24f)))
+        rule.onNodeWithTag("curtain_dot_0").assert(SemanticsMatcher.expectValue(CurtainColor, Color.White))
+        rule.onNodeWithTag("curtain_dot_1").assert(SemanticsMatcher.expectValue(CurtainColor, Color.White.copy(alpha = 0.4f)))
+        val icon = rule.onNodeWithTag("curtain_app_icon")
+            .assert(SemanticsMatcher.expectValue(CurtainIconCorner, 8)).getBoundsInRoot()
+        assertEquals(96f, icon.width.value)
+        assertEquals(96f, icon.height.value)
+        val panelBounds = rule.onNode(hasContentDescription("パネル"), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(PanelIconMirrored, false))
+            .getBoundsInRoot()
+        assertEquals(96f, panelBounds.width.value)
+        assertEquals(96f, panelBounds.height.value)
+    }
+
+    @Test fun leftPanelMirrorsAndMissingIconShowsInitial() {
+        rule.setContent { CurtainContent(sampleTarget().copy(left = SlotPreview.Panel), false) }
+        rule.onNode(hasContentDescription("パネル"), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(PanelIconMirrored, true))
+        rule.onNodeWithText("A").assertIsDisplayed()
+        rule.onNodeWithTag("curtain_app_icon").assertDoesNotExist()
+    }
+
+    @Test fun cancel_visibilitySizeCallbackAndStablePositions() {
+        var progress by mutableStateOf(false)
+        var cancellable by mutableStateOf(true)
+        var calls = 0
+        rule.setContent {
+            LauncherTheme {
+                CurtainContent(sampleTarget().copy(cancellable = cancellable), progress,
+                    onCancel = { calls++ })
+            }
+        }
+        rule.onNodeWithTag("curtain_opening").assertTextEquals("開いています").assertIsDisplayed()
+        rule.onNodeWithTag("curtain_cancel").assertDoesNotExist()
+        val tags = listOf("curtain_set_name", "curtain_left", "curtain_right", "curtain_dots")
+        val before = tags.map { rule.onNodeWithTag(it).getBoundsInRoot() }
+        progress = true
+        rule.waitForIdle()
+        val button = rule.onNodeWithTag("curtain_cancel").assertIsDisplayed().assertTextEquals("ホームへ戻る")
+        val bounds = button.getBoundsInRoot()
+        assertTrue(bounds.height.value >= 72f)
+        assertTrue(bounds.width.value >= 72f)
+        button.performClick()
+        assertEquals(1, calls)
+        assertEquals(before, tags.map { rule.onNodeWithTag(it).getBoundsInRoot() })
+        cancellable = false
+        rule.waitForIdle()
+        rule.onNodeWithTag("curtain_cancel").assertDoesNotExist()
+        assertEquals(before, tags.map { rule.onNodeWithTag(it).getBoundsInRoot() })
+    }
 
     @get:Rule(order = 0)
     val registerActivityRule = object : ExternalResource() {

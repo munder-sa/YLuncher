@@ -9,6 +9,9 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.panel.AppInfo
 import com.gt8d.launcher.ui.panel.MediaAction
@@ -20,6 +23,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import org.robolectric.annotation.TextLayoutMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w600dp-h1000dp")
@@ -29,12 +34,15 @@ class HomeMiniPlayerTest {
     private val song = NowPlaying("music", "長い曲名".repeat(30), "アーティスト", null, 120000L, true, true)
     private val idle = AppInfo("idle", "音楽アプリ", null, true)
     private fun host(now: NowPlaying? = song, height: Int = 800, idleApp: AppInfo = idle,
-                     installed: Boolean = true, width: Int = 360,
+                     installed: Boolean = true, width: Int = 360, scale: Float = 1f,
                      onAction: (MediaAction) -> Unit = {}, onSeek: (Long) -> Unit = {}, onLaunch: (String) -> Unit = {}) {
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
-            HomeMiniPlayer(now, idleApp, 30000L, { AppInfo(it, "音楽", null, installed) },
-                onAction, onSeek, onLaunch, Modifier.size(width.dp, height.dp))
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
+                HomeMiniPlayer(now, idleApp, 30000L, { AppInfo(it, "音楽", null, installed) },
+                    onAction, onSeek, onLaunch, Modifier.size(width.dp, height.dp))
+            }
         } }
         controller.visible()
     }
@@ -112,6 +120,7 @@ class HomeMiniPlayerTest {
         rule.onNodeWithText("アプリが見つかりません").assertIsDisplayed()
         rule.onNodeWithTag("player_idle_app").assertHasNoClickAction()
         rule.onNodeWithText("タップで開く").assertDoesNotExist()
+        rule.onNodeWithTag("player_idle_open").assertDoesNotExist()
     }
     @Test fun height400_keepsTitleAndPlay() {
         host(height = 400)
@@ -166,12 +175,33 @@ class HomeMiniPlayerTest {
         assertEquals(centerY("player_play"), centerY("player_next"), 1f)
     }
     @Test fun idle_showsIdleApp_andOpens() {
-        var pkg: String? = null
-        host(null, onLaunch = { pkg = it })
+        val launches = mutableListOf<String>()
+        host(null, onLaunch = { launches.add(it) })
         rule.onNodeWithText("音楽アプリ").assertIsDisplayed()
-        rule.onNodeWithText("タップで開く").assertIsDisplayed()
-        rule.onNodeWithTag("player_idle_app").performClick()
-        assertEquals("idle", pkg)
+        rule.onNodeWithText("再生情報はありません").assertIsDisplayed()
+        rule.onNodeWithTag("player_idle_app").assertHasNoClickAction()
+        rule.onNodeWithTag("player_idle_open").assertHeightIsAtLeast(72.dp).assertWidthIsAtLeast(72.dp).performClick()
+        assertEquals(listOf("idle"), launches)
+        val icon = rule.onNodeWithTag("player_idle_icon", true).fetchSemanticsNode().boundsInRoot
+        val player = rule.onNodeWithTag("home_player").fetchSemanticsNode().boundsInRoot
+        assertEquals(40f * rule.density.density, icon.top - player.top, rule.density.density)
+    }
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
+    fun idle_longNameAtLargeFont_ellipsizesInsideCard() {
+        host(null, idleApp = idle.copy(label = "音".repeat(40)), scale = 1.3f)
+        val player = rule.onNodeWithTag("home_player").fetchSemanticsNode().boundsInRoot
+        val inset = 40f * rule.density.density
+        for (tag in listOf("player_idle_name", "player_idle_open_text")) {
+            val node = rule.onNodeWithTag(tag, true)
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertEquals(1, layouts.single().lineCount)
+            assertTrue(layouts.single().isLineEllipsized(0))
+            val bounds = node.fetchSemanticsNode().boundsInRoot
+            assertTrue(bounds.left >= player.left + inset && bounds.right <= player.right - inset)
+        }
     }
     @Test fun shortHeight_keepsTitleAndControlsVisible() {
         host(height = 480)

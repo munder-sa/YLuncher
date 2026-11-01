@@ -74,6 +74,7 @@ class PanelActivity : ComponentActivity() {
         settingsOpen = savedInstanceState?.getBoolean("settings_open") ?: false
         settingsInitialRoute = if (savedInstanceState?.getBoolean("settings_new_set") == true) SettingsRoute.SetEdit(null, true) else null
         if (savedInstanceState?.getString("settings_route") == "lists") settingsInitialRoute = SettingsRoute.Lists
+        if (savedInstanceState?.getString("settings_route") == "permissions") settingsInitialRoute = SettingsRoute.Permissions
         inSplitState = isInMultiWindowMode
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -136,6 +137,14 @@ class PanelActivity : ComponentActivity() {
                                 settingsInitialRoute = null
                                 settingsOpen = true
                             } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java))
+                        },
+                        onOpenPermissionSettings = {
+                            if (AppGraph.runner.opening.value != null) {
+                                DiagLog.d("Panel", "settings ignored while opening")
+                            } else if (isInMultiWindowMode) {
+                                settingsInitialRoute = SettingsRoute.Permissions
+                                settingsOpen = true
+                            } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_route", "permissions"))
                         },
                         onLaunchComponent = { component ->
                             val succeeded = launchComponent(component, isInMultiWindowMode)
@@ -219,6 +228,7 @@ class PanelActivity : ComponentActivity() {
         outState.putBoolean("settings_open", settingsOpen)
         outState.putBoolean("settings_new_set", (settingsInitialRoute as? SettingsRoute.SetEdit)?.fromSplitButton == true)
         if (settingsInitialRoute == SettingsRoute.Lists) outState.putString("settings_route", "lists")
+        if (settingsInitialRoute == SettingsRoute.Permissions) outState.putString("settings_route", "permissions")
         super.onSaveInstanceState(outState)
     }
 

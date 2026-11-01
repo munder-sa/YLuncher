@@ -35,6 +35,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowToast
+import com.gt8d.launcher.diag.DiagLog
+import com.gt8d.launcher.notice.Notice
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -200,6 +203,10 @@ class LinkEntryActivityTest {
         shadowOf(app.packageManager).addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_VIEW).apply {
             addDataScheme("https"); addDataScheme("http")
         })
+    }
+    // removePackage は intent filter を残し、ブラウザの問い合わせが NPE になるため、activity ごと外す。
+    private fun unregisterBrowser(pkg: String) {
+        shadowOf(app.packageManager).removeActivity(ComponentName(pkg, "$pkg.Main"))
     }
     private fun assertView(intent: Intent?, url: String, pkg: String) {
         assertNotNull(intent)
@@ -387,11 +394,55 @@ class LinkEntryActivityTest {
     }
 
     @Test fun noBrowser_doesNothing() {
-        shadowOf(app.packageManager).removePackage("com.android.chrome")
+        // 出し方(Toast・幕待ち)は NoticeOverlayTest で確かめる。ここでは NoBrowser を渡したことを見る。
+        DiagLog.clearForTest()
+        unregisterBrowser("com.android.chrome")
         flow.value = Defaults.build(emptySet())
         val activity = open("https://example.com")
         assertNull(shadowOf(app).nextStartedActivity)
         assertEquals(0, openForLinkCalls)
+        assertTrue(activity.isFinishing)
+        assertTrue(DiagLog.dump().any { "[Notice] show NoBrowser text=${Notice.NoBrowser.text}" in it })
+    }
+
+    @Test fun noBrowser_afterRouteException_notifies() {
+        // 出し方(Toast・幕待ち)は NoticeOverlayTest で確かめる。ここでは NoBrowser を渡したことを見る。
+        DiagLog.clearForTest()
+        flow.value = Defaults.build(emptySet())
+        depsField.set(AppGraph.runner, savedDeps.copy(config = {
+            unregisterBrowser("com.android.chrome")
+            throw IllegalStateException("route failed")
+        }))
+        val activity = open("https://example.com")
+        assertTrue(DiagLog.dump().any { "[Notice] show NoBrowser text=${Notice.NoBrowser.text}" in it })
+        assertNull(shadowOf(app).nextStartedActivity)
+        assertTrue(activity.isFinishing)
+    }
+
+    class FailingBrowserApplication : Application() {
+        override fun startActivity(intent: Intent) {
+            if (intent.action == Intent.ACTION_VIEW) throw android.content.ActivityNotFoundException("browser failed")
+            super.startActivity(intent)
+        }
+    }
+
+    @Test @Config(application = FailingBrowserApplication::class)
+    fun browserViewFailure_notifies() {
+        flow.value = Defaults.build(emptySet())
+        AppGraph.homeResumed = true
+        val activity = open("https://example.com")
+        assertEquals(Notice.BrowserFailed.text, ShadowToast.getTextOfLatestToast())
+        assertNull(shadowOf(app).nextStartedActivity)
+        assertTrue(activity.isFinishing)
+    }
+
+    @Test @Config(application = FailingBrowserApplication::class)
+    fun browserViewFailure_afterRouteException_notifies() {
+        flow.value = Defaults.build(emptySet())
+        depsField.set(AppGraph.runner, savedDeps.copy(config = { throw IllegalStateException("route failed") }))
+        val activity = open("https://example.com")
+        assertEquals(Notice.BrowserFailed.text, ShadowToast.getTextOfLatestToast())
+        assertNull(shadowOf(app).nextStartedActivity)
         assertTrue(activity.isFinishing)
     }
 

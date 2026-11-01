@@ -1,0 +1,13 @@
+write app/src/main/res/drawable/ic_launcher_foreground.xml
+write app/src/main/res/drawable/ic_launcher_background.xml
+write app/src/main/res/drawable/ic_launcher_monochrome.xml
+write app/src/main/AndroidManifest.xml
+write app/src/main/java/com/gt8d/launcher/edge/EdgeStripService.kt
+create panelhost/src/main/res/drawable/ic_launcher_foreground.xml
+create panelhost/src/main/res/drawable/ic_launcher_background.xml
+create panelhost/src/main/res/drawable/ic_launcher_monochrome.xml
+create panelhost/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+write panelhost/src/main/AndroidManifest.xml
+write panelhost/src/main/res/values/strings.xml
+command /home/munde/tools/gradle-run.sh assembleDebug :panelhost:assembleDebug
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.edge.*'

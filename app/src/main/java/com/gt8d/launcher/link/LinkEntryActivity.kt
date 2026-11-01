@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.gt8d.launcher.AppGraph
+import com.gt8d.launcher.notice.Notice
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.config.LinkConfig
 import com.gt8d.launcher.config.Side
@@ -89,6 +90,7 @@ class LinkEntryActivity : ComponentActivity() {
             val browser = BrowserChooser.choose(config.browserPkg, BrowserChooser.installedBrowsers(packageManager))
             if (browser == null) {
                 DiagLog.d("Link", "no browser")
+                AppGraph.noticeOverlay.show(Notice.NoBrowser)
                 return
             }
             val front = LinkRouter.detectFront(clues, packageName, browser)
@@ -118,7 +120,10 @@ class LinkEntryActivity : ComponentActivity() {
     private fun openWithConfig(url: String, config: LinkConfig) {
         runCatching {
             val browser = BrowserChooser.choose(config.browserPkg, BrowserChooser.installedBrowsers(packageManager))
-            if (browser == null) DiagLog.d("Link", "no browser")
+            if (browser == null) {
+                DiagLog.d("Link", "no browser")
+                AppGraph.noticeOverlay.show(Notice.NoBrowser)
+            }
             else openBrowser(applicationContext, url, browser)
         }.onFailure { DiagLog.d("Link", "browser lookup failed: $it") }
     }
@@ -129,7 +134,10 @@ class LinkEntryActivity : ComponentActivity() {
             runCatching {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))
                     .setPackage(browser).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }.onFailure { DiagLog.d("Link", "browser VIEW failed: $it") }
+            }.onFailure {
+                DiagLog.d("Link", "browser VIEW failed: $it")
+                AppGraph.noticeOverlay.show(Notice.BrowserFailed)
+            }
         }
     }
 }

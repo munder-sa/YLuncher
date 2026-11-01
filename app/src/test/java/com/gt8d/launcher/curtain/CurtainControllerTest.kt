@@ -8,6 +8,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CurtainControllerTest {
+    @Test fun cancel_notifiesOnceAndStopsAllTimers_idleDoesNothing() {
+        val scheduler = FakeScheduler()
+        val view = FakeCurtainView()
+        val controller = CurtainController(scheduler, view)
+        val reasons = mutableListOf<HideReason>()
+        controller.onHidden = { reasons.add(it) }
+        controller.cancel()
+        assertTrue(reasons.isEmpty())
+        assertTrue(view.hiddenReasons.isEmpty())
+        controller.show(sampleTarget(), 3500, true)
+        controller.cancel()
+        controller.cancel()
+        scheduler.advanceBy(5000)
+        assertEquals(listOf(HideReason.Cancelled), reasons)
+        assertEquals(listOf(HideReason.Cancelled), view.hiddenReasons)
+        assertFalse(controller.isShowing)
+        assertEquals(0, view.showProgressCount)
+    }
 
     private class ThrowingShowView : CurtainView {
         var throwNext = true

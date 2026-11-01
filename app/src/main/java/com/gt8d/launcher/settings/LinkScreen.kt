@@ -20,6 +20,7 @@ import com.gt8d.launcher.ui.theme.Dims
 
 @Composable
 fun LinkScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> LauncherConfig) -> Unit) {
+    SettingsAutoSaveNote()
     val pm = LocalContext.current.packageManager
     val browsers = BrowserChooser.installedBrowsers(pm)
     val handlers = pm.queryIntentActivities(

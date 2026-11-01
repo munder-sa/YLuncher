@@ -1,0 +1,7 @@
+write app/src/main/java/com/gt8d/launcher/edge/EdgeStripService.kt
+create app/src/main/java/com/gt8d/launcher/ui/home/HomeHintStore.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/HomeHintStoreTest.kt
+write app/src/test/java/com/gt8d/launcher/edge/EdgeStripServiceTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.edge.*' --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.ui.layout.*'

@@ -14,6 +14,7 @@ import com.gt8d.launcher.ui.theme.Palette
 
 @Composable
 fun BootSettingsScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> LauncherConfig) -> Unit) {
+    SettingsAutoSaveNote()
     SettingsSection {
         Column(Modifier.fillMaxWidth().background(Palette.Panel).padding(16.dp)) {
             Text("車との接続を待ってから前回のセットを開く", fontSize = Dims.BodyText, color = Palette.Muted)

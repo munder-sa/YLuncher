@@ -36,6 +36,7 @@ fun SeekBar(
     val clampedPos = positionMs.coerceIn(0L, duration)
     var dragPos by remember { mutableStateOf<Float?>(null) }
     var endpoint by remember { mutableStateOf<Long?>(null) }
+    var dragged by remember { mutableStateOf(false) }
     val sliderValue = dragPos ?: clampedPos.toFloat()
 
     Box(
@@ -51,7 +52,8 @@ fun SeekBar(
                 value = sliderValue,
                 onValueChange = { dragPos = it },
                 onValueChangeFinished = {
-                    dragPos?.let { onSeek(endpoint ?: it.toLong()) }
+                    if (dragged) dragPos?.let { onSeek(endpoint ?: it.toLong()) }
+                    dragged = false
                     endpoint = null
                     dragPos = null
                 },
@@ -70,9 +72,14 @@ fun SeekBar(
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                             endpoint = null
+                            dragged = false
+                            dragPos = null
                             do {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val pointer = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if ((pointer.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                                    dragged = true
+                                }
                                 endpoint = when {
                                     pointer.position.x <= 1f -> 0L
                                     pointer.position.x >= size.width - 1f -> duration

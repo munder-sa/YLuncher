@@ -317,7 +317,7 @@ class PanelActivityTest {
     }
     @Test fun longPressAppList_inSplit_showsSettingsInPanel() {
         splitPanel(); settingsLongPress()
-        rule.onNodeWithTag("settings_close").assertIsDisplayed()
+        rule.onNodeWithTag("settings_back").assertIsDisplayed()
         assertTrue(controller!!.get().settingsShown)
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }
@@ -333,12 +333,34 @@ class PanelActivityTest {
         assertNull(shadowOf(controller!!.get()).nextStartedActivity)
     }
     @Test fun settings_close_returnsToPanel() {
-        splitPanel(); settingsLongPress(); rule.onNodeWithTag("settings_close").performClick()
+        splitPanel(); settingsLongPress(); rule.onNodeWithTag("settings_back").performClick()
         rule.onNodeWithTag("dock_applist").assertIsDisplayed(); assertFalse(controller!!.get().settingsShown)
     }
     @Test fun settings_survivesRecreate() {
         splitPanel(); settingsLongPress(); controller!!.recreate(); rule.waitForIdle()
         assertTrue(controller!!.get().settingsShown); rule.onNodeWithTag("settings_item_sets").assertIsDisplayed()
+    }
+    @Test fun permissionBanner_inSplit_opensPermissionsAndSurvivesRecreate() {
+        splitPanel()
+        rule.onNodeWithTag("permission_banner").performScrollTo().performClick()
+        rule.onNodeWithText("許可のチェック").assertIsDisplayed()
+        rule.onNodeWithTag("perm_row_Notification").assertExists()
+        assertTrue(controller!!.get().settingsShown)
+        assertNull(shadowOf(controller!!.get()).nextStartedActivity)
+        controller!!.recreate()
+        rule.waitForIdle()
+        assertTrue(controller!!.get().settingsShown)
+        rule.onNodeWithText("許可のチェック").assertIsDisplayed()
+        rule.onNodeWithTag("perm_row_Notification").assertExists()
+    }
+
+    @Test fun permissionBanner_outsideSplit_startsSettingsWithPermissionsRoute() {
+        controller = Robolectric.buildActivity(PanelActivity::class.java).create().start().resume().visible()
+        rule.onNodeWithTag("permission_banner").performScrollTo().performClick()
+        val intent = shadowOf(controller!!.get()).nextStartedActivity
+        assertEquals(com.gt8d.launcher.settings.SettingsActivity::class.java.name, intent?.component?.className)
+        assertEquals("permissions", intent?.getStringExtra("open_route"))
+        assertFalse(controller!!.get().settingsShown)
     }
     @Test fun safetyMode_showsRecovery_andDoesNotForward() {
         activateSafety()

@@ -3,10 +3,13 @@ package com.gt8d.launcher
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
-import android.widget.Toast
+import com.gt8d.launcher.notice.NoticeOverlay
 import com.gt8d.launcher.apps.AppCatalog
+import com.gt8d.launcher.apps.FrequentApp
+import com.gt8d.launcher.apps.UsageHistory
+import com.gt8d.launcher.apps.rankFrequent
+import com.gt8d.launcher.apps.settingsComponent
+import com.gt8d.launcher.apps.HiddenApps
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.boot.BootSequence
 import com.gt8d.launcher.config.ConfigRepository
@@ -23,7 +26,6 @@ import com.gt8d.launcher.foreground.ForegroundWatcher
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
 import com.gt8d.launcher.foreground.WarmTracker
 import com.gt8d.launcher.safety.SafetyGuard
-import com.gt8d.launcher.sets.Messenger
 import com.gt8d.launcher.sets.Opening
 import com.gt8d.launcher.sets.SetRunner
 import com.gt8d.launcher.sets.SetRunnerDeps
@@ -52,6 +54,52 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 object AppGraph {
+    private val _frequentApps = MutableStateFlow<List<FrequentApp>?>(null)
+    val frequentApps: StateFlow<List<FrequentApp>?> = _frequentApps.asStateFlow()
+    private val _usageAvailable = MutableStateFlow(false)
+    val usageAvailable: StateFlow<Boolean> = _usageAvailable.asStateFlow()
+    private var frequentRefreshRunning = false
+    private var frequentTestOverride = false
+
+    @Synchronized
+    internal fun setFrequentAppsForTest(ranked: List<FrequentApp>?, available: Boolean) {
+        frequentTestOverride = true
+        _frequentApps.value = ranked
+        _usageAvailable.value = available
+    }
+
+    @Synchronized
+    internal fun clearFrequentAppsForTest() {
+        frequentTestOverride = false
+        _frequentApps.value = null
+        _usageAvailable.value = false
+    }
+
+    @Synchronized
+    fun refreshFrequentApps() {
+        if (!::app.isInitialized || frequentRefreshRunning || frequentTestOverride) return
+        frequentRefreshRunning = true
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                val history = UsageHistory(app)
+                val available = history.available()
+                val launches = history.launchesSince(System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000)
+                val excluded = setOfNotNull(app.packageName, OwnPackages.PANEL_HOST,
+                    settingsComponent(app.packageManager)?.packageName) + HiddenApps.packages
+                val ranked = launches?.let { rankFrequent(it, catalog.installed() - excluded) }
+                synchronized(this@AppGraph) {
+                    if (!frequentTestOverride) {
+                        _usageAvailable.value = available
+                        _frequentApps.value = ranked
+                    }
+                }
+                DiagLog.d("Frequent", "events=${launches?.size} top=$ranked")
+            } finally {
+                synchronized(this@AppGraph) { frequentRefreshRunning = false }
+            }
+        }
+    }
+
     // 場面テストの受け口からパネルに起動を頼む
     val panelLaunchRequests = MutableSharedFlow<String>(extraBufferCapacity = 4)
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -115,23 +163,13 @@ object AppGraph {
         )
     }
 
+    val noticeOverlay: NoticeOverlay by lazy {
+        NoticeOverlay(app, { curtain.isShowing }, { runner.home() })
+    }
+
     val runner: SetRunner by lazy {
-        val mainHandler = Handler(Looper.getMainLooper())
         val scheduler = MainThreadScheduler()
         val apps = AndroidActivityLauncher(app)
-        val messenger = object : Messenger {
-            override fun showSplitUnavailable() {
-                mainHandler.post {
-                    Toast.makeText(app, "分割が使えなくなりました", Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun showSwitchFailed() {
-                mainHandler.post {
-                    Toast.makeText(app, "切り替えに失敗しました", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
         SetRunner(
             SetRunnerDeps(
                 config = { latestConfig.value },
@@ -155,7 +193,8 @@ object AppGraph {
                     }
                     app.startActivity(intent)
                 },
-                messenger = messenger,
+                messenger = noticeOverlay,
+                homeVisible = { AppGraph.homeResumed },
                 updateConfig = { f -> config.update(f) },
                 scope = applicationScope,
             ),
@@ -248,6 +287,7 @@ object AppGraph {
     @Synchronized
     fun init(app: Application) {
         this.app = app
+        refreshFrequentApps()
         EdgeStripService.listener = { action ->
             when (action) {
                 EdgeAction.Next -> runner.next()
@@ -283,7 +323,11 @@ object AppGraph {
         }
 
         override fun hide(reason: HideReason) {
-            EdgeStripService.curtainView?.hide(reason)
+            try {
+                EdgeStripService.curtainView?.hide(reason)
+            } finally {
+                noticeOverlay.onCurtainHidden(reason)
+            }
         }
     }
 }

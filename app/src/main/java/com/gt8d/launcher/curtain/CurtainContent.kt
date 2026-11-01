@@ -1,6 +1,7 @@
 package com.gt8d.launcher.curtain
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,10 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,12 +39,20 @@ import com.gt8d.launcher.R
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
+import com.gt8d.launcher.ui.home.PanelIcon
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
+
+val CurtainColor = SemanticsPropertyKey<Color>("CurtainColor")
+val CurtainTrackColor = SemanticsPropertyKey<Color>("CurtainTrackColor")
+val CurtainIconCorner = SemanticsPropertyKey<Int>("CurtainIconCorner")
 
 @Composable
 fun CurtainContent(
     target: CurtainTarget,
     showProgress: Boolean,
     iconFor: (String) -> ImageBitmap? = { null },
+    onCancel: () -> Unit = {},
 ) {
     val (leftWeight, rightWeight) = parseRatioWeights(target.ratio)
 
@@ -67,14 +79,22 @@ fun CurtainContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = target.setName,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.testTag("curtain_set_name"),
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = target.setName,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testTag("curtain_set_name"),
+                )
+                Text(
+                    text = "開いています",
+                    fontSize = Dims.BodyText,
+                    color = Palette.Muted,
+                    modifier = Modifier.testTag("curtain_opening"),
+                )
+            }
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -87,6 +107,7 @@ fun CurtainContent(
                 ) {
                     SlotPreviewBlock(
                         slot = target.left,
+                        mirrored = true,
                         iconFor = iconFor,
                         modifier = Modifier
                             .weight(leftWeight)
@@ -107,15 +128,38 @@ fun CurtainContent(
 
                 if (showProgress) {
                     LinearProgressIndicator(
-                        color = Palette.Accent,
-                        trackColor = Palette.Panel,
+                        color = Palette.PanelAccent,
+                        trackColor = Palette.PanelAccent.copy(alpha = 0.24f),
                         modifier = Modifier
                             .width(640.dp)
                             .height(4.dp)
-                            .testTag("curtain_progress"),
+                            .testTag("curtain_progress")
+                            .semantics {
+                                this[CurtainColor] = Palette.PanelAccent
+                                this[CurtainTrackColor] = Palette.PanelAccent.copy(alpha = 0.24f)
+                            },
                     )
                 } else {
                     Spacer(modifier = Modifier.height(4.dp))
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier.height(Dims.MinTouch),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (showProgress && target.cancellable) {
+                        OutlinedButton(
+                            onClick = onCancel,
+                            modifier = Modifier.height(Dims.MinTouch)
+                                .widthIn(min = Dims.MinTouch)
+                                .testTag("curtain_cancel"),
+                            shape = RoundedCornerShape(36.dp),
+                            border = BorderStroke(2.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        ) {
+                            Text("ホームへ戻る", fontSize = Dims.BodyText)
+                        }
+                    }
                 }
             }
 
@@ -127,7 +171,7 @@ fun CurtainContent(
                 val safeCount = target.count.coerceAtLeast(0)
                 for (i in 0 until safeCount) {
                     val dotColor = if (i == target.position) {
-                        Palette.Accent
+                        Palette.PanelAccent
                     } else {
                         Color.White.copy(alpha = 0.4f)
                     }
@@ -135,7 +179,9 @@ fun CurtainContent(
                         modifier = Modifier
                             .size(12.dp)
                             .clip(CircleShape)
-                            .background(dotColor),
+                            .background(dotColor)
+                            .testTag("curtain_dot_$i")
+                            .semantics { this[CurtainColor] = dotColor },
                     )
                 }
             }
@@ -154,6 +200,7 @@ private fun parseRatioWeights(ratio: SplitRatio): Pair<Float, Float> {
 private fun SlotPreviewBlock(
     slot: SlotPreview,
     iconFor: (String) -> ImageBitmap?,
+    mirrored: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -174,7 +221,10 @@ private fun SlotPreviewBlock(
                         Image(
                             bitmap = icon,
                             contentDescription = slot.label,
-                            modifier = Modifier.size(64.dp),
+                            modifier = Modifier.size(96.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .testTag("curtain_app_icon")
+                                .semantics { this[CurtainIconCorner] = 8 },
                         )
                     } else {
                         val initial = slot.label.firstOrNull()?.toString() ?: "?"
@@ -209,20 +259,7 @@ private fun SlotPreviewBlock(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        repeat(3) {
-                            Box(
-                                modifier = Modifier
-                                    .width(12.dp)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Palette.Accent),
-                            )
-                        }
-                    }
+                    PanelIcon(Modifier.size(96.dp), mirrored = mirrored)
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "パネル",

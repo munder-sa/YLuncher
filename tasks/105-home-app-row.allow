@@ -1,0 +1,9 @@
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeSetCards.kt
+create app/src/main/java/com/gt8d/launcher/ui/home/HomeAppRow.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeSetCardsTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/HomeAppRowTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.ui.layout.*'

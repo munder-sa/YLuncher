@@ -1,0 +1,9 @@
+write app/src/main/java/com/gt8d/launcher/curtain/CurtainContent.kt
+write app/src/main/java/com/gt8d/launcher/edge/CurtainWindow.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/BootScreen.kt
+write app/src/test/java/com/gt8d/launcher/curtain/CurtainContentTest.kt
+write app/src/test/java/com/gt8d/launcher/edge/CurtainWindowTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/BootScreenTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.curtain.*' --tests 'com.gt8d.launcher.edge.*' --tests 'com.gt8d.launcher.ui.home.*'
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.curtain.*' --tests 'com.gt8d.launcher.edge.*' --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.layout.*'

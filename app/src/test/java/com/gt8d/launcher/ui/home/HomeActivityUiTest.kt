@@ -71,6 +71,7 @@ class HomeActivityUiTest {
         flow = MutableStateFlow(Defaults.build(emptySet()).copy(
             screenSets = listOf(ScreenSet("home-test", Slot.App(pkg), Slot.Panel)),
             homeApps = listOf(pkg), panelApps = emptyList(), dockApps = emptyList(), idleApp = "example.other.idle",
+            appListPkgs = emptyList(),
         ))
         AppGraph.configFlowForHomeTest = flow
         AppGraph.bootHandled = true
@@ -123,7 +124,9 @@ class HomeActivityUiTest {
         val index = runner.currentIndex
         val scheduler = com.gt8d.launcher.time.FakeScheduler()
         field.set(runner, original.copy(config = { flow.value }, installed = { emptySet() },
-            scheduler = scheduler, clock = scheduler, startHome = {}))
+            scheduler = scheduler, clock = scheduler, startHome = {},
+            // カードの配線(開き始め)を見るため、ホーム表示中の即時完了(Task 099)は外す。
+            homeVisible = { false }))
         try {
             runner.followIndex(0)
             androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
@@ -145,6 +148,16 @@ class HomeActivityUiTest {
         val intent = shadowOf(controller!!.get()).nextStartedActivity
         assertEquals(com.gt8d.launcher.settings.SettingsActivity::class.java.name, intent?.component?.className)
         assertTrue(intent!!.getBooleanExtra("open_new_set", false))
+    }
+    @Test fun homeAppRow_launchesAppWithoutAdjacentFlags() {
+        install()
+        flow.value = flow.value!!.copy(appListPkgs = listOf(pkg))
+        host()
+        rule.onNodeWithTag("home_app_$pkg").performClick()
+        val intent = requireNotNull(shadowOf(controller!!.get()).nextStartedActivity)
+        assertEquals(component, intent.component)
+        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
     }
     @Test fun longPressAppList_startsSettingsActivity() {
         host()
@@ -191,7 +204,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { install() }
         broadcast(Intent.ACTION_PACKAGE_ADDED)
         rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("Home App | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  Home App | パネル"))
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
         assertOpen()
@@ -204,7 +217,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { shadowOf(app.packageManager).removePackage(pkg) }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
         rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("$pkg | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  $pkg | パネル"))
         assertOpen()
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)
@@ -217,7 +230,7 @@ class HomeActivityUiTest {
         rule.runOnIdle { install("Changed Home") }
         broadcast(Intent.ACTION_PACKAGE_CHANGED)
         rule.onNodeWithContentDescription("Changed Home", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("Changed Home | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  Changed Home | パネル"))
         assertSame(config, flow.value)
         assertEquals(listOf(pkg), flow.value!!.homeApps)
         assertSame(media, MediaWatcher.nowPlaying.value)
@@ -230,7 +243,7 @@ class HomeActivityUiTest {
         rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
         rule.runOnIdle { controller!!.pause(); install(); controller!!.resume() }
         rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("Home App | パネル", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  Home App | パネル"))
         assertSame(activity, controller!!.get())
         assertSame(config, flow.value)
         assertSame(media, MediaWatcher.nowPlaying.value)

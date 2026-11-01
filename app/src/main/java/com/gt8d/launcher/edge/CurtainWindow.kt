@@ -20,12 +20,16 @@ import com.gt8d.launcher.curtain.CurtainTarget
 import com.gt8d.launcher.curtain.CurtainView
 import com.gt8d.launcher.curtain.HideReason
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 
 class CurtainWindow(
     private val context: Context,
     private val wm: WindowManagerFacade,
     private val contentFactory: (Context) -> ComposeView = { ComposeView(it) },
     private val readdStrips: () -> Unit = {},
+    private val onCancel: () -> Unit = {},
 ) : CurtainView {
 
     companion object {
@@ -34,6 +38,18 @@ class CurtainWindow(
     }
 
     private val handler = Handler(Looper.getMainLooper())
+    private val iconCache = mutableMapOf<String, ImageBitmap?>()
+
+    internal fun iconFor(pkg: String): ImageBitmap? {
+        if (!iconCache.containsKey(pkg)) {
+            iconCache[pkg] = runCatching {
+                // 表示は 96dp。密度に合わせた画素数で描き、ぼけないようにする。
+                val px = (96 * context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
+                context.packageManager.getApplicationIcon(pkg).toBitmap(px, px).asImageBitmap()
+            }.getOrNull()
+        }
+        return iconCache[pkg]
+    }
     private class WindowSession {
         var view: ComposeView? = null
         var owner: OverlayLifecycleOwner? = null
@@ -69,6 +85,8 @@ class CurtainWindow(
                         CurtainContent(
                             target = currentTarget,
                             showProgress = showProgressState.value,
+                            iconFor = ::iconFor,
+                            onCancel = onCancel,
                         )
                     }
                 }

@@ -5,11 +5,19 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import com.gt8d.launcher.ui.layout.OneLineText
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -20,6 +28,8 @@ import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.config.allowedFor
 import com.gt8d.launcher.ui.theme.Dims
+import com.gt8d.launcher.ui.theme.Palette
+import com.gt8d.launcher.ui.home.PanelIcon
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +91,7 @@ fun SetsScreen(
     onOpenSet: (Int) -> Unit,
     labelFor: (String) -> String,
     launchablePackages: () -> List<String>,
+    iconFor: (String) -> ImageBitmap? = { null },
 ) {
     // null は読み込み中。既存 ID の有無は最初の読み込みが終わってから調べる。
     val sets by store.sets.collectAsState(initial = null)
@@ -105,45 +116,49 @@ fun SetsScreen(
             }
         }
     }
-    if (error) Text("保存できませんでした。もう一度お試しください", fontSize = Dims.BodyText)
+    if (error) Text("保存できませんでした。もう一度お試しください", fontSize = Dims.BodyText, color = Palette.Danger)
     when (route) {
         SettingsRoute.Sets -> {
             var deleting by remember { mutableStateOf<String?>(null) }
-            if (loaded.isEmpty()) Text("セットがありません", fontSize = Dims.BodyText)
+            if (loaded.isEmpty()) Text("セットがありません", fontSize = Dims.BodyText, color = Color.White)
             loaded.forEachIndexed { index, set ->
                 key(set.id) {
-                    BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        val stacked = maxWidth <= 516.dp
-                        val name: @Composable (Modifier) -> Unit = { nameModifier ->
-                            SettingsRow("${when (val left = set.left) {
-                                is Slot.App -> labelFor(left.pkg)
-                                Slot.Panel -> "パネル"
-                            }} | ${when (val right = set.right) {
-                                Slot.Panel -> "パネル"
-                                is Slot.App -> labelFor(right.pkg)
-                            }}", "set_row_${set.id}", { onEdit(set.id) }, modifier = nameModifier, enabled = !busy,
-                                subtitle = set.ratio.label)
-                        }
-                        val controls: @Composable () -> Unit = {
-                            SetButton("▲", "set_up_${set.id}", enabled = !busy && index > 0) {
-                                change({ SetsEdit.moveUp(it, set.id) }, {})
+                    var menu by remember { mutableStateOf(false) }
+                    fun name(slot: Slot) = if (slot is Slot.App) labelFor(slot.pkg) else "パネル"
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp))
+                        .background(Palette.Panel), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1f).heightIn(min = Dims.MinTouch)
+                            .testTag("set_row_${set.id}").clickable(enabled = !busy) { onEdit(set.id) }
+                            // 左端の帯(取っ手)と重ならないよう、番号の前を 24dp 空ける。
+                            .padding(start = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OneLineText("${index + 1}", color = Palette.Muted, fontSize = Dims.BodyText)
+                            listOf(set.left, set.right).forEachIndexed { side, slot ->
+                                val modifier = Modifier.padding(start = if (side == 0) 16.dp else 4.dp).testTag("set_icon_${set.id}_$side")
+                                if (slot == Slot.Panel) PanelIcon(modifier.size(48.dp), mirrored = side == 0)
+                                else SettingsAppIcon(name(slot), iconFor((slot as Slot.App).pkg), modifier)
                             }
-                            SetButton("▼", "set_down_${set.id}", enabled = !busy && index < loaded.lastIndex) {
-                                change({ SetsEdit.moveDown(it, set.id) }, {})
+                            Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                                OneLineText("${name(set.left)} | ${name(set.right)}", color = Color.White, fontSize = Dims.BodyText)
+                                OneLineText(set.ratio.label, color = Palette.Muted, fontSize = Dims.BodyText)
                             }
-                            SetButton("削除", "set_delete_${set.id}", enabled = !busy, kind = SettingsButtonKind.Danger) { deleting = set.id }
                         }
-                        if (stacked) Column {
-                            name(Modifier.fillMaxWidth())
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { controls() }
-                        } else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            name(Modifier.weight(1f))
-                            controls()
+                        Box {
+                            IconButton({ menu = true }, Modifier.size(Dims.MinTouch).testTag("set_menu_${set.id}"), enabled = !busy) {
+                                Icon(Icons.Default.MoreVert, "メニュー", tint = Color.White)
+                            }
+                            DropdownMenu(menu, { menu = false }) {
+                                DropdownMenuItem(text = { Text("上へ") }, modifier = Modifier.heightIn(min = Dims.MinTouch).testTag("set_up_${set.id}"), enabled = !busy && index > 0,
+                                    onClick = { menu = false; change({ SetsEdit.moveUp(it, set.id) }, {}) })
+                                DropdownMenuItem(text = { Text("下へ") }, modifier = Modifier.heightIn(min = Dims.MinTouch).testTag("set_down_${set.id}"), enabled = !busy && index < loaded.lastIndex,
+                                    onClick = { menu = false; change({ SetsEdit.moveDown(it, set.id) }, {}) })
+                                DropdownMenuItem(text = { Text("削除", color = Palette.Danger) }, modifier = Modifier.heightIn(min = Dims.MinTouch).testTag("set_delete_${set.id}"), enabled = !busy,
+                                    onClick = { menu = false; deleting = set.id })
+                            }
                         }
                     }
                 }
             }
-            SetButton("セットを追加", "set_add", Modifier.fillMaxWidth(), enabled = !busy) { onEdit(null) }
+            SetButton("セットを追加", "set_add", Modifier.fillMaxWidth(), enabled = !busy, kind = SettingsButtonKind.Outlined) { onEdit(null) }
             deleting?.let { id ->
                 AlertDialog(onDismissRequest = { deleting = null },
                     text = { Text("このセットを削除しますか?", fontSize = Dims.BodyText) },
@@ -159,10 +174,38 @@ fun SetsScreen(
             if (route.setId != null && original == null) {
                 LaunchedEffect(route) { onMissing() }
             } else key(route) {
-                var draft by remember { mutableStateOf(original?.let(SetDraft::from) ?: SetDraft.new(UUID.randomUUID().toString())) }
+                val initial = remember { original?.let(SetDraft::from) ?: SetDraft.new(UUID.randomUUID().toString()) }
+                var draft by remember { mutableStateOf(initial) }
                 var pickingLeft by remember { mutableStateOf<Boolean?>(null) }
+                var confirming by remember { mutableStateOf(false) }
+                val save = {
+                    val saved = draft.toScreenSet()
+                    confirming = false
+                    change({ SetsEdit.upsert(it, saved) }) { after ->
+                        if (route.fromSplitButton) onOpenSet(after.indexOfFirst { it.id == saved.id } + 1) else onBack()
+                    }
+                }
+                BackHandler {
+                    if (!busy) {
+                        if (pickingLeft != null) pickingLeft = null
+                        else if (draft != initial) confirming = true
+                        else onBack()
+                    }
+                }
+                if (confirming) AlertDialog(
+                    onDismissRequest = { confirming = false },
+                    title = { Text("変更を保存しますか?") },
+                    text = { Text("保存していない変更があります。") },
+                    dismissButton = {
+                        Row {
+                            TextButton({ confirming = false }, Modifier.testTag("set_unsaved_continue")) { Text("続ける") }
+                            TextButton({ confirming = false; onBack() }, Modifier.testTag("set_unsaved_discard")) { Text("破棄", color = Palette.Danger) }
+                        }
+                    },
+                    confirmButton = { SettingsButton("保存", "set_unsaved_save", kind = SettingsButtonKind.Primary,
+                        enabled = !busy && draft.canSave, onClick = save) },
+                )
                 if (pickingLeft != null) {
-                    BackHandler { pickingLeft = null }
                     val ownPkg = LocalContext.current.packageName
                     SetButton("アプリの選択を戻る", "set_pick_back") { pickingLeft = null }
                     launchablePackages().distinct().filterNot { it == ownPkg || it == OwnPackages.PANEL_HOST }.sortedBy(labelFor).forEach { pkg ->
@@ -176,45 +219,52 @@ fun SetsScreen(
                         val slot = if (left) draft.left else draft.right
                         val title = if (left) "左" else "右"
                         val tag = if (left) "set_left" else "set_right"
-                        Text(title, fontSize = Dims.BodyText)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SetButton("パネル", "${tag}_panel", enabled = !busy, selected = slot == Slot.Panel) {
-                                draft = if (left) draft.withLeft(Slot.Panel) else draft.withRight(Slot.Panel)
+                        Text(title, fontSize = Dims.BodyText, color = Palette.Muted)
+                        val highlighted = slot == null && (if (left) draft.right else draft.left) == Slot.Panel
+                        val choices: @Composable () -> Unit = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SetButton("パネル", "${tag}_panel", enabled = !busy, selected = slot == Slot.Panel) {
+                                    draft = if (left) draft.withLeft(Slot.Panel) else draft.withRight(Slot.Panel)
+                                }
+                                SetButton("アプリ", "${tag}_app", enabled = !busy, selected = slot != Slot.Panel) { pickingLeft = left }
                             }
-                            SetButton("アプリ", "${tag}_app", enabled = !busy, selected = slot != Slot.Panel) { pickingLeft = left }
                         }
-                        if (slot != Slot.Panel) {
-                            OneLineText("${title}のアプリ: ${(slot as? Slot.App)?.let { labelFor(it.pkg) } ?: "選んでください"}",
-                                Modifier.testTag("${tag}_label"), fontSize = Dims.BodyText)
+                        val app: @Composable () -> Unit = {
+                            if (slot != Slot.Panel) Column {
+                                val pkg = (slot as? Slot.App)?.pkg
+                                SettingsAppRow(pkg?.let(labelFor) ?: "", pkg?.let(iconFor), tag,
+                                    placeholder = if (pkg == null) "アプリを選んでください" else null,
+                                    highlighted = highlighted, onClick = { if (!busy) pickingLeft = left })
+                                if (highlighted) OneLineText("反対側のアプリを選んでください", fontSize = Dims.BodyText, color = Palette.Muted)
+                            }
+                        }
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            if (maxWidth < 600.dp) Column { choices(); app() }
+                            else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                choices()
+                                Box(Modifier.weight(1f)) { app() }
+                            }
                         }
                     }
                     sideEditor(true)
                     Button(onClick = { draft = draft.swapped() }, enabled = !busy,
                         modifier = Modifier.fillMaxWidth().heightIn(min = Dims.MinTouch).testTag("set_swap"),
-                        colors = ButtonDefaults.buttonColors(containerColor = com.gt8d.launcher.ui.theme.Palette.Control,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Palette.Panel,
                             contentColor = androidx.compose.ui.graphics.Color.White)) {
                         Icon(Icons.Default.SwapHoriz, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         OneLineText("左右を入れ替える")
                     }
                     sideEditor(false)
-                    SplitRatio.entries.filter { it.allowedFor(draft.left ?: Slot.App(""), draft.right ?: Slot.App("")) }.chunked(3).forEach { ratios ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ratios.forEach { ratio ->
-                                SetButton(ratio.label, "set_ratio_${ratio.label}", enabled = !busy, selected = draft.ratio == ratio) {
-                                    draft = draft.copy(ratio = ratio)
-                                }
-                            }
-                        }
-                    }
+                    Text("比率", fontSize = Dims.BodyText, color = Palette.Muted)
+                    val ratios = SplitRatio.entries.filter { it.allowedFor(draft.left ?: Slot.App(""), draft.right ?: Slot.App("")) }
+                    SettingsSegments(ratios.map { it.label to "set_ratio_${it.label}" }, ratios.indexOf(draft.ratio),
+                        { draft = draft.copy(ratio = ratios[it]) }, enabled = !busy)
                     Text("分割に対応していないアプリは、分割できないことがあります",
-                        Modifier.padding(vertical = 8.dp).testTag("set_unresizeable_note"), fontSize = Dims.BodyText)
-                    SettingsButton("保存", "set_save", Modifier.fillMaxWidth(), kind = SettingsButtonKind.Primary, enabled = !busy && draft.canSave) {
-                        val saved = draft.toScreenSet()
-                        change({ SetsEdit.upsert(it, saved) }) { after ->
-                            if (route.fromSplitButton) onOpenSet(after.indexOfFirst { it.id == saved.id } + 1) else onBack()
-                        }
-                    }
+                        Modifier.padding(vertical = 8.dp).testTag("set_unresizeable_note"), fontSize = Dims.BodyText, color = Palette.Muted)
+                    SettingsButton("保存", "set_save", Modifier.fillMaxWidth(), kind = SettingsButtonKind.Primary,
+                        enabled = !busy && draft.canSave, onClick = save)
                 }
             }
         }
