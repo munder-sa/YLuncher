@@ -24,7 +24,7 @@
 - テスト: `app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt`、`app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt`
 
 使ってよいコマンド:
-- `/home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.apps.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.link.*'`
+- `/home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.apps.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.link.*' --tests 'com.gt8d.launcher.split.*'`
 
 ## 仕様
 1. `SplitRedirect.kt`:
