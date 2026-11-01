@@ -4,7 +4,7 @@
 
 **アプリ一覧の上にある「設定」ボタンを押す。または、ドックの一番下の「アプリ一覧」（点が9つのアイコン）を長押しする。** 左パネルではドックが左端、右パネルとホームでは右端にある。分割中はパネル内で設定が開く。
 
-この手順書は [v1.5 導入手順](install-v1.5.md) からの差分。接続・ビルド環境・初回の許可は、同書と [v1.0 導入手順](install-v1.0.md) を使う。以下のコマンドは利用者向けの例で、今回ビルド・インストール・実機テストは実行していない。
+この手順書は [v1.5 導入手順](install-v1.5.md) からの差分。接続・ビルド環境・初回の許可は、同書と [v1.0 導入手順](install-v1.0.md) を使う。2026-11-01 にリリース版を実機に入れ、既定のホームを YLuncher にした(§6)。
 
 ## 1. ビルドとインストール
 
@@ -36,6 +36,14 @@ Android のアプリ設定・ホームの選択・既定のブラウザ・通知
 - 安全モードのホームは「純正ランチャーを開く」「安全モードを解除」の2つのボタンを表示する。自動では純正に移らない。
 - 再生中の曲が無く、最後に再生したアプリのセッションも無いときは、曲名のある一時停止中のセッションから最近更新された曲を表示する。再生情報が無ければ小さな待ち受け表示になり、ホームは「<アプリ名>を開く」、パネルは「開く」で起動できる。未インストールなら「アプリが見つかりません」と表示し、ボタンは出さない。
 
+### Task 100〜109 で変わった見え方
+
+- ホーム(分割していないとき): セットは高さ 104dp の横長カード(番号・左右のアイコン・左右の名前を 2 行)を 2 列。左の列の一番下に、アプリ一覧の「登録アプリ」を 96dp で並べた段があり、指で横にスクロールできる。押すと全画面で開く。
+- ドック: アプリは 5 枠。上の 4 つは最近 7 日によく開いたアプリ(自動。設定「パネルとホーム」で「自分で選ぶ」に切り替え可)、5 つ目は設定アプリ(`com.suding.settings`)で固定。
+- アプリ一覧: 登録したアプリだけ + 最後の「すべてのアプリ」。「編集」で押して登録・解除。最初の登録はパネル・ドック・セットのアプリ + 最近 30 日に使ったアプリから自動で作る。
+- 純正ランチャーと分割アプリ(スプリットスクリーン)は、ドック・アプリ一覧・ホームの段に出ない。純正ランチャーへは設定の「純正ランチャーに戻す」で戻る。
+- 設定は選択・主ボタンが白、ヘッダーは ← だけ。幕・起動画面も白とアイコンの表示。
+
 ## 4. 追加の動作確認・場面テスト
 
 設定の入口、許可の帯の行き先、番号つきの名前、取っ手、ミニプレイヤー、失敗の通知、幕の「ホームへ戻る」を画面で確認する。左右のパネルの作り方と場面テストの準備・結果の場所は [v1.5 手順 §3・§4](install-v1.5.md) と同じ。
@@ -48,6 +56,23 @@ Android のアプリ設定・ホームの選択・既定のブラウザ・通知
 bash scripts/device-scenarios.sh --only set_cancel_cold
 bash scripts/device-scenarios.sh --only set_cancel_thenOpen
 ```
+
+## 6. リリース版の導入(2026-11-01 に実施)
+
+署名鍵のファイル(`keystore.properties`)が無いので、リリース版も debug と同じ署名鍵で作られ、debug 版の上に `install -r` で入る。版は `versionCode 16` / `versionName 1.6`(本体・中継とも)。
+
+```sh
+/home/munde/tools/gradle-run.sh :app:assembleRelease :panelhost:assembleRelease
+adb.exe -s 192.168.137.248:5555 install -r <app/build/outputs/apk/release/app-release.apk の Windows パス>
+adb.exe -s 192.168.137.248:5555 install -r <panelhost/build/outputs/apk/release/panelhost-release.apk の Windows パス>
+adb.exe -s 192.168.137.248:5555 shell cmd notification allow_listener com.gt8d.launcher/com.gt8d.launcher.media.MediaListenerService
+adb.exe -s 192.168.137.248:5555 shell pm grant com.gt8d.launcher android.permission.POST_NOTIFICATIONS
+adb.exe -s 192.168.137.248:5555 shell cmd role add-role-holder android.app.role.HOME com.gt8d.launcher 0
+```
+
+確かめたこと: 通知へのアクセス・使用状況・重ねて表示・Bluetooth・通知の表示が許可済み、既定のホームと既定のブラウザが YLuncher、ホームボタンで YLuncher のホーム、帯のサービスと通知のサービスが動く、セット 1(YouTube | パネル)・セット 2(YouTube | Apple Music)の分割、ドックの設定ボタン。リリース版には場面テスト用の `DebugPanelReceiver` が無いので、場面テストは debug 版で行う。release 版は `run-as` で設定を読めない。導入前の設定の控えは `build/release-1.6/config-before-release.json`。
+
+純正ランチャーをホームに戻すときは `cmd role add-role-holder android.app.role.HOME com.android.launcher3 0`。
 
 ## 5. v1.5 に戻す
 
