@@ -10,6 +10,87 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BootRunnerIntegrationTest {
+    @Test fun warmupAndSplit_completeBeforeOriginalBootDeadline() {
+        val e = Env(); e.stockState.warmedBootId = null
+        e.boot.start(); e.scheduler.advanceBy(3000)
+        assertTrue(e.splitCalls.isEmpty()); assertTrue(e.curtainCalls.isEmpty())
+        assertEquals(listOf(3000L), e.stockStarts)
+        e.scheduler.advanceBy(1499); assertTrue(e.splitCalls.isEmpty())
+        e.scheduler.advanceBy(1); assertEquals(listOf(4500L), e.splitTimes)
+        e.events.add(ResumeEvent("left", 4600)); e.scheduler.advanceBy(3500)
+        assertEquals(1, e.splitCalls.size)
+        e.events.add(ResumeEvent("right", 8001)); e.scheduler.advanceBy(300)
+        assertEquals(BootPhase.Done, e.boot.phase.value); assertEquals(1, e.runner.readyCount)
+        assertTrue(e.homes.isEmpty()); assertTrue(e.curtainCalls.isEmpty())
+        e.scheduler.advanceBy(10000); assertTrue(e.homes.isEmpty())
+    }
+
+    @Test fun abortDuringWarmup_cancelsLateVendorRequest() {
+        val e = Env(); e.stockState.warmedBootId = null
+        e.boot.start(); e.scheduler.advanceBy(3200); e.runner.abortBootToHome()
+        e.scheduler.advanceBy(2000)
+        assertEquals(listOf(3200L), e.homes); assertTrue(e.splitCalls.isEmpty())
+        assertNull(e.stockState.warmedBootId); assertNull(e.stockState.retryWarmupBootId)
+        assertNull(e.runner.opening.value); assertEquals(0, e.runner.readyCount)
+        assertTrue(e.curtainCalls.isEmpty())
+    }
+
+    @Test fun timeout_keepsOriginal10000DeadlineWithoutCurtain() {
+        val e = Env(); e.stockState.warmedBootId = null
+        e.boot.start(); e.scheduler.advanceBy(4500)
+        e.runner.openForBoot(2); e.runner.open(3)
+        e.scheduler.advanceBy(5499); assertTrue(e.homes.isEmpty())
+        e.scheduler.advanceBy(1); e.assertHome(BootPhase.Done)
+        assertEquals(listOf("boot_timeout"), e.records)
+        val calls = e.splitCalls.size
+        e.events.add(ResumeEvent("left", 10001)); e.events.add(ResumeEvent("right", 10001))
+        e.scheduler.advanceBy(20000)
+        e.assertHome(BootPhase.Done); assertEquals(calls, e.splitCalls.size)
+    }
+
+    @Test fun noProgressBootTimeout_requestsRewarmForNextVendor() {
+        val e = Env(); e.stockState.warmedBootId = null
+        e.boot.start(); e.scheduler.advanceBy(10000)
+        assertEquals(e.stockState.bootId, e.stockState.retryWarmupBootId)
+        e.assertHome(BootPhase.Done)
+        val count = e.splitCalls.size; e.runner.openForBoot(1)
+        assertEquals(count, e.splitCalls.size); e.scheduler.advanceBy(1500)
+        assertEquals(count + 1, e.splitCalls.size)
+        assertEquals(listOf(3000L, 10000L), e.stockStarts)
+        assertNull(e.stockState.retryWarmupBootId)
+        // Also cover SetRunner's own wait limit without BootSequence.
+        val internal = Env(); internal.runner.openForBoot(1)
+        internal.scheduler.advanceBy(10000)
+        assertEquals(internal.stockState.bootId, internal.stockState.retryWarmupBootId)
+        assertEquals(0, internal.selector.state.consecutiveFailures)
+        assertTrue(internal.curtainCalls.isEmpty())
+    }
+
+    @Test fun progressOrUnavailableBootTimeout_requestsRewarmOnlyWithMonitoring() {
+        for (kind in listOf("progress", "unavailable", "queryFailure", "cancel")) {
+            val e = Env(); e.stockState.warmedBootId = null
+            e.boot.start(); e.scheduler.advanceBy(4500)
+            when (kind) {
+                "progress" -> e.events.add(ResumeEvent("left", 4600))
+                "unavailable" -> e.available = false
+                "queryFailure" -> e.queryFails = true
+                else -> e.boot.stayHome()
+            }
+            e.scheduler.advanceBy(5500)
+            if (kind == "progress") assertEquals(e.stockState.bootId, e.stockState.retryWarmupBootId)
+            else assertNull(e.stockState.retryWarmupBootId)
+            e.assertHome(if (kind == "cancel") BootPhase.StayedHome else BootPhase.Done)
+        }
+    }
+
+    @Test fun bootRetry_remains3000msAfterSplitRequest() {
+        val e = Env(); e.stockState.warmedBootId = null
+        e.boot.start(); e.scheduler.advanceBy(7499)
+        assertEquals(listOf(4500L), e.splitTimes)
+        e.scheduler.advanceBy(1); assertEquals(listOf(4500L, 7500L), e.splitTimes)
+        assertEquals(listOf(3000L), e.stockStarts); assertTrue(e.curtainCalls.isEmpty())
+    }
+
     @Test
     fun timeout_startsHomeAt10000_andIgnoresLateSuccess() {
         val e = Env()
@@ -64,14 +145,26 @@ class BootRunnerIntegrationTest {
 
     private class Env {
         val scheduler = FakeScheduler()
+        var available = true
+        var queryFails = false
         val events = mutableListOf<ResumeEvent>()
         val watcher = ForegroundWatcher(object : ForegroundEvents {
-            override fun available() = true
-            override fun resumedSince(sinceMs: Long) = events.filter {
-                it.timeMs >= sinceMs && it.timeMs <= scheduler.nowMs()
+            override fun available() = available
+            override fun resumedSince(sinceMs: Long): List<ResumeEvent> {
+                if (queryFails) throw ForegroundEventsUnavailableException()
+                return events.filter { it.timeMs >= sinceMs && it.timeMs <= scheduler.nowMs() }
             }
         })
         val warm = WarmTracker("own") { true }
+        val stockState = object : StockLauncherWarmupState {
+            override val bootId = "count:1"
+            override var warmedBootId: String? = bootId
+            override var retryWarmupBootId: String? = null
+        }
+        val stockStarts = mutableListOf<Long>()
+        val stockWarmup = StockLauncherWarmup(scheduler, scheduler, watcher, stockState, {
+            stockStarts.add(scheduler.nowMs()); true
+        })
         val selector = SplitModeSelector(object : SplitModeStore {
             override fun load() = SplitModeState()
             override fun save(state: SplitModeState) {}
@@ -80,6 +173,7 @@ class BootRunnerIntegrationTest {
         val homes = mutableListOf<Long>()
         val records = mutableListOf<String>()
         val splitCalls = mutableListOf<Pair<String, String>>()
+        val splitTimes = mutableListOf<Long>()
         val curtainCalls = mutableListOf<String>()
         val curtain = CurtainController(scheduler, object : CurtainView {
             override fun show(target: CurtainTarget) { curtainCalls.add("show") }
@@ -99,6 +193,7 @@ class BootRunnerIntegrationTest {
             vendor = object : SplitLauncher {
                 override fun open(left: String, right: String, ratio: SplitRatio): LaunchResult {
                     splitCalls.add(left to right)
+                    splitTimes.add(scheduler.nowMs())
                     return LaunchResult.Started
                 }
             }, appPair = null,
@@ -107,17 +202,22 @@ class BootRunnerIntegrationTest {
                 override fun start(spec: LaunchSpec) {}
                 override fun startApp(pkg: String, adjacent: Boolean): Boolean = throw AssertionError("direct launch")
                 override fun isResizeable(pkg: String) = true
-            }, watcher = watcher, warm = warm, curtain = curtain, scheduler = scheduler, clock = scheduler,
+            }, watcher = watcher, warm = warm, stockLauncherWarmup = stockWarmup,
+            curtain = curtain, scheduler = scheduler, clock = scheduler,
             ownPkg = "own", labelFor = { it }, startHome = { homes.add(scheduler.nowMs()) },
             messenger = object : Messenger {
                 override fun show(notice: com.gt8d.launcher.notice.Notice) = throw AssertionError("message")
             },
         ))
         var readyAtOpen = 0
+        var deadlineReached = false
         val boot = BootSequence(scheduler, { false }, {
             readyAtOpen = runner.readyCount
             runner.openForBoot(lastIndex.lastSetIndex)
-        }, { runner.readyCount > readyAtOpen }, { runner.abortBootToHome() }, { records.add(it) })
+        }, { runner.readyCount > readyAtOpen }, { runner.abortBootToHome(timedOut = deadlineReached) }, {
+            if (it == "boot_timeout") deadlineReached = true
+            records.add(it)
+        })
 
         fun startOpening() {
             boot.start()

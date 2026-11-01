@@ -51,34 +51,60 @@ class CurtainController(
 
     private val timers = mutableListOf<Cancellable>()
     private var viewFailed = false
+    private var preparing = false
+    private var generation = 0L
+    private var safetyTimer: Cancellable? = null
+
+    fun showPreparing(target: CurtainTarget) {
+        showStage(target, 0L, true, true)
+    }
+
+    fun beginWaiting(expectedMs: Long, watcherAvailable: Boolean) {
+        if (!isShowing || !preparing) return
+        preparing = false
+        safetyTimer?.cancel()
+        scheduleWaiting(expectedMs, watcherAvailable)
+    }
 
     fun show(target: CurtainTarget, expectedMs: Long, watcherAvailable: Boolean) {
+        showStage(target, expectedMs, watcherAvailable, false)
+    }
+
+    private fun scheduleWaiting(expectedMs: Long, watcherAvailable: Boolean) {
+        val id = generation
+        safetyTimer = scheduler.schedule(SAFETY_MS) {
+            if (id == generation && !preparing) hide(HideReason.Safety)
+        }.also { timers.add(it) }
+        if (!watcherAvailable) {
+            timers.add(scheduler.schedule(expectedMs) {
+                if (id == generation && !preparing) hide(HideReason.Timed)
+            })
+        }
+    }
+
+    private fun showStage(target: CurtainTarget, expectedMs: Long, watcherAvailable: Boolean, preparation: Boolean) {
         if (isShowing) {
             update(target)
             return
         }
         isShowing = true
+        preparing = preparation
+        val id = ++generation
         try {
             view.show(target)
         } catch (e: Exception) {
             DiagLog.d("Curtain", "show failed: $e")
             viewFailed = true
         }
-        timers.add(
-            scheduler.schedule(SAFETY_MS) {
-                hide(HideReason.Safety)
-            },
-        )
-        if (!watcherAvailable) {
-            timers.add(
-                scheduler.schedule(expectedMs) {
-                    hide(HideReason.Timed)
-                },
-            )
-        }
+        if (id != generation || !isShowing) return
+        if (preparation) {
+            safetyTimer = scheduler.schedule(5500L) {
+                if (id == generation && preparing) hide(HideReason.Safety)
+            }.also { timers.add(it) }
+        } else scheduleWaiting(expectedMs, watcherAvailable)
         timers.add(
             scheduler.schedule(PROGRESS_AFTER_MS) {
-                if (isShowing && !viewFailed) {
+                if (id == generation && isShowing && !viewFailed) {
                     view.showProgress()
                 }
             },
@@ -105,6 +131,8 @@ class CurtainController(
     private fun hide(reason: HideReason) {
         if (!isShowing) return
         isShowing = false
+        preparing = false
+        generation++
         timers.forEach { it.cancel() }
         timers.clear()
         try {

@@ -514,3 +514,32 @@ BootRunnerIntegrationTest:
 - 未実施の実機確認事項と残る制約。
 - 指示書外で決めたことを「決めたこと」にすべて列挙。
   なければ「決めたこと: なし」。
+
+## 追記(1 回目の実行の後。司令塔の判断)
+
+- 前回の作業(未コミットの差分)はそのまま残っている。続きから進める。
+- **§5 の「splitStartMs+1L から検索」はやめる**。再開イベントの検索開始は splitStartMs(ForegroundWatcher の >= のまま)。温めの純正ランチャーの再開は、分割要求の 300ms 以上前(温め完了の待ち)に起きるため、時刻で自然に除外される。既存テストの期待値・イベント時刻は変えない。
+- 温めがあった操作で、温め中に観測した再開(launchAttemptMs〜splitStartMs の間)を進展に数えないことを、新しいテストで確かめる(SetRunnerTest に追加)。
+- 指定のテストを全部追加し、許可のテストコマンドで全件成功させる。失敗が残ったら、件名と原因を報告する。
+- docs/site/img/*.png の更新は司令塔の作業。触らない。
+
+## 追記 2(レビューの結果。司令塔の判断)
+
+1. **再温めの予約条件を変える**。実機の失敗では、純正の SplitActivity が閉じた後に YLuncher のホームが再開し、`ownScreenSeen=true` で「形跡あり」になる(ログ: `retry skipped: progress` → `timeout not counted: progress`)。このため「形跡なしの時間切れ」に限ると、実際の失敗で再温めが働かない。
+   - 新しい条件: **Vendor の分割待ち(vendorWaiting)が、成立(ready)せずに時間切れ(通常・リンクは Safety、Boot は boot clear / 期限による abortBootToHome)になったら、形跡の有無に関係なく requestRewarm()**。監視不能(Timed)・ユーザーの取消・起動失敗・全画面への退避・AppPair では予約しない(従来どおり)。
+   - 113 の失敗計上(形跡があれば数えない)と Slow 通知と 3 秒後の呼び直しの判定は変えない。
+   - テスト: 「Vendor の待ちでホームが再開(形跡あり)したまま Safety → 次の Vendor 要求で温める」を SetRunnerTest に追加。既存の再温めのテストで「形跡あり→予約しない」を確かめているものがあれば、この追記に合わせて期待値を変えてよい(この項目に限り、RULES 4 の例外として許可。変えたテスト名を報告に列挙)。
+2. **Boot の温め中の cancelOpening() を効かせる**(レビュー指摘)。cancelOpening は幕の有無に関係なく、温めの Cancellable を取り消し、操作世代を進め、遅れて Vendor を要求しない・温め済みを記録しないこと。テスト: openForBoot → 温め中に cancelOpening → 時間を進めても launcher.open が呼ばれない。
+
+## 追記 3
+
+- `ownScreenSeen_resetsOnNextOpen` の変更を許可する(RULES 4 の例外)。検証の目的(次の操作で ownScreenSeen 等が初期化されること)は保ち、次の操作で温めが入ることに合わせて、温めの時間を進めてから同じ確認をする形にする。検証の行は減らさない。
+- `cancelOpeningDuringBootWarmup_neverRequestsVendorOrRecordsWarmed` の修正後の再実行を含め、許可のテストコマンドで全件成功を確認して報告する。
+
+## 追記 4(全テストでの失敗)
+
+全テスト(`test assembleDebug`)で `com.gt8d.launcher.link.LinkEntryActivityTest` の 5 件が失敗した(split_callsOpenForLinkWithBrowser, vendorSplitActivity_realOtherApp_stillCounts, split_failed_sendsViewOnce, split_safety_sendsViewOnceAfterActivityDestroyed, missingPreferredBrowser_secondLink_keepsChosenBrowserOrder)。温めが入って Vendor 要求が遅れたためと推測。原因を確かめ、次のどちらかで直す:
+- テストの準備で「このブートは温め済み」の状態にする(AppGraph のテスト用の口、または状態の差し替え)。温めを検証しないテストに限る。
+- 温めの時間を進めてから同じ確認をする。
+期待値・検証の行は変えない(RULES 4)。製品コードの挙動は変えない(テスト用の口の追加は可)。
+許可のコマンドの link 版で link と、前回の範囲の両方を流し、全件成功を報告する。

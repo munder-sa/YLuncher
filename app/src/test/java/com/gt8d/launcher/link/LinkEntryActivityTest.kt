@@ -21,6 +21,8 @@ import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.sets.SetRunnerDeps
 import com.gt8d.launcher.split.SplitModeState
+import com.gt8d.launcher.split.StockLauncherWarmup
+import com.gt8d.launcher.split.StockLauncherWarmupState
 import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.split.VendorBridge
 import java.time.Duration
@@ -236,9 +238,17 @@ class LinkEntryActivityTest {
             override fun available() = true
             override fun resumedSince(sinceMs: Long) = events.filter { it.timeMs in sinceMs..scheduler.nowMs() }
         })
+        val stockState = object : StockLauncherWarmupState {
+            override val bootId = "link-test-boot"
+            override var warmedBootId: String? = bootId
+            override var retryWarmupBootId: String? = null
+        }
         depsField.set(AppGraph.runner, savedDeps.copy(
             config = { flow.value }, installed = { setOf("com.example.mail", "y", "com.android.chrome") },
             watcher = watcher, scheduler = scheduler, clock = scheduler, curtain = curtain,
+            stockLauncherWarmup = StockLauncherWarmup(scheduler, scheduler, watcher, stockState) {
+                error("温め済みのリンクテストでは純正ランチャーを起動しない")
+            },
             warm = WarmTracker(app.packageName) { true }, labelFor = { it }, startHome = {},
             vendor = object : SplitLauncher {
                 override fun open(left: String, right: String, ratio: SplitRatio): LaunchResult {
