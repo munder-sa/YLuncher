@@ -167,6 +167,7 @@ class HomeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppGraph.refreshFrequentApps()
         if (createdInSafety && !SafetyGuard.isFallbackActive(this)) {
             recreate()
             return

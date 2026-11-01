@@ -39,6 +39,32 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class DockTest {
+    @Test fun dock_settingsAfterAppsBeforeHomeAndCallbackAndFallback() {
+        var calls = 0
+        rule.setContent {
+            LauncherTheme {
+                Dock(DockStatus(true, null), listOf(AppInfo("a", "A", null, true)), false,
+                    {}, {}, {}, {}, {}, {}, AppInfo("settings", "設定", null, true), { calls++ })
+            }
+        }
+        val app = rule.onNodeWithTag("dock_app_a").getBoundsInRoot()
+        val settings = rule.onNodeWithTag("dock_settings").assertContentDescriptionEquals("設定")
+            .assertIsDisplayed().getBoundsInRoot()
+        val home = rule.onNodeWithTag("dock_home").getBoundsInRoot()
+        assertTrue(app.bottom <= settings.top && settings.bottom <= home.top)
+        assertTrue(settings.width >= 72.dp && settings.height >= 72.dp)
+        val fallback = rule.onNodeWithTag("dock_settings_fallback", useUnmergedTree = true).getBoundsInRoot()
+        assertEquals(32.dp, fallback.width)
+        assertEquals(32.dp, fallback.height)
+        rule.onNodeWithTag("dock_settings").performClick()
+        assertEquals(1, calls)
+    }
+
+    @Test fun dock_settingsNullIsHidden() {
+        rule.setContent { LauncherTheme { Dock(DockStatus(true, null), emptyList(), false,
+            {}, {}, {}, {}, {}, {}) } }
+        rule.onNodeWithTag("dock_settings").assertDoesNotExist()
+    }
 
     @Test fun dock_setAdd_descriptionAndCallback() {
         var calls = 0

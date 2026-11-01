@@ -50,7 +50,11 @@ data class LauncherConfig(
     val gesture: GestureConfig = GestureConfig(),
     val boot: BootConfig = BootConfig(),
     val panelView: PanelView = PanelView.Apps,
+    val dockMode: DockMode = DockMode.Auto,
 )
+
+@Serializable
+enum class DockMode { Auto, Manual }
 
 @Serializable
 enum class PanelView { Apps, Sets }

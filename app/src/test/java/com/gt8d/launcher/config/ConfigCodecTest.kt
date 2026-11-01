@@ -6,6 +6,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ConfigCodecTest {
+    @Test fun dockMode_legacyAutoAndManualRoundTrip() {
+        val base = Defaults.build(emptySet())
+        val legacy = ConfigCodec.encode(base).replace(",\"dockMode\":\"Auto\"", "")
+        org.junit.Assert.assertFalse(legacy.contains("dockMode"))
+        assertEquals(DockMode.Auto, ConfigCodec.decode(legacy)!!.dockMode)
+        val manual = base.copy(dockMode = DockMode.Manual)
+        assertEquals(manual, ConfigCodec.decode(ConfigCodec.encode(manual)))
+    }
     @Test fun panelView_legacyDefaultsAndSetsRoundTrip() {
         val base = Defaults.build(emptySet())
         val legacy = ConfigCodec.encode(base).replace(",\"panelView\":\"Apps\"", "")

@@ -12,6 +12,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.width
+import androidx.compose.ui.unit.height
 import androidx.core.view.WindowCompat
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.AppGraph
@@ -243,6 +245,46 @@ class LayoutMatrixTest(
 @TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
 class HomeAppLayoutMatrixTest {
     @get:Rule val rule = createEmptyComposeRule()
+
+    @Test fun dockFourAppsAndSettingsFitWithoutScrollingAt726dp() {
+        RuntimeEnvironment.setQualifiers("w1291dp-h726dp")
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        WindowCompat.setDecorFitsSystemWindows(controller.get().window, false)
+        var wide by mutableStateOf(true)
+        val apps = (1..4).map { AppInfo("a$it", "App $it", null, true) }
+        val state = PanelState(null, null, 0L, emptyList(), apps, DockStatus(true, null), false, false,
+            settingsApp = AppInfo("settings", "設定", null, true))
+        val actions = PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        try {
+            controller.get().setContent { LauncherTheme {
+                Box(Modifier.fillMaxSize().testTag("dock_layout_root")) {
+                    if (wide) HomeWideContent(state, actions, Defaults.build(emptySet()),
+                        { AppInfo(it, it, null, true) }, 0, {}, {})
+                    else Box(Modifier.width(516.dp).fillMaxHeight()) { PanelContent(state, actions) }
+                }
+            } }
+            controller.visible()
+            for (homeWide in listOf(true, false)) {
+                rule.runOnIdle { wide = homeWide; Snapshot.sendApplyNotifications() }
+                val root = rule.onNodeWithTag("dock_layout_root").getBoundsInRoot()
+                assertEquals(1291.dp, root.width)
+                assertEquals(726.dp, root.height)
+                val tags = (1..4).map { "dock_app_a$it" } +
+                    listOf("dock_settings", "dock_home", "dock_split", "dock_applist")
+                for (tag in tags) {
+                    val bounds = rule.onNodeWithTag(tag).assertIsDisplayed().getBoundsInRoot()
+                    assertTrue("$tag outside root", bounds.top >= root.top && bounds.bottom <= root.bottom &&
+                        bounds.left >= root.left && bounds.right <= root.right)
+                    assertTrue(bounds.width >= 72.dp && bounds.height >= 72.dp)
+                }
+                val scroll = rule.onAllNodes(hasScrollAction() and hasAnyAncestor(hasTestTag("dock")),
+                    useUnmergedTree = true).fetchSemanticsNodes().single()
+                    .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]
+                assertEquals(0f, scroll.value(), 0f)
+                assertEquals(0f, scroll.maxValue(), 0f)
+            }
+        } finally { controller.pause().stop().destroy() }
+    }
 
     @Test fun wideHome_cardsAndAppsStayInsideTheirViewports() {
         data class Case(val width: Int, val height: Int, val scale: Float,

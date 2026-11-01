@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material.icons.filled.SignalWifi0Bar
 import androidx.compose.material.icons.filled.SignalWifi4Bar
@@ -60,6 +61,8 @@ fun Dock(
     onAppList: () -> Unit,
     onAppListLongPress: () -> Unit,
     onLaunch: (String) -> Unit,
+    settingsApp: AppInfo? = null,
+    onSettings: () -> Unit = {},
 ) {
     Surface(
         color = Palette.Background1,
@@ -120,6 +123,22 @@ fun Dock(
                     app = app,
                     onLaunch = onLaunch,
                 )
+            }
+
+            if (settingsApp != null) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                        .clickable(onClick = onSettings)
+                        .semantics { contentDescription = "設定" }.testTag("dock_settings"),
+                ) {
+                    if (settingsApp.icon != null) {
+                        Image(settingsApp.icon, null, Modifier.size(64.dp))
+                    } else {
+                        Icon(Icons.Default.Settings, null, Modifier.size(32.dp)
+                            .testTag("dock_settings_fallback"), tint = Color.White)
+                    }
+                }
             }
 
             DockIconButton(

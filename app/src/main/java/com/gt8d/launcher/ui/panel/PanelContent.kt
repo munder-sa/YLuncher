@@ -74,6 +74,7 @@ data class PanelState(
     val setAppInfo: (String) -> AppInfo = { AppInfo(it, it, null, false) },
     val placement: PanelPlacement? = null,
     val missingPermissions: List<MissingPermission> = emptyList(),
+    val settingsApp: AppInfo? = null,
 )
 
 data class PanelActions(
@@ -90,6 +91,7 @@ data class PanelActions(
     val onSelectView: (PanelView) -> Unit = {},
     val onOpenSet: (Int) -> Unit = {},
     val onNewSet: () -> Unit = {},
+    val onSettings: () -> Unit = {},
 )
 
 @Composable
@@ -162,6 +164,8 @@ fun PanelContent(
                     onAppList = actions.onAppList,
                     onAppListLongPress = actions.onAppListLongPress,
                     onLaunch = actions.onLaunch,
+                    settingsApp = state.settingsApp,
+                    onSettings = actions.onSettings,
                 )
             }
         }

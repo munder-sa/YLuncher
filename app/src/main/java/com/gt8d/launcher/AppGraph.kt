@@ -5,6 +5,11 @@ import android.app.Application
 import android.content.Intent
 import com.gt8d.launcher.notice.NoticeOverlay
 import com.gt8d.launcher.apps.AppCatalog
+import com.gt8d.launcher.apps.FrequentApp
+import com.gt8d.launcher.apps.UsageHistory
+import com.gt8d.launcher.apps.rankFrequent
+import com.gt8d.launcher.apps.settingsComponent
+import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.boot.BootSequence
 import com.gt8d.launcher.config.ConfigRepository
@@ -49,6 +54,45 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 object AppGraph {
+    private val _frequentApps = MutableStateFlow<List<FrequentApp>?>(null)
+    val frequentApps: StateFlow<List<FrequentApp>?> = _frequentApps.asStateFlow()
+    private val _usageAvailable = MutableStateFlow(false)
+    val usageAvailable: StateFlow<Boolean> = _usageAvailable.asStateFlow()
+    private var frequentRefreshRunning = false
+    private var frequentTestOverride = false
+
+    @Synchronized
+    internal fun setFrequentAppsForTest(ranked: List<FrequentApp>?, available: Boolean) {
+        frequentTestOverride = true
+        _frequentApps.value = ranked
+        _usageAvailable.value = available
+    }
+
+    @Synchronized
+    fun refreshFrequentApps() {
+        if (!::app.isInitialized || frequentRefreshRunning || frequentTestOverride) return
+        frequentRefreshRunning = true
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                val history = UsageHistory(app)
+                val available = history.available()
+                val launches = history.launchesSince(System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000)
+                val excluded = setOfNotNull(app.packageName, OwnPackages.PANEL_HOST,
+                    STOCK_LAUNCHER_ENTRY.pkg, settingsComponent(app.packageManager)?.packageName)
+                val ranked = launches?.let { rankFrequent(it, catalog.installed() - excluded) }
+                synchronized(this@AppGraph) {
+                    if (!frequentTestOverride) {
+                        _usageAvailable.value = available
+                        _frequentApps.value = ranked
+                    }
+                }
+                DiagLog.d("Frequent", "events=${launches?.size} top=$ranked")
+            } finally {
+                synchronized(this@AppGraph) { frequentRefreshRunning = false }
+            }
+        }
+    }
+
     // 場面テストの受け口からパネルに起動を頼む
     val panelLaunchRequests = MutableSharedFlow<String>(extraBufferCapacity = 4)
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -236,6 +280,7 @@ object AppGraph {
     @Synchronized
     fun init(app: Application) {
         this.app = app
+        refreshFrequentApps()
         EdgeStripService.listener = { action ->
             when (action) {
                 EdgeAction.Next -> runner.next()

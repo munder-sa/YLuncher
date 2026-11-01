@@ -29,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.stockLauncherIntent
+import com.gt8d.launcher.apps.dockAppsFor
+import com.gt8d.launcher.apps.settingsComponent
 import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.media.positionAt
@@ -69,6 +71,11 @@ fun PanelScreen(
     val now by MediaWatcher.nowPlaying.collectAsState()
     var showAppList by rememberSaveable { mutableStateOf(false) }
     val environment = rememberPanelEnvironment(AppGraph.catalog)
+    val frequent by AppGraph.frequentApps.collectAsState()
+    val settings = remember(context, environment.revision) { settingsComponent(context.packageManager) }
+    val settingsApp = remember(settings, environment.revision) {
+        settings?.let { AppInfo(it.packageName, "設定", AppGraph.catalog.icon(it.packageName), true) }
+    }
 
     val appListGridState = rememberLazyGridState()
 
@@ -119,7 +126,8 @@ fun PanelScreen(
     val installedPkgs = environment.installedPkgs
     val idleApp = catalog.info(config.idleApp, installedPkgs)
     val panelApps = config.panelApps.map { catalog.info(it, installedPkgs) }
-    val dockApps = config.dockApps.map { catalog.info(it, installedPkgs) }
+    val dockApps = dockAppsFor(config.dockMode, config.dockApps, frequent, installedPkgs,
+        setOfNotNull(settings?.packageName)).map { catalog.info(it, installedPkgs) }
 
     val state = PanelState(
         placement = placement,
@@ -132,6 +140,7 @@ fun PanelScreen(
         showCar = AppGraph.bridge.carHomeAvailable,
         needsPermission = environment.needsPermission,
         missingPermissions = environment.missingPermissions,
+        settingsApp = settingsApp,
     )
 
     val actions = PanelActions(
@@ -153,6 +162,12 @@ fun PanelScreen(
         onAppList = { showAppList = true },
         onAppListLongPress = onOpenSettings,
         onOpenPermissions = onOpenPermissionSettings,
+        onSettings = {
+            settings?.let { component ->
+                if (onLaunchComponent != null) onLaunchComponent(component)
+                else AndroidActivityLauncher(context).startComponent(component, adjacent = inSplit)
+            }
+        },
     )
 
     if (homeWide) {
@@ -214,7 +229,8 @@ internal fun HomeWideContent(
             HomeMiniPlayer(state.now, state.idleApp, state.positionMs, appInfo, actions.onMediaAction,
                 actions.onSeek, actions.onLaunch, Modifier.width(playerWidth.dp).fillMaxHeight())
             Dock(state.dockStatus, state.dockApps, state.showCar, actions.onHome, actions.onSplit,
-                actions.onCar, actions.onAppList, actions.onAppListLongPress, actions.onLaunch)
+                actions.onCar, actions.onAppList, actions.onAppListLongPress, actions.onLaunch,
+                state.settingsApp, actions.onSettings)
         }
     }
 }

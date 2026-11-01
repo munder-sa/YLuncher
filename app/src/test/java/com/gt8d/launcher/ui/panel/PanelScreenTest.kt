@@ -50,6 +50,40 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun dockAutoUsesRankingAndManualUsesConfiguredOrder() {
+        install()
+        val other = "example.other"
+        val pm = Shadows.shadowOf(app.packageManager)
+        val component = ComponentName(other, "$other.Main")
+        pm.addOrUpdateActivity(ActivityInfo().apply { packageName = other; name = component.className })
+        pm.addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        })
+        AppGraph.setFrequentAppsForTest(listOf(com.gt8d.launcher.apps.FrequentApp(other, 5),
+            com.gt8d.launcher.apps.FrequentApp(pkg, 3)), true)
+        var config by androidx.compose.runtime.mutableStateOf(Defaults.build(emptySet()).copy(dockApps = listOf(pkg, other)))
+        rule.setContent { LauncherTheme { PanelScreen(false, homeConfig = config, onLaunchApp = {}) } }
+        fun top(p: String) = rule.onNodeWithTag("dock_app_$p").getBoundsInRoot().top
+        assertTrue(top(other) < top(pkg))
+        rule.runOnIdle { config = config.copy(dockMode = com.gt8d.launcher.config.DockMode.Manual) }
+        assertTrue(top(pkg) < top(other))
+    }
+
+    @Test fun dockSettingsResolvesWithoutLauncherCatalogEntryAndLaunchesComponent() {
+        val component = ComponentName("system.settings", "system.settings.Main")
+        val pm = Shadows.shadowOf(app.packageManager)
+        pm.addOrUpdateActivity(ActivityInfo().apply {
+            packageName = component.packageName; name = component.className
+        })
+        pm.addIntentFilterForActivity(component, IntentFilter(Settings.ACTION_SETTINGS).apply {
+            addCategory(Intent.CATEGORY_DEFAULT)
+        })
+        assertFalse(component.packageName in AppGraph.catalog.installed())
+        var launched: ComponentName? = null
+        rule.setContent { LauncherTheme { PanelScreen(true, onLaunchComponent = { launched = it }, onLaunchApp = {}) } }
+        rule.onNodeWithTag("dock_settings").performClick()
+        assertEquals(component, launched)
+    }
     @Test fun wideHome_appsAreBelowSetsAtBottomOfLeftColumn() {
         val config = Defaults.build(emptySet()).copy(panelApps = listOf(pkg))
         rule.setContent {
