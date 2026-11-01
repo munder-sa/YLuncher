@@ -36,3 +36,11 @@ Task 105 でワイドのホームの左の列の一番下に `HomeAppRow`(パネ
 
 ## 報告
 変更点、テストの結果(件数)、置き換えた既存テスト、**決めたこと**。
+
+## 追記(実装前レビューの反映。本文より優先)
+- 型: 表示用は `val registered: Set<String> = (config.appListPkgs ?: seed).toSet()`。トグルの保存は今どおりリスト(`it.appListPkgs ?: seed`)。
+- 既存テスト `appList_nullSeedsOnceToggleSurvivesRecomposeAndReopen`(PanelScreenTest)は、「パネルを出すと seed の保存が済む(一覧を開く前に待つ)→ その後の再描画・一覧の開閉では保存し直さない」を確かめる形に変えてよい(RULES の例外としてこの Task で許可)。
+- 「1 回だけ保存」= 保存に成功した後は、再描画・一覧の開閉・ホームの再表示で保存し直さない。保存前の表示は履歴なしの seed、保存後は保存した値(最近 30 日を含む)で、内容が変わってよい。空のリスト `[]` は上書きしない(今のまま)。
+- `LayoutMatrixTest` の今のワイドのホームの場面(パラメータの表と別の viewport のテスト)は、`homeEntries` に登録アプリを入れる形に直し、今の画面の大きさ・文字の倍率・許可の帯の条件はそのまま。そのうえで 0 / 3 / 12 個を足す。
+- スクロールの確かめ方: 段に `performScrollToIndex`(または `performScrollToKey`)で最後へ動かし、最後のアイコン全体が段の中にあることを確かめる。別に、段の上での横のスワイプ(`performTouchInput { swipeLeft() }`)で最初のアイコンの位置が動くことも確かめる。
+- スクロールの位置は、`PanelScreen` の中の、アプリ一覧で早く return する所より前で `rememberLazyListState()` を作って `HomeAppRow` に渡す(引数 `state: LazyListState = rememberLazyListState()` を足す)。アプリ一覧を開いて閉じた後も位置が残ることをテストする。
