@@ -24,6 +24,7 @@ class StockLauncherTest {
         val expected = stockLauncherIntent()
         assertEquals(expected.component, received!!.component)
         assertEquals(expected.action, received!!.action)
+        assertEquals(expected.categories, received!!.categories)
         assertEquals(expected.flags, received!!.flags)
     }
 
@@ -33,6 +34,11 @@ class StockLauncherTest {
         }
         assertFalse(startStockLauncher(context))
     }
+    @Test
+    fun stockLauncherIntent_hasHomeCategory() {
+        assertTrue(stockLauncherIntent().hasCategory(Intent.CATEGORY_HOME))
+    }
+
     @Test
     fun stockLauncherIntent_explicitComponent() {
         val intent = stockLauncherIntent()

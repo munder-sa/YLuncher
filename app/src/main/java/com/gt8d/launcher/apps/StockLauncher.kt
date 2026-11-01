@@ -15,6 +15,7 @@ fun startStockLauncher(context: Context): Boolean = try {
 
 fun stockLauncherIntent(): Intent {
     return Intent(Intent.ACTION_MAIN).apply {
+        addCategory(Intent.CATEGORY_HOME)
         component = ComponentName(
             "com.android.launcher3",
             "com.android.launcher3.uioverrides.QuickstepLauncher",
