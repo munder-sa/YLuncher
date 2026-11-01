@@ -71,6 +71,7 @@ class HomeActivityUiTest {
         flow = MutableStateFlow(Defaults.build(emptySet()).copy(
             screenSets = listOf(ScreenSet("home-test", Slot.App(pkg), Slot.Panel)),
             homeApps = listOf(pkg), panelApps = emptyList(), dockApps = emptyList(), idleApp = "example.other.idle",
+            appListPkgs = emptyList(),
         ))
         AppGraph.configFlowForHomeTest = flow
         AppGraph.bootHandled = true
@@ -150,7 +151,7 @@ class HomeActivityUiTest {
     }
     @Test fun homeAppRow_launchesAppWithoutAdjacentFlags() {
         install()
-        flow.value = flow.value!!.copy(panelApps = listOf(pkg))
+        flow.value = flow.value!!.copy(appListPkgs = listOf(pkg))
         host()
         rule.onNodeWithTag("home_app_$pkg").performClick()
         val intent = requireNotNull(shadowOf(controller!!.get()).nextStartedActivity)

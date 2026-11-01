@@ -68,6 +68,7 @@ class LayoutMatrixTest(
             AppInfo("idle", "Apple Music", null, true), 10000L, apps, apps.take(4),
             DockStatus(true, true), true, true, view = view, sets = Defaults.build(emptySet()).screenSets,
             placement = if (leftPlacement) com.gt8d.launcher.split.PanelPlacement.Left else null,
+            homeEntries = apps.map { com.gt8d.launcher.ui.apps.AppListEntry(it.pkg, "${it.pkg}.Main", it.label) },
         ))
         val actions = PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
         var pixelsPerDp = 0f
@@ -296,6 +297,10 @@ class HomeAppLayoutMatrixTest {
             Case(840, 600, 1f, true, 6, 0),
             Case(840, 600, 1.3f, true, 8, 5),
             Case(840, 600, 1f, false, 5, 1),
+            Case(1291, 726, 1f, false, 5, 0),
+            Case(1291, 726, 1f, false, 5, 3),
+            Case(1291, 726, 1f, false, 5, 12),
+            Case(840, 600, 1.3f, true, 8, 12),
         )
         for (case in cases) {
             RuntimeEnvironment.setQualifiers("w${case.width}dp-h${case.height}dp")
@@ -307,7 +312,8 @@ class HomeAppLayoutMatrixTest {
             })
             val apps = (1..case.apps).map { AppInfo("a$it", "名前$it", null, true) }
             val state = PanelState(null, AppInfo("idle", "Music", null, true), 0L, apps, emptyList(),
-                DockStatus(true, true), false, case.banner)
+                DockStatus(true, true), false, case.banner,
+                homeEntries = apps.map { com.gt8d.launcher.ui.apps.AppListEntry(it.pkg, "${it.pkg}.Main", it.label) })
             try {
                 controller.get().setContent { LauncherTheme {
                     CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, case.scale)) {
@@ -345,6 +351,7 @@ class HomeAppLayoutMatrixTest {
                     val row = rule.onNodeWithTag("home_apps").getBoundsInRoot()
                     assertEquals(rule.onNodeWithTag("home_player").getBoundsInRoot().bottom, row.bottom)
                     for (app in apps) {
+                        rule.onNodeWithTag("home_apps").performScrollToIndex(apps.indexOf(app))
                         val node = rule.onNodeWithTag("home_app_${app.pkg}")
                         if (case.width == 1291 && !case.banner && case.apps == 5) {
                             val before = node.assertIsDisplayed().getBoundsInRoot()

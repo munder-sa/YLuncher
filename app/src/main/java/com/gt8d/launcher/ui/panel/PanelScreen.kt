@@ -3,6 +3,8 @@ package com.gt8d.launcher.ui.panel
 import android.content.ComponentName
 import android.os.SystemClock
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,8 @@ import com.gt8d.launcher.media.positionAt
 import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.ui.apps.AppListScreen
+import com.gt8d.launcher.ui.apps.AppListEntry
+import com.gt8d.launcher.ui.apps.registeredEntries
 import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
 import com.gt8d.launcher.ui.apps.seedAppList
 import com.gt8d.launcher.ui.apps.toggleRegistered
@@ -80,31 +84,43 @@ fun PanelScreen(
     }
 
     val appListGridState = rememberLazyGridState()
+    val homeAppRowState = rememberLazyListState()
+    val launchEntry: (AppListEntry) -> Unit = { entry ->
+        if (entry == STOCK_LAUNCHER_ENTRY) {
+            runCatching { context.startActivity(stockLauncherIntent()) }
+        } else {
+            val component = ComponentName(entry.pkg, entry.cls)
+            if (onLaunchComponent != null) onLaunchComponent(component)
+            else AndroidActivityLauncher(context).startComponent(component, adjacent = inSplit)
+        }
+    }
 
-    if (showAppList) {
-        val launchable = environment.appListEntries.map { it.pkg }.toSet()
-        val seed = seedAppList(config, emptySet(), launchable)
-        LaunchedEffect(homeConfig != null || latestConfig != null, config.appListPkgs) {
-            if ((homeConfig != null || latestConfig != null) && config.appListPkgs == null) {
-                try {
-                    val recent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        com.gt8d.launcher.apps.UsageHistory(context)
-                            .launchesSince(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
-                            ?.map { it.pkg }?.toSet() ?: emptySet()
-                    }
-                    AppGraph.config.update { cur ->
-                        if (cur.appListPkgs != null) cur
-                        else cur.copy(appListPkgs = seedAppList(cur, recent, launchable))
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    DiagLog.d("Panel", "app list seed save failed: $e")
+    val launchable = environment.appListEntries.map { it.pkg }.toSet()
+    val seed = seedAppList(config, emptySet(), launchable)
+    val registered: Set<String> = (config.appListPkgs ?: seed).toSet()
+    LaunchedEffect(homeConfig != null || latestConfig != null, config.appListPkgs) {
+        if ((homeConfig != null || latestConfig != null) && config.appListPkgs == null) {
+            try {
+                val recent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.gt8d.launcher.apps.UsageHistory(context)
+                        .launchesSince(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
+                        ?.map { it.pkg }?.toSet() ?: emptySet()
                 }
+                AppGraph.config.update { cur ->
+                    if (cur.appListPkgs != null) cur
+                    else cur.copy(appListPkgs = seedAppList(cur, recent, launchable))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                DiagLog.d("Panel", "app list seed save failed: $e")
             }
         }
+    }
+
+    if (showAppList) {
         AppListScreen(
-            registered = (config.appListPkgs ?: seed).toSet(),
+            registered = registered,
             onToggle = { pkg ->
                 scope.launch {
                     try {
@@ -121,18 +137,7 @@ fun PanelScreen(
             entries = environment.appListEntries,
             iconFor = { pkg -> AppGraph.catalog.icon(pkg) },
             onLaunch = { entry ->
-                if (entry == STOCK_LAUNCHER_ENTRY) {
-                    runCatching {
-                        context.startActivity(stockLauncherIntent())
-                    }
-                } else {
-                    val component = ComponentName(entry.pkg, entry.cls)
-                    if (onLaunchComponent != null) {
-                        onLaunchComponent(component)
-                    } else {
-                        AndroidActivityLauncher(context).startComponent(component, adjacent = inSplit)
-                    }
-                }
+                launchEntry(entry)
                 showAppList = false
             },
             onClose = { showAppList = false },
@@ -176,6 +181,7 @@ fun PanelScreen(
         needsPermission = environment.needsPermission,
         missingPermissions = environment.missingPermissions,
         settingsApp = settingsApp,
+        homeEntries = registeredEntries(environment.appListEntries, registered),
     )
 
     val actions = PanelActions(
@@ -190,6 +196,7 @@ fun PanelScreen(
         },
         onSeek = { ms -> MediaWatcher.seekTo(ms) },
         onLaunch = onLaunchApp,
+        onLaunchEntry = launchEntry,
         onAdd = onEditLists,
         onHome = { AppGraph.runner.home() },
         onSplit = { if (AppGraph.runner.opening.value == null) onNewSet() },
@@ -208,7 +215,7 @@ fun PanelScreen(
     if (homeWide) {
         val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
         HomeWideContent(state, actions, config, { catalog.info(it, installedPkgs) }, currentIndex,
-            onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet)
+            onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet, homeAppRowState = homeAppRowState)
     } else {
         val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
         PanelContent(state = state.copy(view = pending ?: config.panelView,
@@ -241,6 +248,7 @@ internal fun HomeWideContent(
     currentIndex: Int,
     onOpen: (Int) -> Unit,
     onNewSet: () -> Unit,
+    homeAppRowState: LazyListState = rememberLazyListState(),
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val playerWidth = PanelLayout.homePlayerWidthDp(maxWidth.value)
@@ -254,10 +262,10 @@ internal fun HomeWideContent(
                     HomeClockHeader(clockHeight)
                     HomeSetCards(config.screenSets, appInfo, currentIndex, onOpen, onNewSet,
                         Modifier.fillMaxWidth().weight(1f))
-                    if (state.panelApps.isNotEmpty()) {
+                    if (state.homeEntries.isNotEmpty()) {
                         com.gt8d.launcher.ui.home.HomeAppRow(
-                            state.panelApps.take(com.gt8d.launcher.config.MAX_PANEL_APPS), actions.onLaunch,
-                            Modifier.fillMaxWidth())
+                            state.homeEntries, { appInfo(it).icon }, actions.onLaunchEntry,
+                            Modifier.fillMaxWidth(), state = homeAppRowState)
                     }
                 }
             }

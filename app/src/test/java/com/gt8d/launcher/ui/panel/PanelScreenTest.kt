@@ -10,6 +10,7 @@ import android.net.Uri
 import android.net.wifi.WifiManager
 import android.bluetooth.BluetoothAdapter
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.unit.dp
 import android.os.Process
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -91,10 +92,7 @@ class PanelScreenTest {
 
     @Test fun appList_nullSeedsOnceToggleSurvivesRecomposeAndReopen() {
         install()
-        host()
-        assertNull(AppGraph.latestConfig.value!!.appListPkgs)
-        openList()
-        rule.onNodeWithTag("applist_$pkg").assertIsDisplayed()
+        host(appListPkgs = null)
         rule.waitUntil(5000L) { AppGraph.latestConfig.value?.appListPkgs == listOf(pkg) }
         val configFile = AppGraph.config.javaClass.getDeclaredField("file").let {
             it.isAccessible = true
@@ -103,6 +101,8 @@ class PanelScreenTest {
         val savedAt = configFile.lastModified()
         val savedText = configFile.readText()
         broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        openList()
+        rule.onNodeWithTag("applist_$pkg").assertIsDisplayed()
         rule.onNodeWithTag("applist_close").performClick()
         openList()
         rule.runOnIdle {
@@ -136,7 +136,8 @@ class PanelScreenTest {
         rule.onNodeWithTag("applist_$pkg").assertIsDisplayed()
     }
     @Test fun wideHome_appsAreBelowSetsAtBottomOfLeftColumn() {
-        val config = Defaults.build(emptySet()).copy(panelApps = listOf(pkg))
+        install()
+        val config = Defaults.build(emptySet()).copy(appListPkgs = listOf(pkg))
         rule.setContent {
             LauncherTheme { PanelScreen(false, homeWide = true, homeConfig = config, onLaunchApp = {}) }
         }
@@ -148,10 +149,92 @@ class PanelScreenTest {
         assertEquals(sets.right, apps.right)
         assertEquals(player.bottom, apps.bottom)
     }
-    @Test fun wideHome_emptyPanelAppsHasNoAppRow() {
+    @Test fun wideHome_registeredOrderMatchesListAndLaunchesComponents() {
+        install(); install("$pkg.B", "Label B")
+        val stock = com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
+        val config = Defaults.build(emptySet()).copy(panelApps = emptyList(),
+            appListPkgs = listOf(pkg, stock.pkg))
+        rule.setContent { LauncherTheme {
+            PanelScreen(false, homeWide = true, homeConfig = config, onLaunchApp = { launches.add(it) })
+        } }
+        val stockBounds = rule.onNodeWithTag("home_app_${stock.pkg}").fetchSemanticsNode().boundsInRoot
+        val home = rule.onAllNodesWithTag("home_app_$pkg").fetchSemanticsNodes()
+        assertEquals(2, home.size)
+        assertTrue(stockBounds.left < home[0].boundsInRoot.left)
+        assertTrue(home[0].boundsInRoot.left < home[1].boundsInRoot.left)
+        rule.onAllNodesWithTag("home_app_$pkg")[1].assertContentDescriptionEquals("Label B").performClick()
+        val intent = requireNotNull(Shadows.shadowOf(app).nextStartedActivity)
+        assertEquals(ComponentName(pkg, "$pkg.B"), intent.component)
+        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+        assertTrue(launches.isEmpty())
+        rule.onNodeWithTag("home_app_${stock.pkg}").performClick()
+        assertEquals(ComponentName(stock.pkg, stock.cls), Shadows.shadowOf(app).nextStartedActivity?.component)
+        openList()
+        val stockList = rule.onNodeWithTag("applist_${stock.pkg}").fetchSemanticsNode().boundsInRoot
+        val entries = rule.onAllNodesWithTag("applist_$pkg").fetchSemanticsNodes()
+        assertEquals(2, entries.size)
+        assertTrue(stockList.top <= entries[0].boundsInRoot.top)
+        rule.onAllNodesWithTag("applist_$pkg")[0].assert(hasText("Label A"))
+        rule.onAllNodesWithTag("applist_$pkg")[1].assert(hasText("Label B"))
+    }
+
+    @Test fun wideHome_seedSavedOnceAndUnregisterRemovesRow() {
+        install()
+        val expected = Defaults.build(emptySet()).copy(panelApps = listOf(pkg))
+        runBlocking { AppGraph.config.update { expected } }
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value == expected }
+        rule.setContent { LauncherTheme { PanelScreen(false, homeWide = true, onLaunchApp = {}) } }
+        rule.onNodeWithTag("home_app_$pkg").assertIsDisplayed()
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.appListPkgs == listOf(pkg) }
+        val file = AppGraph.config.javaClass.getDeclaredField("file").let {
+            it.isAccessible = true; it.get(AppGraph.config) as java.io.File
+        }
+        val saved = file.readText()
+        val savedAt = file.lastModified()
+        broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        openList()
+        rule.onNodeWithTag("applist_close").performClick()
+        rule.onNodeWithTag("home_app_$pkg").assertIsDisplayed()
+        assertEquals(saved, file.readText())
+        assertEquals(savedAt, file.lastModified())
+        openList()
+        rule.onNodeWithTag("applist_edit").performClick()
+        rule.onNodeWithTag("applist_$pkg").performClick()
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.appListPkgs == emptyList<String>() }
+        rule.onNodeWithTag("applist_done").performClick()
+        rule.onNodeWithTag("applist_close").performClick()
+        rule.onNodeWithTag("home_apps").assertDoesNotExist()
+    }
+
+    @Test fun wideHome_scrollSurvivesRecomposeAndAppList() {
+        repeat(12) { install("$pkg.Entry$it", "Scroll %02d".format(it)) }
+        val config = Defaults.build(emptySet()).copy(appListPkgs = listOf(pkg))
+        rule.setContent { LauncherTheme {
+            PanelScreen(false, homeWide = true, homeConfig = config, onLaunchApp = {})
+        } }
+        rule.onNodeWithTag("home_apps").performScrollToIndex(11)
+        fun position() = rule.onNodeWithTag("home_apps").fetchSemanticsNode()
+            .config[SemanticsProperties.HorizontalScrollAxisRange].value()
+        val before = position()
+        assertTrue(before > 0f)
+        broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        assertEquals(before, position(), 0f)
+        openList()
+        rule.onNodeWithTag("applist_close").performClick()
+        assertEquals(before, position(), 0f)
+        val area = rule.onNodeWithTag("home_apps").getBoundsInRoot()
+        val last = rule.onAllNodesWithTag("home_app_$pkg").fetchSemanticsNodes().last().boundsInRoot
+        val row = rule.onNodeWithTag("home_apps").fetchSemanticsNode().boundsInRoot
+        assertTrue(last.left >= row.left && last.right <= row.right &&
+            last.top >= row.top && last.bottom <= row.bottom)
+        assertEquals(96.dp, area.bottom - area.top)
+    }
+
+    @Test fun wideHome_emptyRegistrationHasNoAppRow() {
         rule.setContent {
             LauncherTheme { PanelScreen(false, homeWide = true,
-                homeConfig = Defaults.build(emptySet()).copy(panelApps = emptyList()), onLaunchApp = {}) }
+                homeConfig = Defaults.build(emptySet()).copy(panelApps = listOf(pkg), appListPkgs = emptyList()), onLaunchApp = {}) }
         }
         rule.onNodeWithTag("home_apps").assertDoesNotExist()
     }
@@ -310,11 +393,12 @@ class PanelScreenTest {
         pm.getInternalMutablePackageInfo(pkg).applicationInfo?.nonLocalizedLabel = "Label A"
         pm.addIntentFilterForActivity(cn, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
     }
-    private fun host(split: Boolean = false, onComponent: ((ComponentName) -> Unit)? = null) {
+    private fun host(split: Boolean = false, onComponent: ((ComponentName) -> Unit)? = null,
+                     appListPkgs: List<String>? = listOf(pkg)) {
         val wasInstalled = pkg in AppGraph.catalog.installed()
         if (!wasInstalled) install()
         val latest = AppGraph.latestConfig
-        val expected = Defaults.build(emptySet()).copy(panelApps = listOf(pkg))
+        val expected = Defaults.build(emptySet()).copy(panelApps = listOf(pkg), appListPkgs = appListPkgs)
         runBlocking { AppGraph.config.update { expected } }
         rule.waitUntil(5000L) { latest.value == expected }
         if (!wasInstalled) Shadows.shadowOf(app.packageManager).removePackage(pkg)

@@ -4,12 +4,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.InspectableValue
 import androidx.compose.ui.platform.isDebugInspectorInfoEnabled
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
-import com.gt8d.launcher.ui.panel.AppInfo
+import com.gt8d.launcher.ui.apps.AppListEntry
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.*
 import org.junit.Assert.*
@@ -24,12 +23,12 @@ import org.robolectric.annotation.Config
 class HomeAppRowTest {
     @get:Rule val rule = createEmptyComposeRule()
     private lateinit var controller: ActivityController<ComponentActivity>
-    private fun host(width: Int = 700, count: Int = 5, installed: Boolean = true,
-                     onLaunch: (String) -> Unit = {}) {
+    private fun host(width: Int = 700, count: Int = 5,
+                     onLaunch: (AppListEntry) -> Unit = {}) {
         isDebugInspectorInfoEnabled = true
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
-            HomeAppRow((1..count).map { AppInfo("p$it", "名前$it", null, installed) }, onLaunch, Modifier.width(width.dp))
+            HomeAppRow((1..count).map { AppListEntry("p$it", "p$it.Main", "名前$it") }, { null }, onLaunch, Modifier.width(width.dp))
         } }
         controller.visible()
     }
@@ -37,60 +36,55 @@ class HomeAppRowTest {
         if (::controller.isInitialized) controller.pause().stop().destroy()
         isDebugInspectorInfoEnabled = false
     }
-    @Test fun fiveApps_are96dpLeftAlignedWithCalculatedGap() {
+    @Test fun fiveApps_are96dpLeftAlignedWith24dpGap() {
         host()
         val row = rule.onNodeWithTag("home_apps").getBoundsInRoot()
-        var previousRight = row.left.value - 48f
+        var previousRight = row.left.value - 24f
         for (i in 1..5) {
             val icon = rule.onNodeWithTag("home_app_p$i").assertWidthIsEqualTo(96.dp)
                 .assertHeightIsEqualTo(96.dp).getBoundsInRoot()
-            assertEquals(48f, icon.left.value - previousRight, 0f)
+            assertEquals(24f, icon.left.value - previousRight, 0f)
             previousRight = icon.right.value
             assertTrue(icon.right <= row.right)
         }
     }
-    @Test fun click_launchesPackage_andNoIconShowsInitial() {
-        val launches = mutableListOf<String>()
+    @Test fun click_launchesEntry_andNoIconShowsInitial() {
+        val launches = mutableListOf<AppListEntry>()
         host(count = 1, onLaunch = { launches.add(it) })
         rule.onNodeWithText("名", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("home_app_p1").assertContentDescriptionEquals("名前1").performClick()
-        assertEquals(listOf("p1"), launches)
+        assertEquals(listOf(AppListEntry("p1", "p1.Main", "名前1")), launches)
     }
-    @Test fun missingApp_hasAlphaAndDescription_andDoesNotLaunch() {
-        val launches = mutableListOf<String>()
-        host(count = 1, installed = false, onLaunch = { launches.add(it) })
-        val icon = rule.onNodeWithTag("home_missing_p1")
-            .assertContentDescriptionEquals("名前1(アプリが見つかりません)").performClick()
-        assertTrue(launches.isEmpty())
-        val alpha = icon.fetchSemanticsNode().layoutInfo.getModifierInfo().mapNotNull {
-            (it.modifier as? InspectableValue)?.takeIf { it.nameFallback == "graphicsLayer" }
-                ?.inspectableElements?.firstOrNull { value -> value.name == "alpha" }?.value
+    @Test fun twelveApps_scrollToLastWhole96dpIcon() {
+        host(width = 300, count = 12)
+        val row = rule.onNodeWithTag("home_apps")
+        for (i in 1..12) {
+            row.performScrollToIndex(i - 1)
+            val node = rule.onNodeWithTag("home_app_p$i").assertIsDisplayed()
+            node.assertWidthIsEqualTo(96.dp).assertHeightIsEqualTo(96.dp)
+            val bounds = node.getBoundsInRoot()
+            val area = row.getBoundsInRoot()
+            assertTrue(bounds.left >= area.left && bounds.right <= area.right &&
+                bounds.top >= area.top && bounds.bottom <= area.bottom)
         }
-        assertEquals(listOf(0.4f), alpha)
     }
-    @Test fun width400_shrinksIconsWith8dpGaps() {
-        host(width = 400)
-        for (i in 1..5) rule.onNodeWithTag("home_app_p$i").assertWidthIsEqualTo(73.6.dp)
-        val a = rule.onNodeWithTag("home_app_p1").getBoundsInRoot()
-        val b = rule.onNodeWithTag("home_app_p2").getBoundsInRoot()
-        assertEquals(8f, b.left.value - a.right.value, 1f)
+    @Test fun narrowRow_swipeMovesFirstIconWithoutShrinking() {
+        host(width = 300, count = 12)
+        val first = rule.onNodeWithTag("home_app_p1").assertWidthIsEqualTo(96.dp)
+        val before = first.getBoundsInRoot().right
+        rule.onNodeWithTag("home_app_p2").assertWidthIsEqualTo(96.dp)
+        rule.onNodeWithTag("home_apps").performTouchInput {
+            swipeLeft(startX = centerX, endX = centerX - 60f, durationMillis = 1000L)
+        }
+        assertTrue(first.getBoundsInRoot().right < before)
+        assertTrue(rule.onNodeWithTag("home_apps").fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.HorizontalScrollAxisRange].value() > 0f)
     }
-    @Test fun width600_usesCalculated30dpGap() {
+    @Test fun width600_uses24dpGap() {
         host(width = 600)
-        for (i in 1..5) rule.onNodeWithTag("home_app_p$i").assertWidthIsEqualTo(96.dp)
-        val a = rule.onNodeWithTag("home_app_p1").getBoundsInRoot()
-        val b = rule.onNodeWithTag("home_app_p2").getBoundsInRoot()
-        assertEquals(30f, b.left.value - a.right.value, 0f)
-    }
-    @Test fun narrowRow_scrollsToLastWhole72dpIcon() {
-        host(width = 300)
-        val row = rule.onNodeWithTag("home_apps").getBoundsInRoot()
-        for (i in 1..5) {
-            val node = rule.onNodeWithTag("home_app_p$i").performScrollTo().assertIsDisplayed()
-            node.assertWidthIsEqualTo(72.dp).assertHeightIsEqualTo(72.dp)
-            val b = node.getBoundsInRoot()
-            assertTrue(b.left >= row.left && b.right <= row.right)
-        }
+        val a = rule.onNodeWithTag("home_app_p1").assertWidthIsEqualTo(96.dp).getBoundsInRoot()
+        val b = rule.onNodeWithTag("home_app_p2").assertWidthIsEqualTo(96.dp).getBoundsInRoot()
+        assertEquals(24f, b.left.value - a.right.value, 0f)
     }
     @Test fun oneApp_is96dpAtLeft() {
         host(count = 1)
