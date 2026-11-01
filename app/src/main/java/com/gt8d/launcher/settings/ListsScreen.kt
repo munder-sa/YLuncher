@@ -121,7 +121,7 @@ fun ListsScreen(
             val max = limit(key)
             val full = max != null && list.size >= max
             DailyButton("追加", "${prefix}add", Modifier.fillMaxWidth(), enabled = !full) { picking = key }
-            if (full) Text("最大 $max 個まで", fontSize = Dims.BodyText)
+            if (full) Text("最大 $max 個まで", color = Palette.Muted, fontSize = Dims.BodyText)
         }
         if (key == "dock" && settingsApp != null) {
             Row(Modifier.fillMaxWidth().padding(16.dp).testTag("lists_dock_settings_row")) {
@@ -130,7 +130,7 @@ fun ListsScreen(
             }
         }
     }
-    Text("停止中に表示するアプリ", Modifier.padding(vertical = 8.dp), fontSize = Dims.BodyText)
+    Text("停止中に表示するアプリ", Modifier.padding(vertical = 8.dp), color = Palette.Muted, fontSize = Dims.BodyText)
     OneLineText(labelFor(config.idleApp), Modifier.testTag("lists_idle_row_${config.idleApp}"), fontSize = Dims.BodyText)
     DailyButton("変更", "lists_idle_change", Modifier.fillMaxWidth()) { picking = "idle" }
 }

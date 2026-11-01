@@ -17,6 +17,7 @@ import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.LinkMode
 import com.gt8d.launcher.link.BrowserChooser
 import com.gt8d.launcher.ui.theme.Dims
+import com.gt8d.launcher.ui.theme.Palette
 
 @Composable
 fun LinkScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> LauncherConfig) -> Unit) {
@@ -59,9 +60,9 @@ fun LinkScreen(config: LauncherConfig, onUpdate: ((LauncherConfig) -> LauncherCo
                     })
             }
         }
-        if (browsers.isEmpty()) Text("ブラウザが入っていません", fontSize = Dims.BodyText)
+        if (browsers.isEmpty()) Text("ブラウザが入っていません", color = Palette.Muted, fontSize = Dims.BodyText)
         if (actual != null && actual != config.link.browserPkg) {
-            Text("実際に使うブラウザ: ${label(actual)}", fontSize = Dims.BodyText)
+            Text("実際に使うブラウザ: ${label(actual)}", color = Palette.Muted, fontSize = Dims.BodyText)
         }
     }
 }
