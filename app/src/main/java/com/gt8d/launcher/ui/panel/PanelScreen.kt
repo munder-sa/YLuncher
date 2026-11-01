@@ -36,6 +36,8 @@ import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.ui.apps.AppListScreen
 import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
+import com.gt8d.launcher.ui.apps.seedAppList
+import com.gt8d.launcher.ui.apps.toggleRegistered
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
@@ -73,7 +75,35 @@ fun PanelScreen(
     val appListGridState = rememberLazyGridState()
 
     if (showAppList) {
+        val launchable = environment.appListEntries.map { it.pkg }.toSet()
+        val seed = seedAppList(config, emptySet(), launchable)
+        LaunchedEffect(homeConfig != null || latestConfig != null, config.appListPkgs) {
+            if ((homeConfig != null || latestConfig != null) && config.appListPkgs == null) {
+                try {
+                    AppGraph.config.update { cur ->
+                        if (cur.appListPkgs != null) cur
+                        else cur.copy(appListPkgs = seedAppList(cur, emptySet(), launchable))
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    DiagLog.d("Panel", "app list seed save failed: $e")
+                }
+            }
+        }
         AppListScreen(
+            registered = (config.appListPkgs ?: seed).toSet(),
+            onToggle = { pkg ->
+                scope.launch {
+                    try {
+                        AppGraph.config.update { it.copy(appListPkgs = toggleRegistered(it.appListPkgs ?: seed, pkg)) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        DiagLog.d("Panel", "app list toggle save failed: $e")
+                    }
+                }
+            },
             gridState = appListGridState,
             iconRevision = environment.revision.toInt(),
             entries = environment.appListEntries,

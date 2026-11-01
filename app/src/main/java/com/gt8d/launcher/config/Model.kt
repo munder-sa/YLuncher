@@ -50,6 +50,7 @@ data class LauncherConfig(
     val gesture: GestureConfig = GestureConfig(),
     val boot: BootConfig = BootConfig(),
     val panelView: PanelView = PanelView.Apps,
+    val appListPkgs: List<String>? = null,
 )
 
 @Serializable

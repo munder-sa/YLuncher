@@ -50,6 +50,52 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun appList_nullSeedsOnceToggleSurvivesRecomposeAndReopen() {
+        install()
+        host()
+        assertNull(AppGraph.latestConfig.value!!.appListPkgs)
+        openList()
+        rule.onNodeWithTag("applist_$pkg").assertIsDisplayed()
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.appListPkgs == listOf(pkg) }
+        val configFile = AppGraph.config.javaClass.getDeclaredField("file").let {
+            it.isAccessible = true
+            it.get(AppGraph.config) as java.io.File
+        }
+        val savedAt = configFile.lastModified()
+        val savedText = configFile.readText()
+        broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        rule.onNodeWithTag("applist_close").performClick()
+        openList()
+        rule.runOnIdle {
+            assertEquals(savedText, configFile.readText())
+            assertEquals(savedAt, configFile.lastModified())
+        }
+        rule.onNodeWithTag("applist_edit").performClick()
+        rule.onNodeWithTag("applist_$pkg").performClick()
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.appListPkgs == emptyList<String>() }
+        rule.onNodeWithTag("applist_done").performClick()
+        rule.onNodeWithTag("applist_$pkg").assertDoesNotExist()
+        rule.onNodeWithTag("applist_close").performClick()
+        openList()
+        broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        rule.onNodeWithTag("applist_$pkg").assertDoesNotExist()
+        assertEquals(emptyList<String>(), AppGraph.latestConfig.value!!.appListPkgs)
+    }
+
+    @Test fun appList_emptyRegistrationIsNotSeededAndToggleIsSaved() {
+        install()
+        runBlocking { AppGraph.config.update { Defaults.build(emptySet()).copy(panelApps = listOf(pkg), appListPkgs = emptyList()) } }
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.appListPkgs == emptyList<String>() }
+        rule.setContent { LauncherTheme { PanelScreen(false, onLaunchApp = {}) } }
+        openList()
+        rule.onNodeWithTag("applist_$pkg").assertDoesNotExist()
+        assertEquals(emptyList<String>(), AppGraph.latestConfig.value!!.appListPkgs)
+        rule.onNodeWithTag("applist_edit").performClick()
+        rule.onNodeWithTag("applist_$pkg").performClick()
+        rule.waitUntil(5000L) { AppGraph.latestConfig.value?.appListPkgs == listOf(pkg) }
+        rule.onNodeWithTag("applist_done").performClick()
+        rule.onNodeWithTag("applist_$pkg").assertIsDisplayed()
+    }
     @Test fun wideHome_appsAreBelowSetsAtBottomOfLeftColumn() {
         val config = Defaults.build(emptySet()).copy(panelApps = listOf(pkg))
         rule.setContent {
@@ -229,8 +275,9 @@ class PanelScreenTest {
         val wasInstalled = pkg in AppGraph.catalog.installed()
         if (!wasInstalled) install()
         val latest = AppGraph.latestConfig
-        runBlocking { AppGraph.config.update { Defaults.build(emptySet()).copy(panelApps = listOf(pkg)) } }
-        rule.waitUntil(5000L) { latest.value?.panelApps == listOf(pkg) }
+        val expected = Defaults.build(emptySet()).copy(panelApps = listOf(pkg))
+        runBlocking { AppGraph.config.update { expected } }
+        rule.waitUntil(5000L) { latest.value == expected }
         if (!wasInstalled) Shadows.shadowOf(app.packageManager).removePackage(pkg)
         rule.setContent {
             owner = androidx.compose.runtime.remember { PanelTestLifecycle().also { it.resume() } }
@@ -247,6 +294,7 @@ class PanelScreenTest {
         rule.waitForIdle()
     }
     private fun choose(label: String) {
+        rule.onNodeWithTag("applist_all").performClick()
         rule.onNode(hasText(label) and hasClickAction()).performClick()
     }
     @Test fun panelScreen_appListSelection_notifiesComponentCallbackOnce() {
@@ -324,6 +372,7 @@ class PanelScreenTest {
     }
     @Test fun panelScreen_openAppList_updatesAfterPackageChange() {
         host(); openList()
+        rule.onNodeWithTag("applist_all").performClick()
         rule.onNodeWithText("Label A").assertDoesNotExist()
         rule.runOnIdle { install() }
         broadcast(Intent.ACTION_PACKAGE_ADDED)
@@ -336,6 +385,8 @@ class PanelScreenTest {
     @Test fun panelScreen_radioChange_keepsAppListScroll() {
         repeat(150) { install("$pkg.Entry$it", "Scroll %03d".format(it)) }
         host(); openList()
+        rule.onNode(hasScrollToIndexAction()).performScrollToIndex(150)
+        rule.onNodeWithTag("applist_all").performClick()
         val grid = rule.onNode(hasScrollToIndexAction())
         grid.performScrollToIndex(90)
         fun position() = grid.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
