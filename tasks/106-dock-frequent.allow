@@ -16,3 +16,6 @@ write app/src/test/java/com/gt8d/launcher/config/ConfigCodecTest.kt
 write app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt
 write app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
 command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.apps.*' --tests 'com.gt8d.launcher.config.*' --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.layout.*'
+write app/src/main/AndroidManifest.xml
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt
+create app/src/test/java/com/gt8d/launcher/apps/UsageHistoryTest.kt

@@ -58,3 +58,16 @@
 
 ## 報告
 変更点、テストの結果(件数)、置き換えた既存テスト、**決めたこと**。
+
+## 追記(実装前レビューの反映。本文より優先)
+- 更新の契機は「`AppGraph.init`」「`HomeActivity.onResume`」「設定の『パネルとホーム』を開いたとき」の 3 つだけ(`onLaunchApp` の後に呼ぶのはやめる。`HomeActivity.kt` は onResume の所だけ)。集計は非同期で、終わった時点で並びが変わってよい(ホームが出た直後に入れ替わるのは許す)。
+- 設定アプリのパッケージは、4 つの枠(Auto の順位・Auto の埋め・Manual)のどれにも入れない。`dockAppsFor(..., exclude: Set<String>)` を足して除く。Manual の選択の候補からも除く。設定アプリが解決できないときは除くものなし。
+- 回数の数え方の細部: 最初の RESUMED は 1 回。同じアプリが続く間は回数を増やさず、最後に使った時刻はその続きの最後の時刻に更新。時刻が同じものは入力の順。`eligible` 外を除いてから数え、上位 `limit` 個。例: `A@1, A@10, B@11, A@12` → A=2(最後 12)、B=1。
+- 設定アプリのボタン: `settingsComponent` が解決できたら出す(`installed` の集合とは無関係)。`AppInfo(pkg = component.packageName, label = "設定", icon = catalog.icon(component.packageName), installed = true)`。解決は `PanelEnvironment` の `revision` が変わったとき(復帰・パッケージの変化)にやり直し、普段の再描画では覚えたものを使う。解決できないときはドックにも設定画面にも「設定」の枠・行を出さない。
+- `AndroidManifest.xml` の `<queries>` に `android.settings.SETTINGS` の `<intent>` を足す(変更してよいファイルに足す)。
+- 許可とランキングは別に持つ: `AppGraph.usageAvailable: StateFlow<Boolean>`(`UsageHistory.available()`)。設定画面の案内は `usageAvailable == false` のときだけ。`frequentApps == null` で許可ありのとき(まだ数えていない)は、案内を出さず `dockAppsFor` の結果(手動で埋めたもの)を「記録なし」で並べる。
+- テストのための入口: `ListsScreen` に引数 `frequent: List<FrequentApp>? = <AppGraph の値>`、`usageAvailable: Boolean = <AppGraph の値>`、`settingsApp: AppInfo? = <解決したもの>` を足す(既定は今の値)。`AppGraph` に、テストから `frequentApps`・`usageAvailable` を入れる internal な関数を足してよい(テストでは `init` の集計が後から上書きしないこと)。
+- `Dock` を呼ぶ所は 2 つ(`PanelContent` と `PanelScreen.kt` の `HomeWideContent`)。`PanelState` / `PanelActions` / `Dock` に足すものは、最後に既定値つき(`settingsApp: AppInfo? = null`、`onSettings: () -> Unit = {}`)。変更してよいテストに `app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt` を足す。
+- 高さのテスト: 1291×726dp で、`HomeWideContent` と分割の `PanelContent`(パネルの幅)の両方、車なし・アプリ 4+設定で、スクロールする前に全部のボタンが画面の中にあり、ドックのスクロールの最大量が 0。ボタンの領域は 72dp のまま(アイコン 64dp)。
+- `DailyScreensTest` の、既定の設定のままドックの「追加」を探しているテスト(`lists_addToDock_disabledAt4` など)は、入力を Manual にして今の確かめ方を残す。Manual での並べ替え・削除のテストも足す。
+- `UsageHistory` のテスト(許可なし → null・例外 → null・期間・時間順)を `FrequentAppsTest` か新しいテストで足す(新しいテストファイルなら create で `app/src/test/java/com/gt8d/launcher/apps/UsageHistoryTest.kt`)。

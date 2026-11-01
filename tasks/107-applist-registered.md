@@ -44,3 +44,21 @@
 
 ## 報告
 変更点、テストの結果(件数)、置き換えた既存テスト、**決めたこと**。
+
+## 追記(実装前レビューの反映。本文より優先)
+- 新しい引数は既定値つき: `registered: Set<String>? = null`(null = 全部が登録済みとみなす。今の呼び出し・`OtherScreensLayoutTest` はそのまま動く)、`onToggle: (String) -> Unit = {}`。
+- 最初の保存: 本当の設定が読めてから(`PanelScreen` の `latestConfig` か `homeConfig` が null でないとき)だけ。保存は `AppGraph.config.update { cur -> if (cur.appListPkgs != null) cur else cur.copy(appListPkgs = seedAppList(cur, emptySet(), launchable)) }`(ラムダの中で null を確かめ、トグルの結果を上書きしない)。保存の失敗は今の書き方どおりログ(`CancellationException` は投げ直す)。保存が済むまでの表示は、同じ seed を使う。空のリスト `[]` は「全部外した」意味で、seed し直さない。
+- 並び: `registeredEntries` は `buildAppList` の並び(純正ランチャーが先頭、残りは名前順)のまま絞る。
+- 登録はパッケージ単位。同じパッケージの別の activity は、登録・解除が一緒に変わる。チェックのタグは `applist_check_<pkg>`(同じパッケージが複数あればタグも複数。テストは `onAllNodesWithTag`)。
+- スクロール: 「すべて」は今の `gridState`(引数)を使う。「登録」は画面の中で別の `rememberLazyGridState()`。
+- 状態ごとの見出し:
+  | 状態 | 左 | 題 | 右 | Android の戻る |
+  |---|---|---|---|---|
+  | 登録 | なし | アプリ一覧 | 編集・設定・× | 閉じる(今どおり) |
+  | すべて | ←(`applist_back`) | すべてのアプリ | 編集・設定・× | 登録へ |
+  | 編集中 | なし | すべてのアプリ — 押して登録・外す | 完了だけ | 編集の前の状態へ |
+  閉じて開き直したら登録から。Activity の作り直しでは状態が残ってよい。「設定」のボタンは今の `onOpenSettings` があるときだけ(今どおり)。
+- 見出しの行: 題は `weight(1f)`・1 行で省略。幅 600dp 未満では「編集」「設定」はアイコンだけ(72dp、内容説明「編集」「設定」)。テストで、360dp と 1291dp でボタン同士が重ならず行の中に収まることを確かめる。
+- 「すべてのアプリ」のタイルの文字は最大 2 行。チェックの丸はアイコン(56dp)の右上に重ねる。未登録の透明度 0.5 はアイコンと名前だけに掛け、丸には掛けない。1291×726dp・長い名前・編集中で、セル同士が重ならないことを確かめる。
+- 既存テストの合わせ方: `PanelScreenTest` の、一覧を開いてアプリ(純正ランチャー・後から入れたアプリ・同じパッケージの別の activity など)を探すテストは、「すべてのアプリ」へ移ってから今の確かめ方を残す。`AppListScreenTest` のアイコンの読み直しのテストも「すべて」で行う(`entries[item.index]` が追加のタイルにずれないように)。
+- `ConfigCodecTest`: キーが無い → null、明示の null → null、`[]` → `[]`、中身あり → 往復。`PanelScreenTest`: null で開くと 1 回だけ保存(再描画・開き直しでも上書きしない)、保存の後のトグルが残る、`[]` は seed し直さない。
