@@ -1,0 +1,4 @@
+write app/src/main/java/com/gt8d/launcher/apps/StockLauncher.kt
+write app/src/test/java/com/gt8d/launcher/apps/StockLauncherTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.apps.*'
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.apps.*

@@ -10,6 +10,9 @@ import com.gt8d.launcher.apps.UsageHistory
 import com.gt8d.launcher.apps.rankFrequent
 import com.gt8d.launcher.apps.settingsComponent
 import com.gt8d.launcher.apps.HiddenApps
+import com.gt8d.launcher.apps.startStockLauncher
+import com.gt8d.launcher.split.AndroidStockLauncherWarmupState
+import com.gt8d.launcher.split.StockLauncherWarmup
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.boot.BootSequence
 import com.gt8d.launcher.config.ConfigRepository
@@ -182,6 +185,10 @@ object AppGraph {
                 redirects = com.gt8d.launcher.apps.AndroidSplitRedirects(app.packageManager),
                 watcher = watcher,
                 warm = warm,
+                stockLauncherWarmup = StockLauncherWarmup(
+                    ElapsedClock, scheduler, watcher, AndroidStockLauncherWarmupState(app),
+                    { startStockLauncher(app) },
+                ),
                 curtain = curtain,
                 scheduler = scheduler,
                 clock = ElapsedClock,
@@ -261,6 +268,7 @@ object AppGraph {
     val boot: BootSequence
         get() = bootInstance ?: run {
             var readyAtOpen = 0
+            var deadlineReached = false
             BootSequence(
                 scheduler = MainThreadScheduler(),
                 safetyActive = { SafetyGuard.isFallbackActive(app) },
@@ -269,8 +277,11 @@ object AppGraph {
                     runner.openForBoot(config.lastSetIndex)
                 },
                 splitAppeared = { runner.readyCount > readyAtOpen },
-                goHome = { runner.abortBootToHome() },
-                record = { msg -> DiagLog.d("Boot", msg) },
+                goHome = { runner.abortBootToHome(timedOut = deadlineReached) },
+                record = { msg ->
+                    if (msg == "boot_timeout") deadlineReached = true
+                    DiagLog.d("Boot", msg)
+                },
             )
         }.also { bootInstance = it }
 

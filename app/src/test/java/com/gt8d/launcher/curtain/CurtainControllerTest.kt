@@ -8,6 +8,51 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CurtainControllerTest {
+    @Test fun preparing_hasNoTimedHide() {
+        val s = FakeScheduler(); val v = FakeCurtainView(); val c = CurtainController(s, v)
+        c.showPreparing(sampleTarget()); s.advanceBy(3500)
+        assertTrue(c.isShowing); assertTrue(v.hiddenReasons.isEmpty())
+    }
+    @Test fun preparing_safetyAt5500() {
+        val s = FakeScheduler(); val v = FakeCurtainView(); val c = CurtainController(s, v)
+        c.showPreparing(sampleTarget()); s.advanceBy(5499); assertTrue(c.isShowing)
+        s.advanceBy(1); assertEquals(listOf(HideReason.Safety), v.hiddenReasons)
+    }
+    @Test fun beginWaiting_startsSafetyFromTransition() {
+        val s = FakeScheduler(); val v = FakeCurtainView(); val c = CurtainController(s, v)
+        c.showPreparing(sampleTarget()); s.advanceBy(1500); c.beginWaiting(800, true)
+        s.advanceBy(3999); assertTrue(c.isShowing)
+        s.advanceBy(1); assertEquals(listOf(HideReason.Safety), v.hiddenReasons)
+    }
+    @Test fun beginWaiting_startsTimedFromTransition() {
+        val s = FakeScheduler(); val v = FakeCurtainView(); val c = CurtainController(s, v)
+        c.showPreparing(sampleTarget()); s.advanceBy(1500); c.beginWaiting(800, false)
+        s.advanceBy(799); assertTrue(c.isShowing)
+        s.advanceBy(1); assertEquals(listOf(HideReason.Timed), v.hiddenReasons)
+    }
+    @Test fun beginWaiting_keepsViewAndProgress() {
+        val s = FakeScheduler(); val v = FakeCurtainView(); val c = CurtainController(s, v)
+        val hidden = mutableListOf<HideReason>(); c.onHidden = { hidden.add(it) }
+        c.showPreparing(sampleTarget()); s.advanceBy(400); c.beginWaiting(3500, true)
+        s.advanceBy(399); assertEquals(0, v.showProgressCount)
+        s.advanceBy(1); assertEquals(1, v.showProgressCount)
+        s.advanceBy(1000); assertEquals(1, v.showProgressCount)
+        assertEquals(1, v.shownTargets.size); assertTrue(v.hiddenReasons.isEmpty()); assertTrue(hidden.isEmpty())
+    }
+    @Test fun beginWaiting_twiceDoesNotExtendDeadline() {
+        val s = FakeScheduler(); val v = FakeCurtainView(); val c = CurtainController(s, v)
+        c.showPreparing(sampleTarget()); s.advanceBy(1500); c.beginWaiting(800, true)
+        s.advanceBy(2000); c.beginWaiting(800, true); c.showPreparing(sampleTarget("更新"))
+        s.advanceBy(2000); assertEquals(listOf(HideReason.Safety), v.hiddenReasons)
+        assertEquals(1, v.shownTargets.size); assertEquals(1, v.updatedTargets.size)
+    }
+    @Test fun cancelPreparation_invalidatesOldTimers() {
+        val s = FakeScheduler(); val v = FakeCurtainView(); val c = CurtainController(s, v)
+        c.showPreparing(sampleTarget()); s.advanceBy(300); c.cancel(); c.beginWaiting(800, false)
+        c.showPreparing(sampleTarget()); s.advanceBy(5200); assertTrue(c.isShowing)
+        assertEquals(listOf(HideReason.Cancelled), v.hiddenReasons)
+        s.advanceBy(300); assertEquals(listOf(HideReason.Cancelled, HideReason.Safety), v.hiddenReasons)
+    }
     @Test fun cancel_notifiesOnceAndStopsAllTimers_idleDoesNothing() {
         val scheduler = FakeScheduler()
         val view = FakeCurtainView()

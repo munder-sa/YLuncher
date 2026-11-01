@@ -38,8 +38,290 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
 import com.gt8d.launcher.split.PanelPlacement
+import com.gt8d.launcher.split.StockLauncherWarmup
+import com.gt8d.launcher.split.StockLauncherWarmupState
 
 class SetRunnerTest {
+    private fun coldVendor() = TestEnv().apply { stockState.warmedBootId = null }
+
+    private fun finishApps(e: TestEnv, runner: SetRunner = e.runner) {
+        val at = e.scheduler.nowMs() + 1
+        e.events.events.add(ResumeEvent("youtube", at))
+        e.events.events.add(ResumeEvent("applemusic", at))
+        e.scheduler.advanceBy(200)
+        assertNull(runner.opening.value)
+    }
+
+    @Test fun vendor_firstRequestInBootWarms_allEntryPoints() {
+        for (entry in listOf("normal", "link", "boot")) {
+            val e = coldVendor()
+            val requests = mutableListOf<Long>()
+            e.vendor.onOpen = { requests.add(e.scheduler.nowMs()) }
+            when (entry) {
+                "normal" -> e.runner.open(2)
+                "link" -> assertTrue(e.runner.openForLink("youtube", "applemusic", {}, {}))
+                else -> e.runner.openForBoot(2)
+            }
+            assertEquals(entry != "boot", e.curtain.isShowing)
+            assertNotNull(e.runner.opening.value)
+            assertEquals(0L, e.runner.opening.value!!.startedAtMs)
+            assertEquals(0L, e.runner.lastOpenedAtMs)
+            assertTrue(requests.isEmpty()); assertEquals(0, e.stockStarts)
+            e.scheduler.advanceBy(if (entry == "boot") 0 else 199)
+            assertEquals(if (entry == "boot") 1 else 0, e.stockStarts)
+            if (entry != "boot") e.scheduler.advanceBy(1)
+            assertEquals(listOf(if (entry == "boot") 0L else 200L), e.stockStartTimes)
+            e.scheduler.advanceBy(1500 - e.scheduler.nowMs())
+            assertEquals(listOf(1500L), requests)
+            assertEquals(0, e.runner.readyCount); assertNull(e.runner.lastReadyAtMs)
+            assertEquals(entry != "boot", e.curtain.isShowing)
+            assertEquals(if (entry == "boot") 0 else 1, e.curtainView.shownTargets.size)
+        }
+    }
+
+    @Test fun vendor_sameBootNextRequestOpensImmediately() {
+        val e = coldVendor(); e.runner.open(2); e.scheduler.advanceBy(1500); finishApps(e)
+        e.runner.open(3)
+        assertEquals(2, e.vendor.calls.size); assertEquals(1, e.stockStarts)
+    }
+
+    @Test fun vendor_recreatedRunnerSkipsWarmupWithinBoot() {
+        val e = coldVendor(); e.runner.open(2); e.scheduler.advanceBy(1500); finishApps(e)
+        val recreated = e.createRunner(); recreated.open(3)
+        assertEquals(2, e.vendor.calls.size); assertEquals(1, e.stockStarts)
+    }
+
+    @Test fun vendor_newBootWarmsAgain() {
+        val e = TestEnv(); e.stockState.bootId = "count:2"; e.createRunner().open(2)
+        assertTrue(e.vendor.calls.isEmpty()); e.scheduler.advanceBy(1500)
+        assertEquals(1, e.stockStarts); assertEquals("count:2", e.stockState.warmedBootId)
+    }
+
+    @Test fun vendor_noProgressTimeoutRewarmsNextRequest() {
+        val e = TestEnv(); e.runner.open(2); e.scheduler.advanceBy(4000)
+        assertEquals(e.stockState.bootId, e.stockState.retryWarmupBootId)
+        assertEquals(1, e.selector.state.consecutiveFailures)
+        e.runner.home(); assertEquals(e.stockState.bootId, e.stockState.retryWarmupBootId)
+        e.runner.open(3); assertEquals(2, e.vendor.calls.size)
+        e.scheduler.advanceBy(1500); assertEquals(3, e.vendor.calls.size)
+        assertEquals(1, e.stockStarts); assertNull(e.stockState.retryWarmupBootId)
+    }
+
+    @Test fun vendor_progressTimeoutRequestsRewarm() {
+        for (progress in listOf("app", "stock", "own", "panel")) {
+            val e = TestEnv(); e.runner.open(2)
+            e.scheduler.advanceBy(100)
+            when (progress) {
+                "own" -> e.runner.ownScreenResumed()
+                "panel" -> e.runner.panelResumedInSplit()
+                else -> e.events.events.add(ResumeEvent(if (progress == "app") "youtube" else SetRunner.STOCK_LAUNCHER_PKG, 100))
+            }
+            e.scheduler.advanceBy(3900)
+            assertEquals(e.stockState.bootId, e.stockState.retryWarmupBootId)
+            assertEquals(0, e.selector.state.consecutiveFailures)
+            assertEquals(1, e.vendor.calls.size)
+            e.runner.open(3)
+            assertEquals(1, e.vendor.calls.size)
+            e.scheduler.advanceBy(1500)
+            assertEquals(1, e.stockStarts)
+            assertEquals(2, e.vendor.calls.size)
+            assertNull(e.stockState.retryWarmupBootId)
+        }
+    }
+
+    @Test fun vendor_monitoringUnavailableDoesNotRequestRewarm() {
+        for (queryFails in listOf(false, true)) {
+            val e = TestEnv(); e.runner.open(2)
+            if (queryFails) e.events.queryFails = true else e.events.isAvailable = false
+            e.scheduler.advanceBy(4000)
+            assertNull(e.stockState.retryWarmupBootId); assertEquals(0, e.selector.state.consecutiveFailures)
+        }
+    }
+
+    @Test fun vendor_cancelOrLaunchFailureDoesNotRequestRewarm() {
+        for (failure in listOf(false, true)) {
+            val e = TestEnv()
+            if (failure) e.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+            e.runner.open(2)
+            if (!failure) e.runner.cancelOpening()
+            e.scheduler.advanceBy(10000); assertNull(e.stockState.retryWarmupBootId)
+        }
+    }
+
+    @Test fun vendor_retryAt3000FromSplitRequest() {
+        val e = coldVendor(); e.runner.open(2); e.scheduler.advanceBy(4499)
+        assertEquals(1, e.vendor.calls.size); e.scheduler.advanceBy(1)
+        assertEquals(2, e.vendor.calls.size); assertEquals(1, e.stockStarts)
+        assertEquals(e.vendor.calls[0], e.vendor.calls[1])
+    }
+
+    @Test fun vendor_postSplitProgressSkipsRetry() {
+        val e = coldVendor(); e.runner.open(2); e.scheduler.advanceBy(1600)
+        e.events.events.add(ResumeEvent("youtube", 1600)); e.scheduler.advanceBy(2900)
+        assertEquals(1, e.vendor.calls.size)
+    }
+
+    @Test fun vendor_warmupProgressDoesNotSkipRetryOrFailureCount() {
+        val e = coldVendor(); e.runner.open(2)
+        e.events.events.add(ResumeEvent(SetRunner.STOCK_LAUNCHER_PKG, 201))
+        e.events.events.add(ResumeEvent("youtube", 250))
+        e.events.events.add(ResumeEvent("applemusic", 250))
+        e.scheduler.advanceBy(300); e.runner.ownScreenResumed(); e.runner.panelResumedInSplit()
+        e.scheduler.advanceBy(299); assertTrue(e.vendor.calls.isEmpty())
+        e.scheduler.advanceBy(1); assertEquals(1, e.vendor.calls.size)
+        assertEquals(0, e.runner.readyCount)
+        e.scheduler.advanceBy(2999); assertEquals(1, e.vendor.calls.size)
+        e.scheduler.advanceBy(1); assertEquals(2, e.vendor.calls.size)
+        e.scheduler.advanceBy(1000)
+        assertEquals(1, e.selector.state.consecutiveFailures)
+        assertEquals(e.stockState.bootId, e.stockState.retryWarmupBootId)
+        assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+    }
+
+    @Test fun vendor_safetyAt4000FromSplitRequest() {
+        val e = coldVendor(); e.runner.open(2); e.scheduler.advanceBy(5499)
+        assertTrue(e.curtain.isShowing); e.scheduler.advanceBy(1)
+        assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+    }
+
+    @Test fun vendor_retryDoesNotExtendSafety() {
+        val e = coldVendor(); e.runner.open(2); e.scheduler.advanceBy(4500)
+        assertEquals(2, e.vendor.calls.size); e.scheduler.advanceBy(1000)
+        assertNull(e.runner.opening.value); assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+        e.scheduler.advanceBy(5000); assertEquals(2, e.vendor.calls.size)
+    }
+
+    @Test fun vendor_synchronousOpenTimeDoesNotExtendDeadlines() {
+        val e = TestEnv(); val calls = mutableListOf<Long>()
+        e.vendor.onOpen = {
+            calls.add(e.scheduler.nowMs())
+            if (calls.size == 1) e.scheduler.advanceBy(1000)
+        }
+        e.runner.open(2); assertEquals(1000L, e.scheduler.nowMs())
+        e.scheduler.advanceBy(1999); assertEquals(listOf(0L), calls)
+        e.scheduler.advanceBy(1); assertEquals(listOf(0L, 3000L), calls)
+        e.scheduler.advanceBy(1000); assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+        val late = TestEnv()
+        late.vendor.onOpen = { late.scheduler.advanceBy(5000) }
+        late.runner.open(2); assertNull(late.runner.opening.value)
+        late.scheduler.advanceBy(10000); assertEquals(1, late.vendor.calls.size)
+    }
+
+    @Test fun vendor_warmupFailureStillRequestsSplit() {
+        val e = coldVendor(); e.stockStartResult = false; e.runner.open(2)
+        e.scheduler.advanceBy(1500); assertEquals(1, e.vendor.calls.size)
+        assertNull(e.stockState.warmedBootId); assertEquals(0, e.selector.state.consecutiveFailures)
+    }
+
+    @Test fun nonVendorAndFallback_doNotWarm() {
+        for (mode in listOf("home", "leftOnly", "appPair", "missing", "unsupported")) {
+            val e = coldVendor()
+            when (mode) {
+                "home" -> e.runner.home()
+                "leftOnly" -> { e.selector.onBoot(false); e.runner.open(2) }
+                "appPair" -> { e.dReady = true; e.selector.onBoot(false); e.runner.open(2) }
+                "missing" -> { e.installed.remove("applemusic"); e.runner.open(2) }
+                else -> { e.apps.unresizeablePkgs.add("youtube"); e.runner.open(2) }
+            }
+            e.scheduler.advanceBy(1500); assertEquals(0, e.stockStarts); assertNull(e.stockState.warmedBootId)
+        }
+    }
+
+    @Test fun monitoringUnavailable_keepsCurtainThroughWarmup() {
+        for (warm in listOf(false, true)) {
+            val e = coldVendor(); e.events.isAvailable = false
+            if (warm) { e.warm.markForeground("youtube"); e.warm.markForeground("applemusic") }
+            e.runner.open(2); e.scheduler.advanceBy(1499)
+            assertTrue(e.curtain.isShowing); assertTrue(e.vendor.calls.isEmpty())
+            e.scheduler.advanceBy(1); assertEquals(1, e.vendor.calls.size)
+            e.scheduler.advanceBy((if (warm) 800L else 3500L) - 1)
+            assertTrue(e.curtain.isShowing); e.scheduler.advanceBy(1)
+            assertEquals(listOf(HideReason.Timed), e.curtainView.hiddenReasons)
+            assertNull(e.stockState.retryWarmupBootId)
+        }
+    }
+
+    @Test fun cancelDuringWarmup_neverRequestsVendor() {
+        for (at in listOf(199L, 250L, 400L, 1500L)) {
+            val e = coldVendor()
+            // Register cancellation first to exercise the shared deadline at 1500ms.
+            e.scheduler.schedule(at) { e.runner.cancelOpening() }
+            e.runner.open(2); e.scheduler.advanceBy(10000)
+            assertTrue(e.vendor.calls.isEmpty()); assertNull(e.stockState.warmedBootId)
+            assertNull(e.runner.opening.value); assertEquals(0, e.runner.readyCount)
+        }
+        val immediate = coldVendor()
+        immediate.curtainView.onShow = { immediate.runner.cancelOpening() }
+        immediate.runner.open(2); immediate.scheduler.advanceBy(10000)
+        assertEquals(0, immediate.stockStarts); assertTrue(immediate.vendor.calls.isEmpty())
+        assertNull(immediate.stockState.warmedBootId)
+    }
+
+    @Test fun pendingDuringWarmup_doesNotStartConcurrentWarmup() {
+        val e = coldVendor(); e.runner.open(2); e.runner.open(3); e.runner.open(3)
+        assertFalse(e.runner.openForLink("youtube", "maps", {}, {}))
+        e.scheduler.advanceBy(1500); assertEquals(1, e.stockStarts); assertEquals(1, e.vendor.calls.size)
+        e.events.events.add(ResumeEvent("youtube", 1501))
+        e.events.events.add(ResumeEvent("applemusic", 1501))
+        e.scheduler.advanceBy(200)
+        assertEquals(2, e.vendor.calls.size); assertEquals(1, e.stockStarts)
+        assertEquals("maps", e.vendor.calls.last().right)
+        val same = coldVendor(); same.runner.open(2); same.runner.open(2)
+        same.scheduler.advanceBy(1500); finishApps(same)
+        assertEquals(1, same.vendor.calls.size); assertEquals(1, same.stockStarts)
+    }
+
+    @Test fun cancelOpeningDuringBootWarmup_neverRequestsVendorOrRecordsWarmed() {
+        for (at in listOf(0L, 250L, 400L)) {
+            val e = coldVendor()
+            e.runner.openForBoot(2)
+            if (at == 400L) {
+                e.events.events.add(ResumeEvent(SetRunner.STOCK_LAUNCHER_PKG, 101L))
+            }
+            e.scheduler.advanceBy(at)
+            e.runner.openForBoot(3)
+            e.runner.cancelOpening()
+            e.runner.cancelOpening()
+            e.scheduler.advanceBy(10000)
+            assertTrue(e.vendor.calls.isEmpty())
+            assertNull(e.stockState.warmedBootId)
+            assertNull(e.stockState.retryWarmupBootId)
+            assertNull(e.runner.opening.value)
+            assertEquals(0, e.runner.readyCount)
+            assertEquals(1, e.startHomeCount)
+            assertTrue(e.curtainView.shownTargets.isEmpty())
+        }
+    }
+
+    @Test fun oldWarmupCompletion_doesNotAffectNewOpening() {
+        val e = coldVendor(); e.runner.open(2); e.scheduler.advanceBy(250)
+        e.runner.cancelOpening(); e.runner.open(3); e.scheduler.advanceBy(1250)
+        assertTrue(e.vendor.calls.isEmpty()); assertNull(e.stockState.warmedBootId)
+        assertEquals("maps", e.runner.opening.value!!.right)
+        e.scheduler.advanceBy(250); assertEquals(1, e.vendor.calls.size)
+        assertEquals("maps", e.vendor.calls.single().right); assertEquals(0, e.runner.readyCount)
+    }
+
+    @Test fun cancelGuard_includesStockLauncher() {
+        val e = coldVendor(); e.runner.open(2); e.scheduler.advanceBy(250); e.runner.cancelOpening()
+        assertEquals(1, e.startHomeCount)
+        e.events.events.add(ResumeEvent(SetRunner.STOCK_LAUNCHER_PKG, 300))
+        e.scheduler.advanceBy(200); assertEquals(2, e.startHomeCount)
+        e.events.events.add(ResumeEvent(SetRunner.STOCK_LAUNCHER_PKG, 500))
+        e.scheduler.advanceBy(200); assertEquals(3, e.startHomeCount)
+        e.events.events.add(ResumeEvent(SetRunner.STOCK_LAUNCHER_PKG, 700))
+        e.scheduler.advanceBy(6000); assertEquals(3, e.startHomeCount)
+    }
+
+    @Test fun link_callbacksAreNotTriggeredByWarmup() {
+        val e = coldVendor(); var ready = 0; var failed = 0
+        e.runner.openForLink("youtube", "applemusic", { ready++ }, { failed++ })
+        e.events.events.add(ResumeEvent(SetRunner.STOCK_LAUNCHER_PKG, 201))
+        e.scheduler.advanceBy(600); assertEquals(0, ready); assertEquals(0, failed)
+        finishApps(e); assertEquals(1, ready); assertEquals(0, failed)
+        e.scheduler.advanceBy(10000); assertEquals(1, ready); assertEquals(0, failed)
+    }
+
     @org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
     @org.robolectric.annotation.Config(sdk = [35])
     class RedirectTests {
@@ -804,6 +1086,7 @@ class SetRunnerTest {
         e.scheduler.advanceBy(1000)
         assertNull(e.runner.opening.value)
         e.runner.open(2)
+        e.scheduler.advanceBy(1500)
         assertEquals(2, e.vendor.calls.size)
         e.scheduler.advanceBy(3000)
         assertEquals(3, e.vendor.calls.size)
@@ -1439,8 +1722,10 @@ class SetRunnerTest {
         var result: LaunchResult = LaunchResult.Started,
     ) : SplitLauncher {
         val calls = mutableListOf<SplitCall>()
+        var onOpen: () -> Unit = {}
         override fun open(left: String, right: String, ratio: SplitRatio): LaunchResult {
             calls.add(SplitCall(left, right, ratio))
+            onOpen()
             return result
         }
     }
@@ -1471,6 +1756,7 @@ class SetRunnerTest {
     }
 
     private class FakeCurtainView : CurtainView {
+        var onShow: () -> Unit = {}
         val shownTargets = mutableListOf<CurtainTarget>()
         val updatedTargets = mutableListOf<CurtainTarget>()
         var showProgressCount = 0
@@ -1478,6 +1764,7 @@ class SetRunnerTest {
 
         override fun show(target: CurtainTarget) {
             shownTargets.add(target)
+            onShow()
         }
         override fun update(target: CurtainTarget) {
             updatedTargets.add(target)
@@ -1523,13 +1810,19 @@ class SetRunnerTest {
         override fun show(notice: Notice) { notices.add(notice) }
     }
 
+    private class MemoryStockState : StockLauncherWarmupState {
+        override var bootId = "count:1"
+        override var warmedBootId: String? = bootId
+        override var retryWarmupBootId: String? = null
+    }
+
     private class TestEnv(
         initialLastSetIndex: Int = 0,
         watcherAvailable: Boolean = true,
         ownTaskExists: () -> Boolean = { true },
         var loading: Boolean = false,
-        scope: CoroutineScope? = null,
-        homeVisible: () -> Boolean = { false },
+        private val scope: CoroutineScope? = null,
+        private val homeVisible: () -> Boolean = { false },
     ) {
         val ownPkg = "com.gt8d.launcher"
         var config = LauncherConfig(
@@ -1555,6 +1848,15 @@ class SetRunnerTest {
         val events = FakeForegroundEvents(nowMs = { scheduler.nowMs() }, isAvailable = watcherAvailable)
         val watcher = ForegroundWatcher(events)
         val warm = WarmTracker(ownPkg, ownTaskExists)
+        val stockState = MemoryStockState()
+        var stockStarts = 0
+        val stockStartTimes = mutableListOf<Long>()
+        var stockStartResult = true
+        fun createWarmup() = StockLauncherWarmup(scheduler, scheduler, watcher, stockState, {
+            stockStarts++
+            stockStartTimes.add(scheduler.nowMs())
+            stockStartResult
+        })
         val curtainView = FakeCurtainView()
         val curtain = CurtainController(scheduler, curtainView)
         var startHomeCount = 0
@@ -1564,7 +1866,7 @@ class SetRunnerTest {
 
         init { apps.vendorCallCount = { vendor.calls.size } }
 
-        val runner = SetRunner(
+        fun createRunner() = SetRunner(
             SetRunnerDeps(
                 config = { if (loading) null else config },
                 installed = { installed },
@@ -1576,6 +1878,7 @@ class SetRunnerTest {
                 redirects = SplitRedirects { redirects.forPackage(it) },
                 watcher = watcher,
                 warm = warm,
+                stockLauncherWarmup = createWarmup(),
                 curtain = curtain,
                 scheduler = scheduler,
                 clock = scheduler,
@@ -1589,6 +1892,7 @@ class SetRunnerTest {
                 updateConfig = { f -> config = f(config) },
             ),
         )
+        val runner = createRunner()
     }
 
     @Test

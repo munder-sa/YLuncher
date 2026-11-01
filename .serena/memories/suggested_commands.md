@@ -1,0 +1,12 @@
+# Commands (WSL2, プロジェクトルートで)
+- Gradle は必ず `~/tools/gradle-run.sh <args>` 経由(env を整えて ./gradlew を実行)。素の ./gradlew は JDK/SDK が見つからない。
+  - 範囲を絞ったテスト: `~/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.sets.*'`(--tests の値は引用符で囲む。zsh の glob 対策)
+  - 全テスト+ビルド(約12分): `~/tools/gradle-run.sh test assembleDebug`
+  - リリース: `~/tools/gradle-run.sh assembleRelease` → app/build/outputs/apk/release/app-release.apk, panelhost/build/outputs/apk/release/panelhost-release.apk
+  - 長いものはバックグラウンドで流して監視する(skill `gradle-test-watch`)。
+- 実機: `adb.exe -s 192.168.137.248:5555 ...`(Windows の adb。APK は Windows パスで渡す)。端末の再起動ごとにワイヤレスデバッグの再有効化が要る。
+  - 導入: 本体→中継の順に `install -r`、その後 `shell cmd notification allow_listener com.gt8d.launcher/com.gt8d.launcher.media.MediaListenerService`(手順は docs/install-v1.6.md §6)。
+  - GT8D では `uiautomator dump` が使えない。見た目の確認は `exec-out screencap -p`。
+- 実機の場面テスト: `bash scripts/device-scenarios.sh [--with-ylauncher-home] [--only <場面名>]`(debug 版が必要。結果は build/device-scenarios/<日時>/summary.md)。
+- codex への委譲: `codex-run tasks/NNN-xxx.md`(並列は `CODEX_WORKTREE=1`)、検証 `codex-verify tasks/NNN-xxx.md`、相談 `codex-ask "..."`。
+- 新しいスクリプトに実行権限は付かない(/mnt/f は NTFS)→ `bash scripts/x.sh` で起動。許可ファイルを作るときは `command ls -1`(色付き出力を混ぜない)。
