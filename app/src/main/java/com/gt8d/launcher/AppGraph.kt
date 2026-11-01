@@ -69,6 +69,13 @@ object AppGraph {
     }
 
     @Synchronized
+    internal fun clearFrequentAppsForTest() {
+        frequentTestOverride = false
+        _frequentApps.value = null
+        _usageAvailable.value = false
+    }
+
+    @Synchronized
     fun refreshFrequentApps() {
         if (!::app.isInitialized || frequentRefreshRunning || frequentTestOverride) return
         frequentRefreshRunning = true

@@ -14,6 +14,19 @@ class ConfigCodecTest {
         val manual = base.copy(dockMode = DockMode.Manual)
         assertEquals(manual, ConfigCodec.decode(ConfigCodec.encode(manual)))
     }
+
+    @Test fun appListPkgs_missingNullEmptyAndPopulatedRoundTrip() {
+        val base = Defaults.build(emptySet())
+        val encoded = ConfigCodec.encode(base)
+        val missing = encoded.replace(",\"appListPkgs\":null", "")
+        org.junit.Assert.assertFalse(missing.contains("appListPkgs"))
+        assertNull(ConfigCodec.decode(missing)!!.appListPkgs)
+        assertNull(ConfigCodec.decode(encoded)!!.appListPkgs)
+        for (pkgs in listOf(emptyList(), listOf("a", "b"))) {
+            val config = base.copy(appListPkgs = pkgs)
+            assertEquals(config, ConfigCodec.decode(ConfigCodec.encode(config)))
+        }
+    }
     @Test fun panelView_legacyDefaultsAndSetsRoundTrip() {
         val base = Defaults.build(emptySet())
         val legacy = ConfigCodec.encode(base).replace(",\"panelView\":\"Apps\"", "")

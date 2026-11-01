@@ -51,6 +51,7 @@ data class LauncherConfig(
     val boot: BootConfig = BootConfig(),
     val panelView: PanelView = PanelView.Apps,
     val dockMode: DockMode = DockMode.Auto,
+    val appListPkgs: List<String>? = null,
 )
 
 @Serializable

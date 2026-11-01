@@ -1,10 +1,23 @@
 package com.gt8d.launcher.ui.apps
 
 import com.gt8d.launcher.apps.OwnPackages
+import com.gt8d.launcher.config.LauncherConfig
+import com.gt8d.launcher.config.Slot
 import java.text.Collator
 import java.util.Locale
 
 data class AppListEntry(val pkg: String, val cls: String, val label: String)
+
+fun seedAppList(config: LauncherConfig, recent: Set<String>, launchable: Set<String>): List<String> =
+    (config.panelApps + config.dockApps + config.screenSets.flatMap { set ->
+        listOfNotNull((set.left as? Slot.App)?.pkg, (set.right as? Slot.App)?.pkg)
+    } + config.homeApps + recent).filter { it in launchable }.distinct()
+
+fun registeredEntries(all: List<AppListEntry>, registered: Set<String>): List<AppListEntry> =
+    all.filter { it.pkg in registered }
+
+fun toggleRegistered(list: List<String>, pkg: String): List<String> =
+    if (pkg in list) list.filterNot { it == pkg } else list + pkg
 
 val STOCK_LAUNCHER_ENTRY = AppListEntry(
     pkg = "com.android.launcher3",
