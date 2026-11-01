@@ -1,0 +1,9 @@
+write app/src/main/java/com/gt8d/launcher/foreground/UsageStatsForegroundEvents.kt
+create app/src/main/java/com/gt8d/launcher/foreground/OwnResumeClock.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/test/java/com/gt8d/launcher/foreground/UsageStatsForegroundEventsTest.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.foreground.*' --tests 'com.gt8d.launcher.sets.*'
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.foreground.* --tests com.gt8d.launcher.sets.*
