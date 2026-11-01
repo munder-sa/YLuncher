@@ -85,7 +85,8 @@ object AppGraph {
                 val available = history.available()
                 val launches = history.launchesSince(System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000)
                 val excluded = setOfNotNull(app.packageName, OwnPackages.PANEL_HOST,
-                    STOCK_LAUNCHER_ENTRY.pkg, settingsComponent(app.packageManager)?.packageName)
+                    STOCK_LAUNCHER_ENTRY.pkg, com.gt8d.launcher.split.VendorBridge.VENDOR_PKG,
+                    settingsComponent(app.packageManager)?.packageName)
                 val ranked = launches?.let { rankFrequent(it, catalog.installed() - excluded) }
                 synchronized(this@AppGraph) {
                     if (!frequentTestOverride) {

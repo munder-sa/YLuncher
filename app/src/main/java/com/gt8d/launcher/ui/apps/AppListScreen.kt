@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -89,6 +91,7 @@ fun AppListScreen(
             Row(
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 72.dp).testTag("applist_header"),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (all && !editing) {
                     Box(
@@ -111,7 +114,7 @@ fun AppListScreen(
                     Box(
                         Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp)
                             .clip(RoundedCornerShape(12.dp)).background(Color.White)
-                            .clickable { editing = false }.testTag("applist_done"),
+                            .clickable { editing = false }.padding(horizontal = 24.dp).testTag("applist_done"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text("完了", fontSize = Dims.BodyText, color = Palette.Background0)
@@ -120,21 +123,23 @@ fun AppListScreen(
                     Row(
                         Modifier.sizeIn(minWidth = 72.dp, minHeight = 72.dp)
                             .border(1.dp, Palette.Control, RoundedCornerShape(12.dp))
-                            .clickable { editing = true }.testTag("applist_edit"),
+                            .clickable { editing = true }.padding(horizontal = 16.dp).testTag("applist_edit"),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
                     ) {
                         Icon(Icons.Default.Edit, "編集", Modifier.size(32.dp), tint = Color.White)
+                        if (!compact) Spacer(Modifier.width(8.dp))
                         if (!compact) Text("編集", fontSize = Dims.BodyText, color = Color.White)
                     }
                     if (onOpenSettings != null) {
                         Row(
                             Modifier.sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                                .clickable(onClick = onOpenSettings).testTag("applist_settings"),
+                                .clickable(onClick = onOpenSettings).padding(horizontal = 16.dp).testTag("applist_settings"),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center,
                         ) {
                             Icon(Icons.Default.Settings, "設定", Modifier.size(32.dp), tint = Color.White)
+                            if (!compact) Spacer(Modifier.width(8.dp))
                             if (!compact) Text("設定", fontSize = Dims.BodyText, color = Color.White)
                         }
                     }
@@ -211,7 +216,7 @@ fun AppListScreen(
                                     .semantics { selected = checked },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                if (checked) Text("✓", color = Palette.Background0, fontSize = Dims.BodyText)
+                                if (checked) Icon(Icons.Default.Check, null, Modifier.size(18.dp), tint = Palette.Background0)
                             }
                         }
                     }

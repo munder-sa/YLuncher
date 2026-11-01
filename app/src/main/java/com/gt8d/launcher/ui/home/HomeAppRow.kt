@@ -35,7 +35,7 @@ fun HomeAppRow(
     if (entries.isEmpty()) return
     LazyRow(modifier.height(96.dp).testTag("home_apps"), state = state,
         horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-        items(entries, key = { "${it.pkg}/${it.cls}" }) { entry ->
+        items(entries) { entry ->
             Box(Modifier.size(96.dp)
                 .semantics { contentDescription = entry.label }
                 .clickable { onLaunch(entry) }

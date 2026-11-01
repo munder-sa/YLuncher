@@ -104,7 +104,9 @@ fun PanelScreen(
                 val recent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     com.gt8d.launcher.apps.UsageHistory(context)
                         .launchesSince(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
-                        ?.map { it.pkg }?.toSet() ?: emptySet()
+                        ?.map { it.pkg }?.toSet().orEmpty() - setOf(context.packageName,
+                        com.gt8d.launcher.apps.OwnPackages.PANEL_HOST, STOCK_LAUNCHER_ENTRY.pkg,
+                        com.gt8d.launcher.split.VendorBridge.VENDOR_PKG)
                 }
                 AppGraph.config.update { cur ->
                     if (cur.appListPkgs != null) cur
