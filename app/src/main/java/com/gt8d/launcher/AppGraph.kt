@@ -179,6 +179,7 @@ object AppGraph {
                 vendor = VendorSplitLauncher(bridge),
                 appPair = null,
                 apps = apps,
+                redirects = com.gt8d.launcher.apps.AndroidSplitRedirects(app.packageManager),
                 watcher = watcher,
                 warm = warm,
                 curtain = curtain,

@@ -145,7 +145,7 @@ fun SettingsHost(
                 val config by AppGraph.latestConfig.collectAsState()
                 val loaded = config
                 if (loaded == null) {
-                    Text("読み込み中", fontSize = Dims.BodyText)
+                    Text("読み込み中", color = Palette.Muted, fontSize = Dims.BodyText)
                 } else {
                     val update: ((com.gt8d.launcher.config.LauncherConfig) -> com.gt8d.launcher.config.LauncherConfig) -> Unit = { transform ->
                         settingsScope.launch {

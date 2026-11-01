@@ -74,6 +74,49 @@ adb.exe -s 192.168.137.248:5555 shell cmd role add-role-holder android.app.role.
 
 純正ランチャーをホームに戻すときは `cmd role add-role-holder android.app.role.HOME com.android.launcher3 0`。
 
+## 7. v1.6.1(2026-11-01)
+
+### 変わったこと
+- ワイドのホームの下の段は、パネルのアイコン(パネルと同じもの・同じ並び)。最後に「＋」(パネルのアイコンの設定へ)。
+- パネルのアイコンは最大 10 個。パネルの「アプリ」は最大 2 段のページ送り(横にスワイプ、下の点が今のページ)。1 ページに収まれば点は出ない。
+- 分割がそろったのに 4 秒で時間切れになる不具合を修正。使用状況の記録の時計が端末の時計より約 0.5 秒遅れていたため、YLuncher 自身の画面の再開を目印にずれを補正する。分割の入口が何か動かした形跡のある時間切れは、分割の失敗(3 回で全部のセットが全画面になる)に数えない。
+- 設定画面の読めなかった文字(「最大 N 個まで」など)を灰色にした。
+
+### 導入
+§6 と同じ手順で、release 版を本体 → 中継の順に `install -r`。入れた後に通知へのアクセスを許可し直す(§6 のコマンド)。版は 17 / 1.6.1。
+
+分割が全部全画面になる状態(設定 →「許可のチェック」の分割の方式が「全画面」)になっていたら、同じ画面の「メーカー方式に戻す」で戻す。
+
+### 自作のショートカットのアプリを分割で開く
+起動するとすぐ別のアプリを開いて自分は閉じるアプリ(例: 自作の GPT Live)は、そのままでは分割の片側に置けない(すぐ消えるため、分割が成立しない)。アプリの `AndroidManifest.xml` の、ランチャーに出る Activity(`MAIN`/`LAUNCHER` を受けるもの)に次の `<meta-data>` を書くと、YLuncher はセットの分割で**行き先のアプリを置き、分割ができてから 1 回だけリンクを送る**。パネルから隣に開くときも同じ。全画面で開くとき(ホームの段など)は、今までどおりそのアプリ自身を開く。
+
+```xml
+<activity android:name=".LauncherActivity" android:exported="true" ...>
+    <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+    </intent-filter>
+    <!-- 必須: 分割に実際に置くアプリ -->
+    <meta-data android:name="com.gt8d.launcher.split.PACKAGE" android:value="com.openai.chatgpt" />
+    <!-- 任意: 分割ができてから送る先(パッケージ/クラス) -->
+    <meta-data android:name="com.gt8d.launcher.split.COMPONENT" android:value="com.openai.chatgpt/com.openai.chatgpt.MainActivity" />
+    <!-- 任意: 送るリンク(ACTION_VIEW の data) -->
+    <meta-data android:name="com.gt8d.launcher.split.URI" android:value="https://chat.com/?mode=voice" />
+</activity>
+```
+
+- `PACKAGE` だけなら、行き先のアプリを分割に置くだけ(何も送らない)。
+- 送る Intent は `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_SINGLE_TOP`(パネルから隣に開くときは `LAUNCH_ADJACENT | MULTIPLE_TASK` も)。`COMPONENT` が無ければ `PACKAGE` 宛て。
+- `COMPONENT` は、分割の中にある行き先の**本体の画面**にする。中継の画面(ChatGPT なら `ChatGptDeeplinkActivity`)に送ると、行き先が冷えているとき分割の外に全画面で出ることがある(実機で確認)。
+- 行き先のアプリが入っていない・`PACKAGE` が自分自身・左右の行き先が同じになる、のどれかなら、今までどおりそのアプリ自身で開く。
+- セットの設定にはそのアプリ(例 GPT Live)のまま残り、カードや幕の名前・アイコンもそのアプリのもの。
+- YLuncher の診断ログ(タグ `GT8D`)に `redirect target=… sent=true` が出れば送れている。
+
+### GPT Live(自作)の更新
+- ソースは `F:\ChatGPT-Live-GT8D-source`(WSL では `/mnt/f/ChatGPT-Live-GT8D-source`)。上の 3 行を入れた 1.2(versionCode 3)を導入済み。
+- ビルド: PowerShell 7 で `pwsh -File F:\ChatGPT-Live-GT8D-source\build.ps1`(Windows PowerShell 5 では ZIP の型が見つからず失敗する)。出力は `F:\outputs\ChatGPT-Live-GT8D.apk`。
+- 署名の鍵は 2026-11-01 に作り直した(ソースのフォルダの `launcher-signing.p12` と `launcher-signing.password`。消すと次のビルドで別の鍵になり、上書きできなくなる)。古い鍵の版からの更新では、一度アンインストールしてから入れた。
+
 ## 5. v1.5 に戻す
 
 [v1.0 手順 §9「v1.5 から v1.0 に戻す」](install-v1.0.md#9-v15-から-v10-に戻す) と同じく、純正ホームを既定にしてから本体を停止し、同じ署名鍵の旧版 APK を本体→中継の順に `install -r -d` で上書きする。先に v1.5 の APK を用意する。

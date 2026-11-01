@@ -1,11 +1,14 @@
 package com.gt8d.launcher.sets
 
 import com.gt8d.launcher.notice.Notice
+import com.gt8d.launcher.apps.SplitRedirect
+import com.gt8d.launcher.apps.SplitRedirects
 
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.SplitRatio
+import com.gt8d.launcher.config.swapped
 import com.gt8d.launcher.curtain.CurtainController
 import com.gt8d.launcher.curtain.CurtainTarget
 import com.gt8d.launcher.curtain.CurtainView
@@ -37,6 +40,180 @@ import kotlinx.coroutines.test.*
 import com.gt8d.launcher.split.PanelPlacement
 
 class SetRunnerTest {
+    @org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+    @org.robolectric.annotation.Config(sdk = [35])
+    class RedirectTests {
+        private val source = "local.aibox.gptlive"
+        private val target = "com.openai.chatgpt"
+        private val redirect get() = SplitRedirect(target, null, android.net.Uri.parse("https://chat.com/?mode=voice"))
+        private fun env(panelLeft: Boolean? = null, scope: CoroutineScope? = null): TestEnv = TestEnv(scope = scope).also { e ->
+            val left = if (panelLeft == true) Slot.Panel else if (panelLeft == false) Slot.App(source) else Slot.App("applemusic")
+            val right = if (panelLeft == false) Slot.Panel else Slot.App(source)
+            e.config = e.config.copy(screenSets = listOf(ScreenSet("redirect", left, right, SplitRatio.R6_4), e.config.screenSets[2]))
+            e.installed.addAll(listOf(source, target))
+            e.redirects = SplitRedirects { if (it == source) redirect else null }
+        }
+        private fun ready(e: TestEnv, panel: Boolean = false) {
+            val at = e.scheduler.nowMs() + 100
+            e.events.events.add(ResumeEvent(target, at))
+            if (panel) e.runner.panelResumedInSplit() else e.events.events.add(ResumeEvent("applemusic", at))
+            e.scheduler.advanceBy(200)
+        }
+        @Test fun split_usesTarget_andSendsOnlyAfterReady() {
+            for (panel in listOf(null, true, false)) {
+                val e = env(panel)
+                e.runner.open(1)
+                val expected = if (panel == true) "com.gt8d.launcher.panel" to target else if (panel == false) target to "com.gt8d.launcher.panel" else "applemusic" to target
+                assertEquals(expected, e.runner.lastOpenedPair)
+                assertEquals(expected.first, e.vendor.calls.single().left)
+                assertEquals(expected.second, e.vendor.calls.single().right)
+                assertEquals(expected.first, e.runner.opening.value!!.left)
+                assertEquals(expected.second, e.runner.opening.value!!.right)
+                assertTrue(e.apps.redirectCalls.isEmpty())
+                ready(e, panel != null)
+                assertEquals(listOf(redirect to false), e.apps.redirectCalls)
+                assertEquals(expected, e.runner.lastOpenedPair)
+                e.scheduler.advanceBy(10000)
+                assertEquals(1, e.apps.redirectCalls.size)
+            }
+        }
+        @Test fun retry_sendsOnceAfterReady_andNewOpenSendsAgain() {
+            val e = env(); e.runner.open(1); e.scheduler.advanceBy(3000)
+            assertEquals(2, e.vendor.calls.size); assertTrue(e.apps.redirectCalls.isEmpty())
+            ready(e); assertEquals(1, e.apps.redirectCalls.size)
+            e.scheduler.advanceBy(1000); e.runner.open(1); ready(e)
+            assertEquals(2, e.apps.redirectCalls.size)
+        }
+        @Test fun bootReady_sendsBeforePendingSetStarts() {
+            val e = env(); val order = mutableListOf<String>()
+            e.apps.onRedirect = { order.add("redirect") }
+            e.runner.openForBoot(1); e.runner.open(2)
+            ready(e)
+            assertEquals(listOf("redirect"), order)
+            assertEquals(2, e.vendor.calls.size)
+            assertEquals(1, e.apps.redirectVendorCallCounts.single())
+        }
+        @Test fun safetyCancelFailureBootTimeoutAndAbort_doNotSend() {
+            for (action in listOf("safety", "cancel", "failure", "retryFailure", "timeout", "abort")) {
+                val e = env()
+                if (action == "failure") e.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+                if (action in listOf("timeout", "abort")) e.runner.openForBoot(1) else e.runner.open(1)
+                when (action) {
+                    "cancel" -> e.runner.cancelOpening()
+                    "abort" -> e.runner.abortBootToHome()
+                    "retryFailure" -> e.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+                }
+                e.scheduler.advanceBy(11000)
+                assertTrue(e.apps.redirectCalls.isEmpty())
+                if (action == "failure" || action == "retryFailure") assertEquals(listOf(StartAppCall("applemusic", false)), e.apps.startAppCalls)
+            }
+        }
+        @Test fun leftOnly_opensOriginalAndWaitsForTarget() {
+            val e = env(false)
+            e.selector.onFailure(FailReason.EntryMissing, countable = true)
+            e.runner.open(1)
+            assertEquals(listOf(StartAppCall(source, false)), e.apps.startAppCalls)
+            ready(e, true)
+            assertNull(e.runner.opening.value)
+            assertTrue(e.apps.redirectCalls.isEmpty())
+        }
+        @Test fun nullRedirectAndSameTarget_useOriginalPackages_andLinkDoesNotResolve() {
+            val e = env(); e.redirects = SplitRedirects { null }; e.runner.open(1)
+            assertEquals(source, e.vendor.calls.single().right)
+            e.runner.cancelOpening()
+            e.redirects = SplitRedirects { SplitRedirect(target, null, null) }
+            e.runner.open(1)
+            assertEquals("applemusic", e.vendor.calls.last().left)
+            assertEquals(source, e.vendor.calls.last().right)
+            e.runner.cancelOpening()
+            e.redirects = SplitRedirects { error("link must not resolve redirects") }
+            assertTrue(e.runner.openForLink("applemusic", source, {}, {}))
+            assertEquals(source, e.vendor.calls.last().right)
+        }
+        @Test fun packageOnlyRedirect_doesNotSend() {
+            val e = env(); e.redirects = SplitRedirects { if (it == source) SplitRedirect(target, null, null) else null }
+            e.runner.open(1); ready(e)
+            assertTrue(e.apps.redirectCalls.isEmpty()); assertEquals(1, e.runner.readyCount)
+        }
+        @OptIn(ExperimentalCoroutinesApi::class)
+        @Test fun panelSwap_savesOriginalInBothDirections_andSuppressesOtherPartner() = runTest {
+            for (panelLeft in listOf(true, false)) {
+                for (changed in listOf(false, true)) {
+                    val e = env(panelLeft, this)
+                    val original = e.config.screenSets.first()
+                    e.runner.open(1); ready(e, true)
+                    if (changed) e.runner.panelLaunched("maps")
+                    e.runner.onPanelPlacementChanged(if (panelLeft) PanelPlacement.Right else PanelPlacement.Left)
+                    advanceUntilIdle()
+                    assertEquals(if (changed) original else original.swapped(), e.config.screenSets.first())
+                }
+            }
+        }
+        @Test fun bothRedirects_sendLeftThenRight_evenIfFirstFails() {
+            val e = env()
+            val leftRedirect = SplitRedirect("music.target", null, android.net.Uri.parse("https://example.com/music"))
+            e.redirects = SplitRedirects { if (it == source) redirect else if (it == "applemusic") leftRedirect else null }
+            e.apps.redirectResult = false
+            e.runner.open(1)
+            e.events.events.add(ResumeEvent("music.target", 100))
+            e.events.events.add(ResumeEvent(target, 120))
+            e.scheduler.advanceBy(200)
+            assertEquals(listOf(leftRedirect to false, redirect to false), e.apps.redirectCalls)
+            assertEquals(1, e.runner.readyCount)
+        }
+        @Test fun fallbackPaths_openOriginal_andWaitForTarget() {
+            for (path in listOf("unresizeable", "panelMissing", "otherMissing")) {
+                val e = env(false)
+                when (path) {
+                    "unresizeable" -> e.apps.unresizeablePkgs.add(target)
+                    "panelMissing" -> e.installed.remove("com.gt8d.launcher.panel")
+                    "otherMissing" -> e.config = e.config.copy(screenSets = listOf(ScreenSet("fallback", Slot.App(source), Slot.App("missing"), SplitRatio.R6_4)))
+                }
+                e.runner.open(1)
+                assertEquals(listOf(StartAppCall(source, false)), e.apps.startAppCalls)
+                assertTrue(e.warm.isWarm(source))
+                e.events.events.add(ResumeEvent(source, 100)); e.scheduler.advanceBy(200)
+                assertNotNull(e.runner.opening.value)
+                ready(e, true)
+                assertNull(e.runner.opening.value)
+                assertTrue(e.warm.isWarm(target))
+                assertTrue(e.apps.redirectCalls.isEmpty())
+            }
+        }
+        @Test fun missingOriginal_doesNotLaunchRedirectTarget() {
+            val e = env(false); e.installed.remove(source); e.runner.open(1)
+            assertTrue(e.vendor.calls.isEmpty())
+            assertTrue(e.apps.startAppCalls.isEmpty())
+            assertEquals(listOf(Notice.AppMissing(source)), e.messenger.notices)
+            assertTrue(e.apps.redirectCalls.isEmpty())
+        }
+        @Test fun initialAndRetryFailure_openOriginalRedirectApp() {
+            for (retry in listOf(false, true)) {
+                val e = env(false)
+                if (!retry) e.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+                e.runner.open(1)
+                if (retry) {
+                    e.vendor.result = LaunchResult.Failed(FailReason.EntryMissing)
+                    e.scheduler.advanceBy(3000)
+                }
+                assertEquals(listOf(StartAppCall(source, false)), e.apps.startAppCalls)
+                assertTrue(e.warm.isWarm(source))
+                assertFalse(e.warm.isWarm(target))
+                assertTrue(e.apps.redirectCalls.isEmpty())
+            }
+        }
+        @Test fun sourceNextToItsTarget_disablesRedirectOnBothSides() {
+            val e = env()
+            e.config = e.config.copy(screenSets = listOf(ScreenSet("same", Slot.App(source), Slot.App(target), SplitRatio.R6_4)))
+            e.runner.open(1)
+            assertEquals(source, e.vendor.calls.single().left)
+            assertEquals(target, e.vendor.calls.single().right)
+            e.events.events.add(ResumeEvent(source, 100)); e.events.events.add(ResumeEvent(target, 120))
+            e.scheduler.advanceBy(200)
+            assertEquals(1, e.runner.readyCount)
+            assertTrue(e.apps.redirectCalls.isEmpty())
+        }
+    }
     @Test fun cancelOpening_clearsStatePendingAndRetry_withoutFailureOrNotice() {
         val e = TestEnv()
         e.runner.open(2)
@@ -1269,6 +1446,17 @@ class SetRunnerTest {
     }
 
     private class FakeActivityLauncher : ActivityLauncher {
+        val redirectCalls = mutableListOf<Pair<SplitRedirect, Boolean>>()
+        val redirectVendorCallCounts = mutableListOf<Int>()
+        var vendorCallCount: () -> Int = { 0 }
+        var redirectResult = true
+        var onRedirect: () -> Unit = {}
+        override fun startRedirect(redirect: SplitRedirect, adjacent: Boolean): Boolean {
+            redirectCalls.add(redirect to adjacent)
+            redirectVendorCallCounts.add(vendorCallCount())
+            onRedirect()
+            return redirectResult
+        }
         var startAppResult = true
         val startAppCalls = mutableListOf<StartAppCall>()
         val unresizeablePkgs = mutableSetOf<String>()
@@ -1372,6 +1560,9 @@ class SetRunnerTest {
         var startHomeCount = 0
         val messenger = FakeMessenger()
         val labels = mutableMapOf<String, String>()
+        var redirects = SplitRedirects { null }
+
+        init { apps.vendorCallCount = { vendor.calls.size } }
 
         val runner = SetRunner(
             SetRunnerDeps(
@@ -1382,6 +1573,7 @@ class SetRunnerTest {
                 vendor = vendor,
                 appPair = appPair,
                 apps = apps,
+                redirects = SplitRedirects { redirects.forPackage(it) },
                 watcher = watcher,
                 warm = warm,
                 curtain = curtain,
@@ -1571,6 +1763,20 @@ class SetRunnerTest {
         assertEquals(listOf(HideReason.Timed), envUnavailable.curtainView.hiddenReasons)
         assertEquals(0, envUnavailable.selector.state.consecutiveFailures)
         assertEquals(0, envUnavailable.messenger.switchFailedCount)
+    }
+
+    @Test
+    fun safety_withOneSideResumed_doesNotCountFailureAndShowsNotice() {
+        for (pkg in listOf("youtube", "applemusic")) {
+            val env = TestEnv()
+            env.selector.onFailure(FailReason.Timeout, countable = true)
+            env.runner.open(2)
+            env.events.events.add(ResumeEvent(pkg, 250L))
+            env.scheduler.advanceBy(4000L)
+            assertEquals(listOf(HideReason.Safety), env.curtainView.hiddenReasons)
+            assertEquals(1, env.selector.state.consecutiveFailures)
+            assertEquals(listOf(Notice.Slow), env.messenger.notices)
+        }
     }
 
     @Test

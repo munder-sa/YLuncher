@@ -3,7 +3,7 @@ package com.gt8d.launcher.config
 import kotlinx.serialization.Serializable
 
 const val CONFIG_VERSION = 3
-const val MAX_PANEL_APPS = 5
+const val MAX_PANEL_APPS = 10
 const val MAX_DOCK_APPS = 4
 
 @Serializable

@@ -11,10 +11,12 @@ import android.net.wifi.WifiManager
 import android.bluetooth.BluetoothAdapter
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.width
 import android.os.Process
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -51,6 +53,37 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun panel_tenAppsPageSurvivesAppListAndViewSwitch() {
+        val panels = (1..11).map { "example.paged$it" }
+        panels.forEach { install(packageName = it) }
+        var config by androidx.compose.runtime.mutableStateOf(Defaults.build(emptySet()).copy(
+            panelApps = panels, appListPkgs = emptyList()))
+        rule.setContent { LauncherTheme {
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier
+                .size(516.dp, 800.dp)) {
+                PanelScreen(true, homeConfig = config, onLaunchApp = { launches.add(it) })
+            }
+        } }
+        for (p in panels.take(8)) rule.onNodeWithTag("icon_$p").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("icon_pager").performScrollTo().performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+        for (p in panels.drop(8).take(2)) rule.onNodeWithTag("icon_$p").assertIsDisplayed()
+        rule.onNodeWithTag("icon_${panels.last()}").assertDoesNotExist()
+        rule.onNodeWithTag("icon_add").assertIsDisplayed()
+        rule.onNodeWithTag("icon_${panels[8]}").performClick()
+        assertEquals(listOf(panels[8]), launches)
+        openList()
+        rule.onNodeWithTag("applist_close").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+        rule.onNodeWithTag("panel_view_sets").performClick()
+        rule.runOnIdle { config = config.copy(panelView = PanelView.Sets) }
+        rule.onNodeWithTag("panel_view_apps").performClick()
+        rule.runOnIdle { config = config.copy(panelView = PanelView.Apps) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+    }
     private val hidden get() = com.gt8d.launcher.apps.HiddenApps.packages
     private fun installHidden() {
         val pm = Shadows.shadowOf(app.packageManager)
@@ -171,7 +204,7 @@ class PanelScreenTest {
     }
     @Test fun wideHome_appsAreBelowSetsAtBottomOfLeftColumn() {
         install()
-        val config = Defaults.build(emptySet()).copy(appListPkgs = listOf(pkg))
+        val config = Defaults.build(emptySet()).copy(panelApps = listOf(pkg), appListPkgs = listOf(pkg))
         rule.setContent {
             LauncherTheme { PanelScreen(false, homeWide = true, homeConfig = config, onLaunchApp = {}) }
         }
@@ -183,24 +216,38 @@ class PanelScreenTest {
         assertEquals(sets.right, apps.right)
         assertEquals(player.bottom, apps.bottom)
     }
-    @Test fun wideHome_registeredOrderMatchesListAndLaunchesComponents() {
+    @Test fun wideHome_panelOrderAndLimitLaunchesPackageAndAddsWhileListKeepsActivities() {
         install(); install("$pkg.B", "Label B")
         installHidden()
-        val config = Defaults.build(emptySet()).copy(panelApps = emptyList(),
+        val panels = (1..11).map { "example.panel$it" }
+        panels.forEach { install(packageName = it) }
+        var added = 0
+        val config = Defaults.build(emptySet()).copy(panelApps = panels,
             appListPkgs = listOf(pkg) + hidden)
         rule.setContent { LauncherTheme {
-            PanelScreen(false, homeWide = true, homeConfig = config, onLaunchApp = { launches.add(it) })
+            PanelScreen(false, homeWide = true, homeConfig = config, onEditLists = { added++ },
+                onLaunchApp = { launches.add(it) })
         } }
         hidden.forEach { rule.onNodeWithTag("home_app_$it").assertDoesNotExist() }
-        val home = rule.onAllNodesWithTag("home_app_$pkg").fetchSemanticsNodes()
-        assertEquals(2, home.size)
-        assertTrue(home[0].boundsInRoot.left < home[1].boundsInRoot.left)
-        rule.onAllNodesWithTag("home_app_$pkg")[1].assertContentDescriptionEquals("Label B").performClick()
-        val intent = requireNotNull(Shadows.shadowOf(app).nextStartedActivity)
-        assertEquals(ComponentName(pkg, "$pkg.B"), intent.component)
-        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
-        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-        assertTrue(launches.isEmpty())
+        rule.onNodeWithTag("home_app_$pkg").assertDoesNotExist()
+        var previous = Float.NEGATIVE_INFINITY
+        for ((index, panel) in panels.take(10).withIndex()) {
+            rule.onNodeWithTag("home_apps").performScrollToIndex(index)
+            val node = rule.onNodeWithTag("home_app_$panel").assertIsDisplayed()
+            val row = rule.onNodeWithTag("home_apps").fetchSemanticsNode()
+            val offset = row.config[SemanticsProperties.HorizontalScrollAxisRange].value()
+            val position = node.fetchSemanticsNode().boundsInRoot.left + offset
+            assertTrue(position > previous)
+            previous = position
+            node.performClick()
+        }
+        assertEquals(panels.take(10), launches)
+        rule.onNodeWithTag("home_app_${panels.last()}").assertDoesNotExist()
+        rule.onNodeWithTag("home_missing_${panels.last()}").assertDoesNotExist()
+        rule.onNodeWithTag("home_apps").performScrollToIndex(10)
+        rule.onNodeWithTag("home_app_add").performClick()
+        assertEquals(1, added)
+        assertNull(Shadows.shadowOf(app).nextStartedActivity)
         openList()
         hidden.forEach { rule.onNodeWithTag("applist_$it").assertDoesNotExist() }
         val entries = rule.onAllNodesWithTag("applist_$pkg").fetchSemanticsNodes()
@@ -209,7 +256,7 @@ class PanelScreenTest {
         rule.onAllNodesWithTag("applist_$pkg")[1].assert(hasText("Label B"))
     }
 
-    @Test fun wideHome_seedSavedOnceAndUnregisterRemovesRow() {
+    @Test fun wideHome_seedSavedOnceAndUnregisterKeepsPanelApp() {
         install()
         val expected = Defaults.build(emptySet()).copy(panelApps = listOf(pkg))
         runBlocking { AppGraph.config.update { expected } }
@@ -234,16 +281,21 @@ class PanelScreenTest {
         rule.waitUntil(5000L) { AppGraph.latestConfig.value?.appListPkgs == emptyList<String>() }
         rule.onNodeWithTag("applist_done").performClick()
         rule.onNodeWithTag("applist_close").performClick()
-        rule.onNodeWithTag("home_apps").assertDoesNotExist()
+        rule.onNodeWithTag("home_apps").assertIsDisplayed()
+        rule.onNodeWithTag("home_app_$pkg").assertIsDisplayed()
+        rule.onNodeWithTag("home_app_add").assertIsDisplayed()
     }
 
     @Test fun wideHome_scrollSurvivesRecomposeAndAppList() {
-        repeat(12) { install("$pkg.Entry$it", "Scroll %02d".format(it)) }
-        val config = Defaults.build(emptySet()).copy(appListPkgs = listOf(pkg))
+        RuntimeEnvironment.setQualifiers("w840dp-h1000dp")
+        val panels = (1..5).map { "example.scroll$it" }
+        panels.forEach { install(packageName = it) }
+        val config = Defaults.build(emptySet()).copy(panelApps = panels, appListPkgs = panels)
         rule.setContent { LauncherTheme {
             PanelScreen(false, homeWide = true, homeConfig = config, onLaunchApp = {})
         } }
-        rule.onNodeWithTag("home_apps").performScrollToIndex(11)
+        assertTrue(rule.onNodeWithTag("home_apps").getBoundsInRoot().width < 696.dp)
+        rule.onNodeWithTag("home_apps").performScrollToIndex(5)
         fun position() = rule.onNodeWithTag("home_apps").fetchSemanticsNode()
             .config[SemanticsProperties.HorizontalScrollAxisRange].value()
         val before = position()
@@ -254,19 +306,22 @@ class PanelScreenTest {
         rule.onNodeWithTag("applist_close").performClick()
         assertEquals(before, position(), 0f)
         val area = rule.onNodeWithTag("home_apps").getBoundsInRoot()
-        val last = rule.onAllNodesWithTag("home_app_$pkg").fetchSemanticsNodes().last().boundsInRoot
+        val last = rule.onNodeWithTag("home_app_add").fetchSemanticsNode().boundsInRoot
         val row = rule.onNodeWithTag("home_apps").fetchSemanticsNode().boundsInRoot
         assertTrue(last.left >= row.left && last.right <= row.right &&
             last.top >= row.top && last.bottom <= row.bottom)
         assertEquals(96.dp, area.bottom - area.top)
     }
 
-    @Test fun wideHome_emptyRegistrationHasNoAppRow() {
+    @Test fun wideHome_emptyRegistrationShowsPanelAppAndAdd() {
+        install()
         rule.setContent {
             LauncherTheme { PanelScreen(false, homeWide = true,
                 homeConfig = Defaults.build(emptySet()).copy(panelApps = listOf(pkg), appListPkgs = emptyList()), onLaunchApp = {}) }
         }
-        rule.onNodeWithTag("home_apps").assertDoesNotExist()
+        rule.onNodeWithTag("home_apps").assertIsDisplayed()
+        rule.onNodeWithTag("home_app_$pkg").assertIsDisplayed()
+        rule.onNodeWithTag("home_app_add").assertIsDisplayed()
     }
     // ホームの操作の案内はユーザーの判断で出さない(2026-10-31、シンプルに)。
     @Test fun panelScreen_wideHome_showsNoHint() {
@@ -414,13 +469,13 @@ class PanelScreenTest {
         }
     }
     @get:Rule(order = 1) val rule = createComposeRule()
-    private fun install(cls: String = "$pkg.A", label: String = "Label A") {
+    private fun install(cls: String = "$pkg.A", label: String = "Label A", packageName: String = pkg) {
         val pm = Shadows.shadowOf(app.packageManager)
-        val cn = ComponentName(pkg, cls)
+        val cn = ComponentName(packageName, cls)
         pm.addOrUpdateActivity(ActivityInfo().apply {
-            name = cls; packageName = pkg; nonLocalizedLabel = label
+            name = cls; this.packageName = packageName; nonLocalizedLabel = label
         })
-        pm.getInternalMutablePackageInfo(pkg).applicationInfo?.nonLocalizedLabel = "Label A"
+        pm.getInternalMutablePackageInfo(packageName).applicationInfo?.nonLocalizedLabel = "Label A"
         pm.addIntentFilterForActivity(cn, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
     }
     private fun host(split: Boolean = false, onComponent: ((ComponentName) -> Unit)? = null,

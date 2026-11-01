@@ -10,12 +10,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -44,6 +52,8 @@ fun IconGrid(
     onLaunch: (String) -> Unit,
     onAdd: (() -> Unit)?,
     modifier: Modifier = Modifier.testTag("icon_grid"),
+    page: Int = 0,
+    onPageSettled: (Int) -> Unit = {},
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val safeColumns = columns?.coerceAtLeast(1) ?: PanelLayout.columns(maxWidth.value)
@@ -52,29 +62,66 @@ fun IconGrid(
             if (onAdd != null) add(GridCell.Add(onAdd))
         }
 
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            for (row in cells.chunked(safeColumns)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    for (cell in row) {
-                        Box(
-                            modifier = Modifier.size(88.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            when (cell) {
-                                is GridCell.App -> AppCell(app = cell.info, onLaunch = onLaunch)
-                                is GridCell.Add -> AddCell(onAdd = cell.onClick)
-                            }
+        if (cells.isEmpty()) return@BoxWithConstraints
+        val pageCells = cells.chunked(safeColumns * 2)
+        val pages = pageCells.size
+        val pagerState = rememberPagerState(initialPage = page.coerceIn(0, pages - 1)) { pages }
+        val settledCallback = rememberUpdatedState(onPageSettled)
+        LaunchedEffect(page, pages) {
+            pagerState.scrollToPage(page.coerceIn(0, pages - 1))
+            if (pages > 1) {
+                snapshotFlow { pagerState.settledPage }.distinctUntilChanged().drop(1).collect {
+                    settledCallback.value(it)
+                }
+            }
+        }
+        if (pages == 1) {
+            GridRows(cells, safeColumns, onLaunch)
+        } else {
+            Column {
+                HorizontalPager(state = pagerState,
+                    modifier = Modifier.fillMaxWidth().height(184.dp).testTag("icon_pager"),
+                    verticalAlignment = Alignment.Top,
+                ) { index -> GridRows(pageCells[index], safeColumns, onLaunch) }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth().height(24.dp).testTag("icon_pager_dots")
+                    .semantics { contentDescription = "ページ ${pagerState.currentPage + 1}/$pages" },
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    repeat(pages) { index ->
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(
+                            Color.White.copy(alpha = if (index == pagerState.currentPage) 1f else 0.4f)))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GridRows(cells: List<GridCell>, safeColumns: Int, onLaunch: (String) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (row in cells.chunked(safeColumns)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (cell in row) {
+                    Box(
+                        modifier = Modifier.size(88.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        when (cell) {
+                            is GridCell.App -> AppCell(app = cell.info, onLaunch = onLaunch)
+                            is GridCell.Add -> AddCell(onAdd = cell.onClick)
                         }
                     }
-                    repeat(safeColumns - row.size) {
-                        Spacer(modifier = Modifier.size(88.dp))
-                    }
+                }
+                repeat(safeColumns - row.size) {
+                    Spacer(modifier = Modifier.size(88.dp))
                 }
             }
         }

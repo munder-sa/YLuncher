@@ -1,6 +1,8 @@
 package com.gt8d.launcher.sets
 
 import com.gt8d.launcher.apps.OwnPackages
+import com.gt8d.launcher.apps.SplitRedirect
+import com.gt8d.launcher.apps.SplitRedirects
 import com.gt8d.launcher.notice.Notice
 import com.gt8d.launcher.ui.home.numberedSetLabel
 import com.gt8d.launcher.config.LauncherConfig
@@ -29,7 +31,6 @@ import com.gt8d.launcher.time.Clock
 import com.gt8d.launcher.time.Scheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.CoroutineScope
-import com.gt8d.launcher.config.appPkgAt
 import com.gt8d.launcher.split.PanelPlacement
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,6 +66,7 @@ data class SetRunnerDeps(
     val updateConfig: suspend ((LauncherConfig) -> LauncherConfig) -> Unit = {},
     val scope: CoroutineScope? = null,
     val homeVisible: () -> Boolean = { false },
+    val redirects: SplitRedirects = SplitRedirects { null },
 )
 
 class SetRunner(private val d: SetRunnerDeps) {
@@ -123,6 +125,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var panelResumed: Boolean = false
     private var panelSessionReady = false
     private var ownScreenSeen: Boolean = false
+    private var bothProgress: (() -> Boolean)? = null
     private var openingForBoot = false
     private var monitoringAvailable: Boolean = true
     private var expectedDelayMs: Long = WarmTracker.COLD_MS
@@ -302,11 +305,10 @@ class SetRunner(private val d: SetRunnerDeps) {
         saver?.partnerChanged(pkg)
     }
 
-    private fun onSetReady(set: ScreenSet) {
+    private fun onSetReady(set: ScreenSet, partner: String) {
         val side = set.panelSide
         if (side != null) {
-            val appPkg = set.appPkgAt(if (side == Side.Left) Side.Right else Side.Left)
-            if (appPkg != null) saver?.begin(set, appPkg)
+            saver?.begin(set, partner)
         }
         DiagLog.d("SetRunner", "session ready id=${set.id}")
     }
@@ -374,15 +376,24 @@ class SetRunner(private val d: SetRunnerDeps) {
         onSetEnded("open ${set.id}")
         val forLink = linkFallback != null
         val panelSide = set.panelSide
-        val left = when (val l = set.left) {
+        val originalLeft = when (val l = set.left) {
             is Slot.App -> l.pkg
             Slot.Panel -> d.panelHostPkg
         }
-        val right = when (val r = set.right) {
+        val originalRight = when (val r = set.right) {
             is Slot.App -> r.pkg
             is Slot.Panel -> d.panelHostPkg
         }
-        val appPkg = if (panelSide == Side.Left) right else left
+        var leftRedirect = if (!forLink && set.left is Slot.App) d.redirects.forPackage(originalLeft) else null
+        var rightRedirect = if (!forLink && set.right is Slot.App) d.redirects.forPackage(originalRight) else null
+        if ((leftRedirect?.targetPkg ?: originalLeft) == (rightRedirect?.targetPkg ?: originalRight)) {
+            leftRedirect = null
+            rightRedirect = null
+        }
+        val left = leftRedirect?.targetPkg ?: originalLeft
+        val right = rightRedirect?.targetPkg ?: originalRight
+        val appPkg = if (panelSide == Side.Left) originalRight else originalLeft
+        val waitPkg = if (panelSide == Side.Left) right else left
 
         val startMs = d.clock.nowMs()
         d.watcher.foregroundPkgsSince(startMs)
@@ -412,15 +423,15 @@ class SetRunner(private val d: SetRunnerDeps) {
                 d.messenger.show(Notice.AppMissing("YLuncher パネル"))
                 DiagLog.d("SetRunner", "panel host missing")
                 d.warm.recordAppLaunch(appPkg, d.apps.startApp(appPkg, false))
-                waitSingle(appPkg, startMs, useCurtain)
+                waitSingle(waitPkg, startMs, useCurtain)
                 return
             }
         }
-        if (left !in installedPkgs) {
-            d.messenger.show(Notice.AppMissing(appLabel(left)))
-            DiagLog.d("SetRunner", "left uninstalled: $left")
-            if (panelSide == null && (forLink || right in installedPkgs)) {
-                d.warm.recordAppLaunch(right, d.apps.startApp(right, false))
+        if (originalLeft !in installedPkgs) {
+            d.messenger.show(Notice.AppMissing(appLabel(originalLeft)))
+            DiagLog.d("SetRunner", "left uninstalled: $originalLeft")
+            if (panelSide == null && (forLink || originalRight in installedPkgs)) {
+                d.warm.recordAppLaunch(originalRight, d.apps.startApp(originalRight, false))
                 waitSingle(right, startMs, useCurtain)
             } else {
                 fallbackHome(startMs, useCurtain)
@@ -429,10 +440,10 @@ class SetRunner(private val d: SetRunnerDeps) {
             return
         }
 
-        if (!forLink && right !in installedPkgs) {
-            d.messenger.show(Notice.AppMissing(if (panelSide == Side.Right) "YLuncher パネル" else appLabel(right)))
-            DiagLog.d("SetRunner", if (panelSide != null) "panel host missing" else "right uninstalled: $right")
-            d.warm.recordAppLaunch(left, d.apps.startApp(left, false))
+        if (!forLink && originalRight !in installedPkgs) {
+            d.messenger.show(Notice.AppMissing(if (panelSide == Side.Right) "YLuncher パネル" else appLabel(originalRight)))
+            DiagLog.d("SetRunner", if (panelSide != null) "panel host missing" else "right uninstalled: $originalRight")
+            d.warm.recordAppLaunch(originalLeft, d.apps.startApp(originalLeft, false))
             waitSingle(left, startMs, useCurtain)
             notifyLinkNotSplit()
             return
@@ -442,8 +453,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         val rightResizeable = panelSide == Side.Right || d.apps.isResizeable(right)
         if (!leftResizeable || !rightResizeable) {
             DiagLog.d("SetRunner", "unresizeable left=$leftResizeable right=$rightResizeable")
-            fullscreen(appPkg, Notice.SplitUnsupported(appLabel(if (!leftResizeable) left else right)))
-            waitSingle(appPkg, startMs, useCurtain)
+            fullscreen(appPkg, waitPkg, Notice.SplitUnsupported(appLabel(if (!leftResizeable) originalLeft else originalRight)), startMs, useCurtain)
             notifyLinkNotSplit()
             return
         }
@@ -457,8 +467,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         if (launcher == null) {
             DiagLog.d("SetRunner", "leftOnly mode=$mode")
-            fullscreen(appPkg, Notice.SplitFailed(appLabel(appPkg)))
-            waitSingle(appPkg, startMs, useCurtain)
+            fullscreen(appPkg, waitPkg, Notice.SplitFailed(appLabel(appPkg)), startMs, useCurtain)
             notifyLinkNotSplit()
             return
         }
@@ -468,7 +477,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
         when (result) {
             is LaunchResult.Failed -> {
-                handleLaunchFailure(result.reason, appPkg, useCurtain)
+                handleLaunchFailure(result.reason, appPkg, waitPkg, useCurtain)
             }
             is LaunchResult.Started -> {
                 waitBoth(
@@ -480,6 +489,8 @@ class SetRunner(private val d: SetRunnerDeps) {
                     launcher = launcher,
                     startMs = startMs,
                     useCurtain = useCurtain,
+                    originalAppPkg = appPkg,
+                    redirects = listOfNotNull(leftRedirect, rightRedirect),
                 )
             }
         }
@@ -495,13 +506,14 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
     }
 
-    private fun handleLaunchFailure(reason: FailReason, left: String, useCurtain: Boolean) {
+    private fun handleLaunchFailure(reason: FailReason, original: String, waitPkg: String, useCurtain: Boolean) {
         panelSessionReady = false
         onSetEnded("launch failure")
         waitKind = WaitKind.None
         cancelTimers()
         d.selector.onFailure(reason, countable = true)
-        fullscreen(left, Notice.SplitFailed(appLabel(left)))
+        DiagLog.d("SetRunner", "launch failure original=$original wait=$waitPkg")
+        fullscreen(original, waitPkg, Notice.SplitFailed(appLabel(original)), null, useCurtain)
         notifyLinkNotSplit()
         if (useCurtain) {
             d.curtain.fail()
@@ -512,10 +524,12 @@ class SetRunner(private val d: SetRunnerDeps) {
 
     private fun appLabel(pkg: String): String = d.labelFor(pkg).ifBlank { pkg }
 
-    private fun fullscreen(pkg: String, success: Notice) {
+    private fun fullscreen(pkg: String, waitPkg: String, success: Notice, startMs: Long?, useCurtain: Boolean) {
         val started = d.apps.startApp(pkg, false)
         d.warm.recordAppLaunch(pkg, started)
         d.messenger.show(if (started) success else Notice.OpenFailed(appLabel(pkg)))
+        // E の失敗は従来どおり即座に終了し、それ以外の退避では前面化を待つ。
+        if (startMs != null) waitSingle(waitPkg, startMs, useCurtain)
     }
 
     private fun waitBoth(
@@ -527,10 +541,19 @@ class SetRunner(private val d: SetRunnerDeps) {
         launcher: SplitLauncher,
         startMs: Long,
         useCurtain: Boolean,
+        originalAppPkg: String,
+        redirects: List<SplitRedirect>,
     ) {
         waitKind = WaitKind.Both
         linkWaitBoth = linkReady != null
         val appPkg = if (panelSide == Side.Left) right else left
+
+        val hasProgress = {
+            val seen = d.watcher.foregroundPkgsSince(startMs)
+            ownScreenSeen || panelResumed ||
+                appPkg in seen || (panelSide == null && right in seen) || STOCK_LAUNCHER_PKG in seen
+        }
+        bothProgress = hasProgress
 
         fun isBothReady(): Boolean {
             if (!monitoringAvailable) return false
@@ -559,7 +582,13 @@ class SetRunner(private val d: SetRunnerDeps) {
                     d.warm.markForeground(right)
                     if (panelSide != null) {
                         panelSessionReady = true
-                        onSetReady(set)
+                        onSetReady(set, appPkg)
+                    }
+                    redirects.forEach { redirect ->
+                        if (redirect.component != null || redirect.uri != null) {
+                            val sent = d.apps.startRedirect(redirect, adjacent = false)
+                            DiagLog.d("SetRunner", "redirect target=${redirect.targetPkg} sent=$sent")
+                        }
                     }
                     if (useCurtain) {
                         d.curtain.ready()
@@ -580,10 +609,8 @@ class SetRunner(private val d: SetRunnerDeps) {
             val ready = isBothReady()
             if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
             if (!ready) {
-                val seen = d.watcher.foregroundPkgsSince(startMs)
+                val progressed = hasProgress()
                 if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
-                val progressed = ownScreenSeen || panelResumed ||
-                    appPkg in seen || (panelSide == null && right in seen) || STOCK_LAUNCHER_PKG in seen
                 if (progressed) {
                     DiagLog.d("SetRunner", "retry skipped: progress left=$left right=$right")
                     return@schedule
@@ -591,7 +618,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 DiagLog.d("SetRunner", "retry at $RETRY_AT_MS left=$left right=$right")
                 val result = launcher.open(left, right, ratio)
                 if (result is LaunchResult.Failed) {
-                    handleLaunchFailure(result.reason, appPkg, useCurtain)
+                    handleLaunchFailure(result.reason, originalAppPkg, appPkg, useCurtain)
                 }
             }
         }
@@ -711,9 +738,14 @@ class SetRunner(private val d: SetRunnerDeps) {
             HideReason.Failed, HideReason.Safety -> fallback?.invoke()
         }
         if (monitoringAvailable && reason == HideReason.Safety && kind == WaitKind.Both) {
-            d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
+            if (bothProgress?.invoke() == true) {
+                DiagLog.d("SetRunner", "timeout not counted: progress")
+            } else {
+                d.selector.onFailure(FailReason.Timeout, countable = d.watcher.available())
+            }
             d.messenger.show(Notice.Slow)
         }
+        bothProgress = null
         runPendingIfNeeded()
     }
 

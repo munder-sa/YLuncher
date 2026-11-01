@@ -51,6 +51,34 @@ import org.robolectric.annotation.TextLayoutMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
 class PanelContentTest {
+    @Test fun panel_pageSurvivesViewSwitchAndVerticalSwipe() {
+        var state by mutableStateOf(PanelState(null, null, 0L,
+            (1..10).map { AppInfo("p$it", "$it", null, true) }, emptyList(),
+            DockStatus(true, null), false, false))
+        val launches = mutableListOf<String>()
+        rule.setContent { LauncherTheme { Box(Modifier.size(516.dp, 400.dp)) {
+            PanelContent(state, emptyActions().copy(onLaunch = { launches.add(it) },
+                onSelectView = { state = state.copy(view = it) }))
+        } } }
+        rule.onNodeWithTag("icon_pager").performScrollTo().performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+        rule.onNodeWithTag("icon_p9").performScrollTo().performClick()
+        assertEquals(listOf("p9"), launches)
+        rule.onNodeWithTag("panel_view_sets").performClick()
+        rule.onNodeWithTag("panel_view_apps").performClick()
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+        val vertical = hasScrollAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange) and
+            hasAnyDescendant(hasTestTag("icon_grid"))
+        fun position() = rule.onNode(vertical).fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange].value()
+        rule.onNodeWithTag("icon_pager_dots").performScrollTo()
+        val before = position()
+        rule.onNodeWithTag("icon_pager").performTouchInput { swipeDown() }
+        rule.waitForIdle()
+        assertTrue(position() < before)
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+    }
     @Test fun panel_missingPermissions_textAndCallback() {
         var missing by mutableStateOf(listOf(MissingPermission.Notification))
         var opened = 0
@@ -422,8 +450,8 @@ class PanelContentTest {
     }
 
     @Test
-    fun panel_limitsPanelAppsTo5() {
-        val panelApps = (1..6).map { i ->
+    fun panel_limitsPanelAppsTo10() {
+        val panelApps = (1..11).map { i ->
             AppInfo(
                 pkg = "com.example.panel$i",
                 label = "Panel $i",
@@ -433,7 +461,7 @@ class PanelContentTest {
         }
         rule.setContent {
             LauncherTheme {
-                Box(modifier = Modifier.size(576.dp, 800.dp)) {
+                Box(modifier = Modifier.size(516.dp, 800.dp)) {
                     PanelContent(
                         state = PanelState(
                             now = null,
@@ -451,10 +479,13 @@ class PanelContentTest {
             }
         }
 
-        for (i in 1..5) {
+        for (i in 1..8) {
             rule.onNodeWithTag("icon_com.example.panel$i").assertIsDisplayed()
         }
-        rule.onNodeWithTag("icon_com.example.panel6").assertDoesNotExist()
+        rule.onNodeWithTag("icon_pager").performScrollTo().performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        for (i in 9..10) rule.onNodeWithTag("icon_com.example.panel$i").assertIsDisplayed()
+        rule.onNodeWithTag("icon_com.example.panel11").assertDoesNotExist()
         rule.onNodeWithTag("icon_add").assertIsDisplayed()
     }
 }

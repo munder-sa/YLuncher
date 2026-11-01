@@ -166,6 +166,7 @@ class HomeActivity : ComponentActivity() {
     }
 
     override fun onResume() {
+        com.gt8d.launcher.foreground.OwnResumeClock.mark(javaClass.name)
         super.onResume()
         AppGraph.refreshFrequentApps()
         if (createdInSafety && !SafetyGuard.isFallbackActive(this)) {

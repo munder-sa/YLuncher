@@ -163,6 +163,23 @@ class DailyScreensTest {
         click("lists_panel_pick_c"); assertEquals(listOf("a", "b", "c"), config.panelApps)
         assertEquals(listOf("a", "b"), config.homeApps)
     }
+    @Test fun lists_panel_addsTenAndDisablesRemainingCandidate() {
+        val candidates = (1..11).map { "p$it" }
+        rule.setContent { LauncherTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+            ListsScreen(config, update, { it }, { candidates })
+        } } }
+        for (count in 1..10) {
+            click("lists_panel_add")
+            click("lists_panel_pick_p$count")
+            assertEquals(candidates.take(count), config.panelApps)
+        }
+        rule.onNodeWithTag("lists_panel_add").performScrollTo().assertIsNotEnabled()
+        assertEquals(10, writes)
+        rule.runOnIdle { config = config.copy(panelApps = candidates.take(9)) }
+        click("lists_panel_add")
+        rule.runOnIdle { config = config.copy(panelApps = candidates.take(10)) }
+        rule.onNodeWithTag("lists_panel_pick_p11").performScrollTo().assertIsNotEnabled()
+    }
     @Test fun link_switchToFull_saves() {
         host(SettingsRoute.Link); click("link_mode_full")
         assertEquals(LinkMode.Chrome, config.link.mode); assertEquals(1, writes)

@@ -1,0 +1,12 @@
+write app/src/main/java/com/gt8d/launcher/config/Model.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/IconGrid.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/IconGridTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeAppRowTest.kt
+write app/src/test/java/com/gt8d/launcher/settings/DailyScreensTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.ui.layout.*' --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.config.*'
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.ui.home.* --tests com.gt8d.launcher.ui.panel.* --tests com.gt8d.launcher.ui.layout.* --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.config.*

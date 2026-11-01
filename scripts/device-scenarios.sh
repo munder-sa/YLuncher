@@ -143,6 +143,12 @@ adb exec-out run-as com.gt8d.launcher cat files/config.json > "$out/config-backu
 adb shell "run-as com.gt8d.launcher sh -c 'cat files/config.json > files/config-scenario-backup.json'" || { row setup FAIL '端末内の設定の退避に失敗'; exit 1; }
 config_saved=1
 # リンクの行き先の期待値は、端末の設定のブラウザ(link.browserPkg)に合わせる。無ければ Chrome。
+# セット 2(index=2)の左右は、端末の今の設定から読む(ユーザーがセットを変えても場面が合うように)
+read -r set2_left set2_right < <(python3 -c 'import json,sys
+c=json.load(open(sys.argv[1]))
+s=c["screenSets"][1]
+f=lambda x: x.get("pkg", "panel")
+print(f(s["left"]), f(s["right"]))' "$out/config-backup.json" 2>/dev/null)
 configured_browser=$(sed -n 's/.*"browserPkg":"\([a-zA-Z0-9_.]*\)".*/\1/p' "$out/config-backup.json" | head -n 1)
 [[ -n $configured_browser ]] && browser=$configured_browser
 original_home=$(adb shell cmd role get-role-holders android.app.role.HOME) || exit 1
@@ -435,12 +441,12 @@ judge() {
             expect_log '\[SetRunner\] waitBoth ready'
             no_safety
             split_shown
-            left_is com.google.android.youtube
-            right_is com.apple.android.music
+            left_is "$set2_left"
+            right_is "$set2_right"
             left=$(sed -n 's/.*openSplit left=\([^ ]*\) right=.*/\1/p' "$active/logcat.txt" | tail -n 1)
             right=$(sed -n 's/.*openSplit left=[^ ]* right=\([^ ]*\).*/\1/p' "$active/logcat.txt" | tail -n 1)
-            [[ $left == com.google.android.youtube ]] || reasons+=("openSplit の左が YouTube でない: ${left:-取得できない}")
-            [[ $right == com.apple.android.music ]] || reasons+=("openSplit の右が Apple Music でない: ${right:-取得できない}")
+            [[ $left == "$set2_left" ]] || reasons+=("openSplit の左がセット 2 の左($set2_left)でない: ${left:-取得できない}")
+            [[ $right == "$set2_right" ]] || reasons+=("openSplit の右がセット 2 の右($set2_right)でない: ${right:-取得できない}")
             ;;
         link_appPanelFront)
             expect_log '\[Link\] front=AppPanel\(app=com\.google\.android\.youtube, panelSide=Right\)'
@@ -666,7 +672,7 @@ run() {
             leftPanel_link) row "$name$suffix" PASS 'front=AppPanel(app=com.google.android.youtube, panelSide=Left)、route=SplitWithBrowser(app=com.google.android.youtube, browserSide=Left)、左ブラウザ、右 YouTube、VIEW は分割成立後' ;;
             leftPanel_link_twice) row "$name$suffix" PASS 'front=AppBrowser(app=com.google.android.youtube, browserSide=Left)、左ブラウザ、右 YouTube、VIEW は分割成立後' ;;
             set_leftToRightPanel) row "$name$suffix" PASS 'openSplit 左 YouTube、右 panel、waitBoth ready、Safety なし、placement=Right、右最前面 PanelActivity' ;;
-            set_panelCard_switch) row "$name$suffix" PASS 'open index=2、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Apple Music、openSplit の左右も一致' ;;
+            set_panelCard_switch) row "$name$suffix" PASS "open index=2、waitBoth ready、Safety なし、分割枠2つ、左 $set2_left、右 $set2_right、openSplit の左右も一致" ;;
             link_appPanelFront) row "$name$suffix" PASS 'front=AppPanel(app=com.google.android.youtube, panelSide=Right)、route=SplitWithBrowser(app=com.google.android.youtube, browserSide=Right)、waitBoth ready、Safety なし、分割枠2つ、左 YouTube、右 Chrome、VIEW は分割成立後、ホーム affinity のタスク増加なし' ;;
             link_fromYlHome) row "$name$suffix" PASS 'front=Home、route=FullscreenBrowser、ブラウザへの VIEW あり、分割枠なし、最前面 Chrome' ;;
             set_strip_coldPanel) row "$name$suffix" PASS 'next base=0 -> 1、waitBoth ready、openSplit の左 YouTube、右 com.gt8d.launcher.panel、右最前面 PanelActivity、Safety なし' ;;
