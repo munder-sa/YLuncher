@@ -1,0 +1,13 @@
+create app/src/main/java/com/gt8d/launcher/apps/SplitRedirect.kt
+create app/src/test/java/com/gt8d/launcher/apps/SplitRedirectTest.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/split/ActivityLauncher.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.apps.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.link.*' --tests 'com.gt8d.launcher.split.*'
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.apps.* --tests com.gt8d.launcher.sets.* --tests com.gt8d.launcher.ui.panel.* --tests com.gt8d.launcher.link.* --tests com.gt8d.launcher.split.*
+write app/src/main/java/com/gt8d/launcher/sets/PanelSwapSaver.kt
+write app/src/test/java/com/gt8d/launcher/sets/PanelSwapSaverTest.kt
+write app/src/test/java/com/gt8d/launcher/split/AndroidActivityLauncherTest.kt
