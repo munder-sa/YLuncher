@@ -9,7 +9,7 @@ import com.gt8d.launcher.apps.FrequentApp
 import com.gt8d.launcher.apps.UsageHistory
 import com.gt8d.launcher.apps.rankFrequent
 import com.gt8d.launcher.apps.settingsComponent
-import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
+import com.gt8d.launcher.apps.HiddenApps
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.boot.BootSequence
 import com.gt8d.launcher.config.ConfigRepository
@@ -85,8 +85,7 @@ object AppGraph {
                 val available = history.available()
                 val launches = history.launchesSince(System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000)
                 val excluded = setOfNotNull(app.packageName, OwnPackages.PANEL_HOST,
-                    STOCK_LAUNCHER_ENTRY.pkg, com.gt8d.launcher.split.VendorBridge.VENDOR_PKG,
-                    settingsComponent(app.packageManager)?.packageName)
+                    settingsComponent(app.packageManager)?.packageName) + HiddenApps.packages
                 val ranked = launches?.let { rankFrequent(it, catalog.installed() - excluded) }
                 synchronized(this@AppGraph) {
                     if (!frequentTestOverride) {

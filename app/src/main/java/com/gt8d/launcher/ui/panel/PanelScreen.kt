@@ -30,7 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.gt8d.launcher.AppGraph
-import com.gt8d.launcher.apps.stockLauncherIntent
+import com.gt8d.launcher.apps.HiddenApps
 import com.gt8d.launcher.apps.dockAppsFor
 import com.gt8d.launcher.apps.settingsComponent
 import com.gt8d.launcher.config.Defaults
@@ -41,7 +41,6 @@ import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.ui.apps.AppListScreen
 import com.gt8d.launcher.ui.apps.AppListEntry
 import com.gt8d.launcher.ui.apps.registeredEntries
-import com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
 import com.gt8d.launcher.ui.apps.seedAppList
 import com.gt8d.launcher.ui.apps.toggleRegistered
 import kotlinx.coroutines.delay
@@ -86,13 +85,9 @@ fun PanelScreen(
     val appListGridState = rememberLazyGridState()
     val homeAppRowState = rememberLazyListState()
     val launchEntry: (AppListEntry) -> Unit = { entry ->
-        if (entry == STOCK_LAUNCHER_ENTRY) {
-            runCatching { context.startActivity(stockLauncherIntent()) }
-        } else {
-            val component = ComponentName(entry.pkg, entry.cls)
-            if (onLaunchComponent != null) onLaunchComponent(component)
-            else AndroidActivityLauncher(context).startComponent(component, adjacent = inSplit)
-        }
+        val component = ComponentName(entry.pkg, entry.cls)
+        if (onLaunchComponent != null) onLaunchComponent(component)
+        else AndroidActivityLauncher(context).startComponent(component, adjacent = inSplit)
     }
 
     val launchable = environment.appListEntries.map { it.pkg }.toSet()
@@ -105,8 +100,7 @@ fun PanelScreen(
                     com.gt8d.launcher.apps.UsageHistory(context)
                         .launchesSince(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
                         ?.map { it.pkg }?.toSet().orEmpty() - setOf(context.packageName,
-                        com.gt8d.launcher.apps.OwnPackages.PANEL_HOST, STOCK_LAUNCHER_ENTRY.pkg,
-                        com.gt8d.launcher.split.VendorBridge.VENDOR_PKG)
+                        com.gt8d.launcher.apps.OwnPackages.PANEL_HOST) - HiddenApps.packages
                 }
                 AppGraph.config.update { cur ->
                     if (cur.appListPkgs != null) cur
@@ -169,7 +163,7 @@ fun PanelScreen(
     val idleApp = catalog.info(config.idleApp, installedPkgs)
     val panelApps = config.panelApps.map { catalog.info(it, installedPkgs) }
     val dockApps = dockAppsFor(config.dockMode, config.dockApps, frequent, installedPkgs,
-        setOfNotNull(settings?.packageName)).map { catalog.info(it, installedPkgs) }
+        setOfNotNull(settings?.packageName) + HiddenApps.packages).map { catalog.info(it, installedPkgs) }
 
     val state = PanelState(
         placement = placement,

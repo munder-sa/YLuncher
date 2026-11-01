@@ -51,6 +51,40 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    private val hidden get() = com.gt8d.launcher.apps.HiddenApps.packages
+    private fun installHidden() {
+        val pm = Shadows.shadowOf(app.packageManager)
+        hidden.forEach { p ->
+            listOf("Main", "Other").forEach { cls ->
+                val component = ComponentName(p, "$p.$cls")
+                pm.addOrUpdateActivity(ActivityInfo().apply {
+                    packageName = p; name = component.className; nonLocalizedLabel = "Hidden $cls"
+                })
+                pm.addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                })
+            }
+        }
+    }
+
+    @Test fun dockExcludesHiddenFromRankingSavedManualAndAutoFill() {
+        install(); installHidden()
+        AppGraph.setFrequentAppsForTest(hidden.map { com.gt8d.launcher.apps.FrequentApp(it, 99) }, true)
+        try {
+            var config by androidx.compose.runtime.mutableStateOf(Defaults.build(emptySet()).copy(
+                dockApps = hidden.toList() + pkg, appListPkgs = emptyList()))
+            rule.setContent { LauncherTheme { PanelScreen(false, homeConfig = config, onLaunchApp = {}) } }
+            fun verify() {
+                hidden.forEach { rule.onNodeWithTag("dock_app_$it").assertDoesNotExist() }
+                rule.onNodeWithTag("dock_app_$pkg").assertIsDisplayed()
+            }
+            verify()
+            rule.runOnIdle { AppGraph.setFrequentAppsForTest(null, false) }
+            verify()
+            rule.runOnIdle { config = config.copy(dockMode = com.gt8d.launcher.config.DockMode.Manual) }
+            verify()
+        } finally { AppGraph.clearFrequentAppsForTest() }
+    }
     @Test fun dockAutoUsesRankingAndManualUsesConfiguredOrder() {
         install()
         val other = "example.other"
@@ -151,16 +185,15 @@ class PanelScreenTest {
     }
     @Test fun wideHome_registeredOrderMatchesListAndLaunchesComponents() {
         install(); install("$pkg.B", "Label B")
-        val stock = com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY
+        installHidden()
         val config = Defaults.build(emptySet()).copy(panelApps = emptyList(),
-            appListPkgs = listOf(pkg, stock.pkg))
+            appListPkgs = listOf(pkg) + hidden)
         rule.setContent { LauncherTheme {
             PanelScreen(false, homeWide = true, homeConfig = config, onLaunchApp = { launches.add(it) })
         } }
-        val stockBounds = rule.onNodeWithTag("home_app_${stock.pkg}").fetchSemanticsNode().boundsInRoot
+        hidden.forEach { rule.onNodeWithTag("home_app_$it").assertDoesNotExist() }
         val home = rule.onAllNodesWithTag("home_app_$pkg").fetchSemanticsNodes()
         assertEquals(2, home.size)
-        assertTrue(stockBounds.left < home[0].boundsInRoot.left)
         assertTrue(home[0].boundsInRoot.left < home[1].boundsInRoot.left)
         rule.onAllNodesWithTag("home_app_$pkg")[1].assertContentDescriptionEquals("Label B").performClick()
         val intent = requireNotNull(Shadows.shadowOf(app).nextStartedActivity)
@@ -168,13 +201,10 @@ class PanelScreenTest {
         assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
         assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
         assertTrue(launches.isEmpty())
-        rule.onNodeWithTag("home_app_${stock.pkg}").performClick()
-        assertEquals(ComponentName(stock.pkg, stock.cls), Shadows.shadowOf(app).nextStartedActivity?.component)
         openList()
-        val stockList = rule.onNodeWithTag("applist_${stock.pkg}").fetchSemanticsNode().boundsInRoot
+        hidden.forEach { rule.onNodeWithTag("applist_$it").assertDoesNotExist() }
         val entries = rule.onAllNodesWithTag("applist_$pkg").fetchSemanticsNodes()
         assertEquals(2, entries.size)
-        assertTrue(stockList.top <= entries[0].boundsInRoot.top)
         rule.onAllNodesWithTag("applist_$pkg")[0].assert(hasText("Label A"))
         rule.onAllNodesWithTag("applist_$pkg")[1].assert(hasText("Label B"))
     }
@@ -429,15 +459,15 @@ class PanelScreenTest {
         assertNull(Shadows.shadowOf(app).nextStartedActivity)
         rule.onNodeWithTag("applist_close").assertDoesNotExist()
     }
-    @Test fun panelScreen_stockLauncher_doesNotNotifyComponentCallback() {
+    @Test fun panelScreen_hiddenApps_absentFromRegisteredListAndDoNotLaunch() {
         val components = mutableListOf<ComponentName>()
-        host(true, { components.add(it) }); openList(); choose("純正ランチャー")
+        installHidden()
+        host(true, { components.add(it) }, hidden.toList()); openList()
+        hidden.forEach { rule.onNodeWithTag("applist_$it").assertDoesNotExist() }
         assertTrue(components.isEmpty())
         assertTrue(launches.isEmpty())
-        assertEquals(ComponentName("com.android.launcher3", "com.android.launcher3.uioverrides.QuickstepLauncher"),
-            Shadows.shadowOf(app).nextStartedActivity?.component)
         assertNull(Shadows.shadowOf(app).nextStartedActivity)
-        rule.onNodeWithTag("applist_close").assertDoesNotExist()
+        rule.onNodeWithTag("applist_close").assertIsDisplayed()
     }
     @Test fun panelScreen_appListSelection_launchesSelectedComponent() {
         install(); install("$pkg.B", "Label B")
@@ -454,12 +484,14 @@ class PanelScreenTest {
             assertEquals(flag, intent.flags and flag)
         }
     }
-    @Test fun panelScreen_stockLauncher_doesNotUseAdjacentFlags() {
-        host(true); openList(); choose("純正ランチャー")
-        val intent = requireNotNull(Shadows.shadowOf(app).nextStartedActivity)
-        assertEquals(ComponentName("com.android.launcher3", "com.android.launcher3.uioverrides.QuickstepLauncher"), intent.component)
-        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
-        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+    @Test fun panelScreen_hiddenApps_absentFromAllAndEditing() {
+        installHidden()
+        host(true); openList()
+        rule.onNodeWithTag("applist_all").performClick()
+        hidden.forEach { rule.onNodeWithTag("applist_$it").assertDoesNotExist() }
+        rule.onNodeWithTag("applist_edit").performClick()
+        hidden.forEach { rule.onNodeWithTag("applist_$it").assertDoesNotExist() }
+        assertNull(Shadows.shadowOf(app).nextStartedActivity)
     }
     @Test fun panelScreen_resume_updatesPermissionBannerWithoutMediaChange() {
         ShadowSettings.setCanDrawOverlays(false)

@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.OwnPackages
+import com.gt8d.launcher.apps.HiddenApps
 import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.apps.FrequentApp
 import com.gt8d.launcher.apps.dockAppsFor
@@ -36,7 +37,7 @@ fun ListsScreen(
     settingsApp: AppInfo? = rememberListsSettingsApp(),
 ) {
     LaunchedEffect(Unit) { AppGraph.refreshFrequentApps() }
-    val excluded = setOfNotNull(settingsApp?.pkg)
+    val excluded = setOfNotNull(settingsApp?.pkg) + HiddenApps.packages
     SettingsAutoSaveNote()
     var picking by remember { mutableStateOf<String?>(null) }
     fun apps(cfg: LauncherConfig, section: String): List<String> = when (section) {

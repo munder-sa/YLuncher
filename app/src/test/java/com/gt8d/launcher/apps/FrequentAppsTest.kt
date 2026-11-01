@@ -5,6 +5,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class FrequentAppsTest {
+    @Test fun hiddenExcludedFromManualRankingAndAutoFill() {
+        val hidden = HiddenApps.packages.toList()
+        val manual = hidden + listOf("a", "b", "c", "d", "e")
+        val installed = manual.toSet()
+        assertEquals(listOf("a", "b", "c", "d"), dockAppsFor(DockMode.Manual,
+            manual, null, installed, HiddenApps.packages))
+        assertEquals(listOf("a", "b", "c", "d"), dockAppsFor(DockMode.Auto,
+            manual, null, installed, HiddenApps.packages))
+        assertEquals(listOf("e", "a", "b", "c"), dockAppsFor(DockMode.Auto,
+            manual, hidden.map { FrequentApp(it, 99) } + FrequentApp("e", 1), installed, HiddenApps.packages))
+    }
     private fun launch(pkg: String, time: Long) = UsageLaunch(pkg, time)
 
     @Test fun consecutiveResumesCountOnceAndUpdateLastTime() {

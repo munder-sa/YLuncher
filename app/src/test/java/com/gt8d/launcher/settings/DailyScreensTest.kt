@@ -28,6 +28,24 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w516dp-h1000dp")
 class DailyScreensTest {
+    @Test fun lists_hiddenExcludedOnlyFromDockRowsAndPicker() {
+        val hidden = com.gt8d.launcher.apps.HiddenApps.packages
+        config = config.copy(dockApps = hidden.toList() + "a")
+        hostDock(hidden.map { com.gt8d.launcher.apps.FrequentApp(it, 99) }, true)
+        hidden.forEach { rule.onNodeWithTag("lists_dock_auto_row_$it").assertDoesNotExist() }
+        rule.onNodeWithTag("lists_dock_auto_row_a").assertExists()
+        click("lists_dock_mode_manual")
+        hidden.forEach { rule.onNodeWithTag("lists_dock_row_$it").assertDoesNotExist() }
+        click("lists_dock_add")
+        hidden.forEach { rule.onNodeWithTag("lists_dock_pick_$it").assertDoesNotExist() }
+        rule.onNodeWithTag("lists_dock_pick_b").assertExists()
+        click("lists_dock_pick_back")
+        click("lists_panel_add")
+        hidden.forEach { rule.onNodeWithTag("lists_panel_pick_$it").assertExists() }
+        click("lists_panel_pick_back")
+        click("lists_idle_change")
+        hidden.forEach { rule.onNodeWithTag("lists_idle_pick_$it").assertExists() }
+    }
     @get:Rule(order = 0) val register = object : ExternalResource() {
         override fun before() {
             val app = ApplicationProvider.getApplicationContext<Application>()
@@ -58,7 +76,7 @@ class DailyScreensTest {
     private fun hostDock(frequent: List<com.gt8d.launcher.apps.FrequentApp>?, available: Boolean,
                          settings: com.gt8d.launcher.ui.panel.AppInfo? = com.gt8d.launcher.ui.panel.AppInfo("settings", "設定", null, true)) {
         rule.setContent { LauncherTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
-            ListsScreen(config, update, { it }, { listOf("a", "b", "c", "d", "settings") },
+            ListsScreen(config, update, { it }, { listOf("a", "b", "c", "d", "settings") + com.gt8d.launcher.apps.HiddenApps.packages },
                 frequent, available, settings)
         } } }
     }

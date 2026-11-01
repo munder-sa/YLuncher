@@ -20,12 +20,23 @@ class AppListTest {
         assertEquals(expected.size, result.size)
     }
 
-    @Test fun registeredEntries_preservesStockFirstAndAllActivities() {
+    @Test fun registeredEntries_excludesHiddenAndPreservesAllActivitiesInLabelOrder() {
         val all = buildAppList(listOf(AppListEntry("b", "B", "B"),
-            AppListEntry("a", "A", "A"), AppListEntry("a", "Other", "Z")), "own")
-        assertEquals(listOf(all[0], all[1], all[3]),
-            registeredEntries(all, setOf(STOCK_LAUNCHER_ENTRY.pkg, "a", "missing")))
+            AppListEntry("a", "A", "A"), AppListEntry("a", "Other", "Z")) +
+            com.gt8d.launcher.apps.HiddenApps.packages.flatMap {
+                listOf(AppListEntry(it, "Main", "Hidden"), AppListEntry(it, "Other", "Other"))
+            }, "own")
+        assertEquals(listOf("A", "B", "Z"), all.map { it.label })
+        assertEquals(listOf(all[0], all[2]),
+            registeredEntries(all, com.gt8d.launcher.apps.HiddenApps.packages + setOf("a", "missing")))
         assertEquals(emptyList<AppListEntry>(), registeredEntries(all, emptySet()))
+    }
+
+    @Test fun seed_excludesHiddenFromEverySource() {
+        val hidden = com.gt8d.launcher.apps.HiddenApps.packages.toList()
+        val config = Defaults.build(emptySet()).copy(panelApps = hidden, dockApps = hidden,
+            homeApps = hidden, screenSets = listOf(ScreenSet("hidden", Slot.App(hidden[0]), Slot.App(hidden[1]))))
+        assertEquals(listOf("visible"), seedAppList(config, hidden.toSet() + "visible", hidden.toSet() + "visible"))
     }
 
     @Test fun toggleRegistered_appendsOrRemovesPackage() {

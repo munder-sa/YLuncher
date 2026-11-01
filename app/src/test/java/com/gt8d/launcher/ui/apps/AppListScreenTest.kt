@@ -260,24 +260,37 @@ class AppListScreenTest {
     }
 
     @Test
-    fun appList_alwaysIncludesStockLauncher() {
+    fun appList_excludesStockLauncherAndSplitAppIncludingOtherActivities() {
         val youtube = AppListEntry(
             "com.google.android.youtube",
             "com.google.android.youtube.HomeActivity",
             "YouTube",
         )
         val result1 = buildAppList(listOf(youtube), ownPkg)
-        assertEquals(2, result1.size)
-        assertEquals(STOCK_LAUNCHER_ENTRY, result1.first())
+        assertEquals(listOf(youtube), result1)
 
         val launcher3Other = AppListEntry(
             "com.android.launcher3",
             "com.android.launcher3.Launcher",
             "Quickstep",
         )
-        val result2 = buildAppList(listOf(youtube, launcher3Other), ownPkg)
-        val launcher3Items = result2.filter { it.pkg == "com.android.launcher3" }
-        assertEquals(listOf(STOCK_LAUNCHER_ENTRY), launcher3Items)
+        val hidden = com.gt8d.launcher.apps.HiddenApps.packages.flatMap {
+            listOf(AppListEntry(it, "Main", "Hidden"), AppListEntry(it, "Other", "Other"))
+        }
+        val result2 = buildAppList(listOf(youtube, STOCK_LAUNCHER_ENTRY, launcher3Other) + hidden, ownPkg)
+        assertEquals(listOf(youtube), result2)
+        hostRegistered(com.gt8d.launcher.apps.HiddenApps.packages + youtube.pkg, result2)
+        fun verify() {
+            com.gt8d.launcher.apps.HiddenApps.packages.forEach {
+                rule.onNodeWithTag("applist_$it").assertDoesNotExist()
+            }
+            rule.onNodeWithTag("applist_${youtube.pkg}").assertIsDisplayed()
+        }
+        verify()
+        rule.onNodeWithTag("applist_all").performClick()
+        verify()
+        rule.onNodeWithTag("applist_edit").performClick()
+        verify()
     }
 
     @Test
@@ -289,7 +302,7 @@ class AppListScreenTest {
         )
         val result = buildAppList(entries, ownPkg)
         assertEquals(
-            listOf("純正ランチャー", "Apple Music", "chrome", "YouTube"),
+            listOf("Apple Music", "chrome", "YouTube"),
             result.map { it.label },
         )
     }
@@ -307,7 +320,7 @@ class AppListScreenTest {
             "YouTube",
         )
         val result = buildAppList(listOf(ownPanel, youtube), ownPkg)
-        assertEquals(2, result.size)
+        assertEquals(listOf(youtube), result)
         assertTrue(result.none { it.pkg == "com.gt8d.launcher" })
     }
 }

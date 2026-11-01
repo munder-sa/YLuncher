@@ -22,8 +22,12 @@ class AppCatalogTest {
             com.gt8d.launcher.ui.apps.AppListEntry("com.gt8d.launcher.panel", "Host", "中継"),
             com.gt8d.launcher.ui.apps.AppListEntry("other", "Main", "他"),
         )
-        assertEquals(listOf(com.gt8d.launcher.ui.apps.STOCK_LAUNCHER_ENTRY, entries.last()),
-            com.gt8d.launcher.ui.apps.buildAppList(entries, "com.gt8d.launcher"))
+        val hidden = HiddenApps.packages.flatMap {
+            listOf(com.gt8d.launcher.ui.apps.AppListEntry(it, "Main", "Hidden"),
+                com.gt8d.launcher.ui.apps.AppListEntry(it, "Other", "Other"))
+        }
+        assertEquals(listOf(entries.last()),
+            com.gt8d.launcher.ui.apps.buildAppList(entries + hidden, "com.gt8d.launcher"))
     }
 
     private val app = ApplicationProvider.getApplicationContext<Application>()
