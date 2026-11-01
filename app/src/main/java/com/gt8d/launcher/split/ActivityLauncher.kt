@@ -21,7 +21,8 @@ class AndroidActivityLauncher(private val context: Context) : ActivityLauncher {
             .setData(redirect.uri)
         if (redirect.component != null) intent.component = redirect.component
         else intent.setPackage(redirect.targetPkg)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // 分割の中にある行き先の画面にそのまま渡す(冷えた ChatGPT で、新しい画面が分割の外に出るのを防ぐ。実機で確認)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
         context.startActivity(intent)
         true

@@ -25,7 +25,7 @@ class AndroidActivityLauncherTest {
         assertEquals(Intent.ACTION_VIEW, intent.action)
         assertEquals(redirect.uri, intent.data)
         assertEquals(selected, intent.component)
-        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK, intent.flags)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK, intent.flags)
     }
     @Test fun startRedirect_packageOnly_buildsMainIntentWithoutAdjacentFlags() {
         assertTrue(AndroidActivityLauncher(app).startRedirect(com.gt8d.launcher.apps.SplitRedirect("example.app", null, null), false))
@@ -34,7 +34,7 @@ class AndroidActivityLauncherTest {
         assertNull(intent.data)
         assertNull(intent.component)
         assertEquals("example.app", intent.`package`)
-        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, intent.flags)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP, intent.flags)
     }
     @Test fun startRedirect_uriWithoutComponent_setsPackage_andFailureReturnsFalse() {
         val redirect = com.gt8d.launcher.apps.SplitRedirect("example.app", null, android.net.Uri.parse("https://example.com"))
