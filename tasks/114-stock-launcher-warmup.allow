@@ -1,0 +1,12 @@
+write app/src/main/java/com/gt8d/launcher/apps/StockLauncher.kt
+create app/src/main/java/com/gt8d/launcher/split/StockLauncherWarmup.kt
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/curtain/CurtainController.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/test/java/com/gt8d/launcher/apps/StockLauncherTest.kt
+create app/src/test/java/com/gt8d/launcher/split/StockLauncherWarmupTest.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+write app/src/test/java/com/gt8d/launcher/curtain/CurtainControllerTest.kt
+write app/src/test/java/com/gt8d/launcher/boot/BootRunnerIntegrationTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.apps.*' --tests 'com.gt8d.launcher.split.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.curtain.*' --tests 'com.gt8d.launcher.boot.*' --tests 'com.gt8d.launcher.ui.apps.*' --tests 'com.gt8d.launcher.ui.panel.*'
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.apps.* --tests com.gt8d.launcher.split.* --tests com.gt8d.launcher.sets.* --tests com.gt8d.launcher.curtain.* --tests com.gt8d.launcher.boot.* --tests com.gt8d.launcher.ui.apps.* --tests com.gt8d.launcher.ui.panel.*
