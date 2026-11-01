@@ -3,6 +3,7 @@ package com.gt8d.launcher.split
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import com.gt8d.launcher.apps.SplitRedirect
 
 data class LaunchSpec(val pkg: String, val cls: String, val extras: Map<String, String>)
 
@@ -10,10 +11,24 @@ interface ActivityLauncher {
     fun canResolve(pkg: String, cls: String): Boolean
     fun start(spec: LaunchSpec)
     fun startApp(pkg: String, adjacent: Boolean): Boolean
+    fun startRedirect(redirect: SplitRedirect, adjacent: Boolean): Boolean = false
     fun isResizeable(pkg: String): Boolean
 }
 
 class AndroidActivityLauncher(private val context: Context) : ActivityLauncher {
+    override fun startRedirect(redirect: SplitRedirect, adjacent: Boolean): Boolean = try {
+        val intent = Intent(if (redirect.uri != null) Intent.ACTION_VIEW else Intent.ACTION_MAIN)
+            .setData(redirect.uri)
+        if (redirect.component != null) intent.component = redirect.component
+        else intent.setPackage(redirect.targetPkg)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (adjacent) intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+        context.startActivity(intent)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
     fun startComponent(component: ComponentName, adjacent: Boolean): Boolean {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             .setComponent(component)

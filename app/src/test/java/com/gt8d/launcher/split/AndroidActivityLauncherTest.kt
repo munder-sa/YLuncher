@@ -18,6 +18,36 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AndroidActivityLauncherTest {
+    @Test fun startRedirect_buildsViewIntentAndAdjacentFlags() {
+        val redirect = com.gt8d.launcher.apps.SplitRedirect("example.app", selected, android.net.Uri.parse("https://example.com/voice"))
+        assertTrue(AndroidActivityLauncher(app).startRedirect(redirect, true))
+        val intent = Shadows.shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals(redirect.uri, intent.data)
+        assertEquals(selected, intent.component)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK, intent.flags)
+    }
+    @Test fun startRedirect_packageOnly_buildsMainIntentWithoutAdjacentFlags() {
+        assertTrue(AndroidActivityLauncher(app).startRedirect(com.gt8d.launcher.apps.SplitRedirect("example.app", null, null), false))
+        val intent = Shadows.shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_MAIN, intent.action)
+        assertNull(intent.data)
+        assertNull(intent.component)
+        assertEquals("example.app", intent.`package`)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, intent.flags)
+    }
+    @Test fun startRedirect_uriWithoutComponent_setsPackage_andFailureReturnsFalse() {
+        val redirect = com.gt8d.launcher.apps.SplitRedirect("example.app", null, android.net.Uri.parse("https://example.com"))
+        assertTrue(AndroidActivityLauncher(app).startRedirect(redirect, false))
+        val intent = Shadows.shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals(redirect.uri, intent.data)
+        assertEquals("example.app", intent.`package`)
+        val context = object : ContextWrapper(app) {
+            override fun startActivity(intent: Intent) { throw IllegalStateException("failed") }
+        }
+        assertFalse(AndroidActivityLauncher(context).startRedirect(redirect, false))
+    }
     private val app = ApplicationProvider.getApplicationContext<Application>()
     private val selected = ComponentName("example.app", "example.app.B")
 

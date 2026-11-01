@@ -177,6 +177,57 @@ class PanelActivityTest {
         rule.waitForIdle()
     }
     private fun icon() { rule.onNodeWithTag("icon_$pkg").performScrollTo().performClick() }
+    @Test fun redirect_inSplit_launchesTargetAndUpdatesPanelPartner() {
+        host("redirect", true)
+        val activity = controller!!.get()
+        shadowOf(activity).setInMultiWindowMode(true)
+        val redirect = com.gt8d.launcher.apps.SplitRedirect("com.openai.chatgpt", null, android.net.Uri.parse("https://chat.com/?mode=voice"))
+        activity.redirects = com.gt8d.launcher.apps.SplitRedirects { redirect }
+        val calls = mutableListOf<Pair<com.gt8d.launcher.apps.SplitRedirect, Boolean>>()
+        activity.launchRedirect = { r, adjacent -> calls.add(r to adjacent); true }
+        val runner = AppGraph.runner
+        val pairField = runner.javaClass.getDeclaredField("lastOpenedPair").apply { isAccessible = true }
+        val readyField = runner.javaClass.getDeclaredField("panelSessionReady").apply { isAccessible = true }
+        val oldPair = pairField.get(runner); val oldReady = readyField.get(runner)
+        try {
+            pairField.set(runner, com.gt8d.launcher.apps.OwnPackages.PANEL_HOST to pkg)
+            readyField.set(runner, true)
+            icon()
+            assertEquals(listOf(redirect to true), calls)
+            assertTrue(appCalls.isEmpty())
+            assertEquals(com.gt8d.launcher.apps.OwnPackages.PANEL_HOST to redirect.targetPkg, runner.lastOpenedPair)
+        } finally { pairField.set(runner, oldPair); readyField.set(runner, oldReady) }
+    }
+    @Test fun redirect_outsideSplit_opensOriginal() {
+        host("redirectfull", true)
+        controller!!.get().redirects = com.gt8d.launcher.apps.SplitRedirects { error("fullscreen must not resolve") }
+        icon()
+        assertEquals(listOf(pkg to false), appCalls)
+    }
+    @Test fun redirect_failure_fallsBackToOriginalAdjacent() {
+        host("redirectfailure", true)
+        val activity = controller!!.get()
+        shadowOf(activity).setInMultiWindowMode(true)
+        activity.redirects = com.gt8d.launcher.apps.SplitRedirects {
+            com.gt8d.launcher.apps.SplitRedirect("com.openai.chatgpt", null, android.net.Uri.parse("https://chat.com/?mode=voice"))
+        }
+        var attempts = 0
+        activity.launchRedirect = { _, adjacent -> assertTrue(adjacent); attempts++; false }
+        icon()
+        assertEquals(1, attempts)
+        assertEquals(listOf(pkg to true), appCalls)
+    }
+    @Test fun redirect_packageOnly_launchesTargetAdjacent() {
+        host("redirectpackage", true)
+        val activity = controller!!.get()
+        shadowOf(activity).setInMultiWindowMode(true)
+        activity.redirects = com.gt8d.launcher.apps.SplitRedirects {
+            com.gt8d.launcher.apps.SplitRedirect("com.openai.chatgpt", null, null)
+        }
+        activity.launchRedirect = { _, _ -> error("package-only must use startApp") }
+        icon()
+        assertEquals(listOf("com.openai.chatgpt" to true), appCalls)
+    }
     private fun listB() {
         rule.onNodeWithTag("dock_applist").performScrollTo().performClick()
         rule.onNode(hasText("Entry B") and hasClickAction()).performClick()

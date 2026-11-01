@@ -21,6 +21,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.stockLauncherIntent
+import com.gt8d.launcher.apps.AndroidSplitRedirects
+import com.gt8d.launcher.apps.SplitRedirect
+import com.gt8d.launcher.apps.SplitRedirects
 import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.settings.SettingsActivity
 import com.gt8d.launcher.settings.SettingsActions
@@ -59,6 +62,9 @@ class PanelActivity : ComponentActivity() {
     private val activityLauncher by lazy { AndroidActivityLauncher(this) }
     internal var launchApp: (String, Boolean) -> Boolean =
         { pkg, adjacent -> activityLauncher.startApp(pkg, adjacent) }
+    internal lateinit var redirects: SplitRedirects
+    internal var launchRedirect: (SplitRedirect, Boolean) -> Boolean =
+        { redirect, adjacent -> activityLauncher.startRedirect(redirect, adjacent) }
     internal var launchComponent: (ComponentName, Boolean) -> Boolean =
         { component, adjacent -> activityLauncher.startComponent(component, adjacent) }
     private var inSplitState by mutableStateOf(false)
@@ -69,6 +75,7 @@ class PanelActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        redirects = AndroidSplitRedirects(packageManager)
         AppGraph.panelAlive = true
         safetyMode = SafetyGuard.isFallbackActive(this)
         settingsOpen = savedInstanceState?.getBoolean("settings_open") ?: false
@@ -159,6 +166,17 @@ class PanelActivity : ComponentActivity() {
     }
 
     private fun onLaunchApp(pkg: String): Boolean {
+        val redirect = if (isInMultiWindowMode) redirects.forPackage(pkg) else null
+        if (redirect != null) {
+            val succeeded = if (redirect.component == null && redirect.uri == null) {
+                launchApp(redirect.targetPkg, true)
+            } else launchRedirect(redirect, true)
+            AppGraph.warm.recordAppLaunch(redirect.targetPkg, succeeded)
+            if (succeeded) {
+                AppGraph.runner.panelLaunched(redirect.targetPkg)
+                return true
+            }
+        }
         val succeeded = launchApp(pkg, isInMultiWindowMode)
         AppGraph.warm.recordAppLaunch(pkg, succeeded)
         if (succeeded && isInMultiWindowMode) AppGraph.runner.panelLaunched(pkg)

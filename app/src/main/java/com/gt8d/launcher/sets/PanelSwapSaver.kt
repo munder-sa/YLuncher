@@ -3,7 +3,6 @@ package com.gt8d.launcher.sets
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Side
-import com.gt8d.launcher.config.appPkgAt
 import com.gt8d.launcher.config.panelSide
 import com.gt8d.launcher.config.swapped
 import com.gt8d.launcher.diag.DiagLog
@@ -25,7 +24,7 @@ class PanelSwapSaver(
     private val onSaved: (ScreenSet) -> Unit,
     private val settleMs: Long = 500,
 ) {
-    private data class Session(var snapshot: ScreenSet, var partner: String)
+    private data class Session(var snapshot: ScreenSet, val expectedPartner: String, var partner: String)
     @Volatile private var session: Session? = null
     @Volatile private var generation = 0L
     @Volatile private var placement: PanelPlacement? = null
@@ -36,7 +35,7 @@ class PanelSwapSaver(
     fun begin(set: ScreenSet, partner: String) {
         end("begin")
         if (set.panelSide == null) return
-        session = Session(set, partner)
+        session = Session(set, partner, partner)
         schedule()
     }
 
@@ -93,8 +92,7 @@ class PanelSwapSaver(
                 else -> return
             }
             if (side == snapshot.panelSide) return
-            val opposite = if (snapshot.panelSide == Side.Left) Side.Right else Side.Left
-            if (active.partner != snapshot.appPkgAt(opposite)) {
+            if (active.partner != active.expectedPartner) {
                 DiagLog.d("SetRunner", "swapSkipped reason=partner")
                 return
             }

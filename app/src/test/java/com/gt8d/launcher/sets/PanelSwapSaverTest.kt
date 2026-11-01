@@ -9,6 +9,18 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PanelSwapSaverTest {
+    @Test fun redirectPartner_savesOriginalPackage_andDifferentPanelAppSuppressesSave() = runTest {
+        for (changed in listOf(false, true)) {
+            val source = ScreenSet("redirect", Slot.Panel, Slot.App("local.aibox.gptlive"), SplitRatio.R6_4)
+            var cfg = LauncherConfig(screenSets = listOf(source), homeApps = emptyList(), panelApps = emptyList(), dockApps = emptyList(), idleApp = "yt")
+            val saver = PanelSwapSaver(this, { cfg }, { f -> cfg = f(cfg) }, {})
+            saver.begin(source, "com.openai.chatgpt")
+            if (changed) saver.partnerChanged("maps")
+            saver.placementChanged(PanelPlacement.Right)
+            advanceUntilIdle()
+            assertEquals(listOf(if (changed) source else source.swapped()), cfg.screenSets)
+        }
+    }
     private val original = ScreenSet("s1", Slot.App("yt"), Slot.Panel, SplitRatio.R6_4)
     private val swapped = ScreenSet("s1", Slot.Panel, Slot.App("yt"), SplitRatio.R4_6, null)
     private inner class Env(scope: CoroutineScope) {
