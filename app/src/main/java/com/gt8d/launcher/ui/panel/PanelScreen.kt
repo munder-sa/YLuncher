@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.config.LauncherConfig
+import com.gt8d.launcher.config.MAX_PANEL_APPS
 import com.gt8d.launcher.config.PanelView
 import com.gt8d.launcher.ui.home.HomeClockHeader
 import com.gt8d.launcher.ui.home.HomeMiniPlayer
@@ -40,7 +41,6 @@ import com.gt8d.launcher.split.AndroidActivityLauncher
 import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.ui.apps.AppListScreen
 import com.gt8d.launcher.ui.apps.AppListEntry
-import com.gt8d.launcher.ui.apps.registeredEntries
 import com.gt8d.launcher.ui.apps.seedAppList
 import com.gt8d.launcher.ui.apps.toggleRegistered
 import kotlinx.coroutines.delay
@@ -177,7 +177,6 @@ fun PanelScreen(
         needsPermission = environment.needsPermission,
         missingPermissions = environment.missingPermissions,
         settingsApp = settingsApp,
-        homeEntries = registeredEntries(environment.appListEntries, registered),
     )
 
     val actions = PanelActions(
@@ -192,7 +191,6 @@ fun PanelScreen(
         },
         onSeek = { ms -> MediaWatcher.seekTo(ms) },
         onLaunch = onLaunchApp,
-        onLaunchEntry = launchEntry,
         onAdd = onEditLists,
         onHome = { AppGraph.runner.home() },
         onSplit = { if (AppGraph.runner.opening.value == null) onNewSet() },
@@ -258,11 +256,9 @@ internal fun HomeWideContent(
                     HomeClockHeader(clockHeight)
                     HomeSetCards(config.screenSets, appInfo, currentIndex, onOpen, onNewSet,
                         Modifier.fillMaxWidth().weight(1f))
-                    if (state.homeEntries.isNotEmpty()) {
-                        com.gt8d.launcher.ui.home.HomeAppRow(
-                            state.homeEntries, { appInfo(it).icon }, actions.onLaunchEntry,
-                            Modifier.fillMaxWidth(), state = homeAppRowState)
-                    }
+                    com.gt8d.launcher.ui.home.HomeAppRow(
+                        state.panelApps.take(MAX_PANEL_APPS), actions.onLaunch, actions.onAdd,
+                        Modifier.fillMaxWidth(), state = homeAppRowState)
                 }
             }
             HomeMiniPlayer(state.now, state.idleApp, state.positionMs, appInfo, actions.onMediaAction,

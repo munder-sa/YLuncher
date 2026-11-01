@@ -68,7 +68,6 @@ class LayoutMatrixTest(
             AppInfo("idle", "Apple Music", null, true), 10000L, apps, apps.take(4),
             DockStatus(true, true), true, true, view = view, sets = Defaults.build(emptySet()).screenSets,
             placement = if (leftPlacement) com.gt8d.launcher.split.PanelPlacement.Left else null,
-            homeEntries = apps.map { com.gt8d.launcher.ui.apps.AppListEntry(it.pkg, "${it.pkg}.Main", it.label) },
         ))
         val actions = PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
         var pixelsPerDp = 0f
@@ -310,10 +309,9 @@ class HomeAppLayoutMatrixTest {
                 com.gt8d.launcher.config.ScreenSet("s$it", com.gt8d.launcher.config.Slot.App("a"),
                     com.gt8d.launcher.config.Slot.Panel)
             })
-            val apps = (1..case.apps).map { AppInfo("a$it", "名前$it", null, true) }
+            val apps = (1..case.apps).map { AppInfo("a$it", "名前$it", null, it != 3) }
             val state = PanelState(null, AppInfo("idle", "Music", null, true), 0L, apps, emptyList(),
-                DockStatus(true, true), false, case.banner,
-                homeEntries = apps.map { com.gt8d.launcher.ui.apps.AppListEntry(it.pkg, "${it.pkg}.Main", it.label) })
+                DockStatus(true, true), false, case.banner)
             try {
                 controller.get().setContent { LauncherTheme {
                     CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, case.scale)) {
@@ -325,8 +323,7 @@ class HomeAppLayoutMatrixTest {
                 } }
                 controller.visible()
                 val root = rule.onNodeWithTag("wide_root").getBoundsInRoot()
-                val tags = listOf("clock", "home_sets", "home_player", "dock") +
-                    if (case.apps > 0) listOf("home_apps") else emptyList()
+                val tags = listOf("clock", "home_sets", "home_player", "dock", "home_apps")
                 val regions = tags.map { rule.onNodeWithTag(it).getBoundsInRoot() }
                 fun inside(b: androidx.compose.ui.unit.DpRect) {
                     assertTrue("$case: $b outside $root", b.left >= root.left + 16.dp &&
@@ -346,13 +343,12 @@ class HomeAppLayoutMatrixTest {
                     assertTrue(b.top >= setsArea.top && b.bottom <= setsArea.bottom)
                     if (tag != "home_set_add") node.assertHeightIsEqualTo(104.dp)
                 }
-                if (case.apps == 0) rule.onNodeWithTag("home_apps").assertDoesNotExist()
-                else {
+                run {
                     val row = rule.onNodeWithTag("home_apps").getBoundsInRoot()
                     assertEquals(rule.onNodeWithTag("home_player").getBoundsInRoot().bottom, row.bottom)
-                    for (app in apps) {
+                    for (app in apps.take(5)) {
                         rule.onNodeWithTag("home_apps").performScrollToIndex(apps.indexOf(app))
-                        val node = rule.onNodeWithTag("home_app_${app.pkg}")
+                        val node = rule.onNodeWithTag(if (app.installed) "home_app_${app.pkg}" else "home_missing_${app.pkg}")
                         if (case.width == 1291 && !case.banner && case.apps == 5) {
                             val before = node.assertIsDisplayed().getBoundsInRoot()
                             assertTrue(before.left >= row.left && before.right <= row.right)
@@ -361,6 +357,15 @@ class HomeAppLayoutMatrixTest {
                         val b = node.performScrollTo().assertIsDisplayed().getBoundsInRoot()
                         inside(b)
                         assertTrue(b.left >= row.left && b.right <= row.right && b.top >= row.top && b.bottom <= row.bottom)
+                    }
+                    rule.onNodeWithTag("home_apps").performScrollToIndex(apps.take(5).size)
+                    val add = rule.onNodeWithTag("home_app_add").assertIsDisplayed()
+                        .assertWidthIsEqualTo(96.dp).assertHeightIsEqualTo(96.dp).getBoundsInRoot()
+                    inside(add)
+                    assertTrue(add.left >= row.left && add.right <= row.right && add.top >= row.top && add.bottom <= row.bottom)
+                    for (app in apps.drop(5)) {
+                        rule.onNodeWithTag("home_app_${app.pkg}").assertDoesNotExist()
+                        rule.onNodeWithTag("home_missing_${app.pkg}").assertDoesNotExist()
                     }
                 }
             } finally { controller.pause().stop().destroy() }

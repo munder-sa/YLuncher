@@ -149,9 +149,9 @@ class HomeActivityUiTest {
         assertEquals(com.gt8d.launcher.settings.SettingsActivity::class.java.name, intent?.component?.className)
         assertTrue(intent!!.getBooleanExtra("open_new_set", false))
     }
-    @Test fun homeAppRow_launchesAppWithoutAdjacentFlags() {
+    @Test fun homeAppRow_panelAppLaunchesWithoutAdjacentFlags() {
         install()
-        flow.value = flow.value!!.copy(appListPkgs = listOf(pkg))
+        flow.value = flow.value!!.copy(panelApps = listOf(pkg), appListPkgs = emptyList())
         host()
         rule.onNodeWithTag("home_app_$pkg").performClick()
         val intent = requireNotNull(shadowOf(controller!!.get()).nextStartedActivity)

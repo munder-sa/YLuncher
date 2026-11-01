@@ -75,7 +75,6 @@ data class PanelState(
     val placement: PanelPlacement? = null,
     val missingPermissions: List<MissingPermission> = emptyList(),
     val settingsApp: AppInfo? = null,
-    val homeEntries: List<com.gt8d.launcher.ui.apps.AppListEntry> = emptyList(),
 )
 
 data class PanelActions(
@@ -93,7 +92,6 @@ data class PanelActions(
     val onOpenSet: (Int) -> Unit = {},
     val onNewSet: () -> Unit = {},
     val onSettings: () -> Unit = {},
-    val onLaunchEntry: (com.gt8d.launcher.ui.apps.AppListEntry) -> Unit = {},
 )
 
 @Composable
