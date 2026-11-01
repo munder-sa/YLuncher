@@ -58,6 +58,67 @@ class LayoutMatrixTest(
     }
     @get:Rule val rule = createEmptyComposeRule()
 
+    @Test fun tenApps_gridAndDotsStayInsideScrollViewport() {
+        RuntimeEnvironment.setQualifiers("w${width}dp-h${height}dp")
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        WindowCompat.setDecorFitsSystemWindows(controller.get().window, false)
+        val state = PanelState(
+            if (playing) NowPlaying("music", "曲名", "歌手", null, 180000L, true, true) else null,
+            AppInfo("idle", "Music", null, true), 0L,
+            (1..10).map { AppInfo("p$it", "$it", null, true) }, emptyList(),
+            DockStatus(true, true), true, true, view = view,
+            placement = if (leftPlacement) com.gt8d.launcher.split.PanelPlacement.Left else null)
+        val wide = home && width >= 840
+        try {
+            controller.get().setContent { LauncherTheme {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, scale)) {
+                    Box(Modifier.fillMaxSize().testTag("ten_root")) {
+                        if (wide) HomeWideContent(state, PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}),
+                            Defaults.build(emptySet()), { AppInfo(it, it, null, true) }, 0, {}, {})
+                        else PanelContent(state, PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}))
+                    }
+                }
+            } }
+            controller.visible()
+            val root = rule.onNodeWithTag("ten_root").getBoundsInRoot()
+            fun checkRegions(tags: List<String>) {
+                val bounds = tags.map { rule.onNodeWithTag(it).getBoundsInRoot() }
+                for (b in bounds) assertTrue(b.left >= root.left && b.right <= root.right &&
+                    b.top >= root.top && b.bottom <= root.bottom)
+                for (i in bounds.indices) for (j in i + 1 until bounds.size) {
+                    val a = bounds[i]; val b = bounds[j]
+                    assertFalse("${tags[i]} overlaps ${tags[j]}",
+                        a.width.value > 0 && a.height.value > 0 && b.width.value > 0 && b.height.value > 0 &&
+                            a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom)
+                }
+            }
+            if (wide) {
+                val regions = listOf("clock", "home_sets", "home_apps", "home_player", "dock")
+                checkRegions(regions)
+                for (index in 0..10) {
+                    rule.onNodeWithTag("home_apps").performScrollToIndex(index)
+                    rule.onNodeWithTag(if (index == 10) "home_app_add" else "home_app_p${index + 1}").assertIsDisplayed()
+                    checkRegions(regions)
+                }
+            } else if (view == PanelView.Apps) {
+                val regions = listOf("clock", "dock", "media_card", "icon_grid")
+                checkRegions(regions)
+                val dots = rule.onAllNodesWithTag("icon_pager_dots").fetchSemanticsNodes().isNotEmpty()
+                if (dots) {
+                    checkRegions(listOf("clock", "dock", "media_card", "icon_pager_dots"))
+                    rule.onNodeWithTag("icon_pager").assertHeightIsEqualTo(184.dp)
+                    rule.onNodeWithTag("icon_pager_dots").performScrollTo().assertIsDisplayed()
+                        .assertHeightIsEqualTo(24.dp)
+                    checkRegions(regions)
+                    checkRegions(listOf("clock", "dock", "media_card", "icon_pager_dots"))
+                    val bounds = rule.onNodeWithTag("icon_pager_dots").getBoundsInRoot()
+                    assertEquals(24.dp, bounds.height)
+                } else rule.onNodeWithTag("icon_grid").performScrollTo()
+                checkRegions(regions)
+            } else rule.onNodeWithTag("icon_grid").assertDoesNotExist()
+        } finally { controller.pause().stop().destroy() }
+    }
+
     @Test fun layout_fitsAndAllControlsAreReachable() {
         RuntimeEnvironment.setQualifiers("w${width}dp-h${height}dp")
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -176,9 +237,10 @@ class LayoutMatrixTest(
                 rule.onNodeWithTag(tag).performScrollTo()
                 checkDisjoint()
             }
-            val clickCount = rule.onAllNodes(hasClickAction()).fetchSemanticsNodes().size
+            val outsideGrid = hasClickAction() and !hasAnyAncestor(hasTestTag("icon_grid"))
+            val clickCount = rule.onAllNodes(outsideGrid).fetchSemanticsNodes().size
             for (index in 0 until clickCount) {
-                val target = rule.onAllNodes(hasClickAction())[index]
+                val target = rule.onAllNodes(outsideGrid)[index]
                 if (target.fetchSemanticsNode().config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { "" } in listOf("panel_view_apps", "panel_view_sets")) target.assertIsDisplayed()
                 else if (home && width >= 840 && target.fetchSemanticsNode().config
                         .getOrElse(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { "" } in
@@ -188,6 +250,32 @@ class LayoutMatrixTest(
                 assertTrue("click width ${node.size}", node.size.width >= 72 * pixelsPerDp)
                 assertTrue("click height ${node.size}", node.size.height >= 72 * pixelsPerDp)
                 assertTrue(node.boundsInRoot.left >= root.left && node.boundsInRoot.right <= root.right)
+            }
+            if (view == PanelView.Apps && !(home && width >= 840)) {
+                val pager = rule.onAllNodesWithTag("icon_pager").fetchSemanticsNodes().isNotEmpty()
+                val columns = PanelLayout.columns(
+                    rule.onNodeWithTag("icon_grid").fetchSemanticsNode().size.width / pixelsPerDp)
+                var page = 0
+                val verticalGridScroll = hasScrollAction() and
+                    SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange) and
+                    hasAnyDescendant(hasTestTag("icon_grid"))
+                for ((index, tag) in (apps.map { "icon_${it.pkg}" } + "icon_add").withIndex()) {
+                    val desired = index / (columns * 2)
+                    if (pager && desired != page) {
+                        rule.onNodeWithTag("icon_pager").performScrollTo().performTouchInput { swipeLeft() }
+                        rule.waitForIdle()
+                        page = desired
+                    }
+                    if (pager) rule.onNodeWithTag("icon_pager_dots")
+                        .assertContentDescriptionEquals("ページ ${desired + 1}/${(apps.size + 1 + columns * 2 - 1) / (columns * 2)}")
+                    rule.onNode(verticalGridScroll).performScrollToNode(hasTestTag(tag))
+                    val target = rule.onNodeWithTag(tag)
+                    assertTrue("$tag page=$page bounds=${target.fetchSemanticsNode().boundsInRoot}", target.isDisplayed())
+                    val node = target.fetchSemanticsNode()
+                    assertTrue("click width ${node.size}", node.size.width >= 72 * pixelsPerDp)
+                    assertTrue("click height ${node.size}", node.size.height >= 72 * pixelsPerDp)
+                    assertTrue(node.boundsInRoot.left >= root.left && node.boundsInRoot.right <= root.right)
+                }
             }
             val oneLine = SemanticsMatcher.expectValue(OneLineKey, true)
             if (!playing && ((home && width >= 840) || view == PanelView.Apps)) {
@@ -346,7 +434,7 @@ class HomeAppLayoutMatrixTest {
                 run {
                     val row = rule.onNodeWithTag("home_apps").getBoundsInRoot()
                     assertEquals(rule.onNodeWithTag("home_player").getBoundsInRoot().bottom, row.bottom)
-                    for (app in apps.take(5)) {
+                    for (app in apps.take(10)) {
                         rule.onNodeWithTag("home_apps").performScrollToIndex(apps.indexOf(app))
                         val node = rule.onNodeWithTag(if (app.installed) "home_app_${app.pkg}" else "home_missing_${app.pkg}")
                         if (case.width == 1291 && !case.banner && case.apps == 5) {
@@ -358,12 +446,12 @@ class HomeAppLayoutMatrixTest {
                         inside(b)
                         assertTrue(b.left >= row.left && b.right <= row.right && b.top >= row.top && b.bottom <= row.bottom)
                     }
-                    rule.onNodeWithTag("home_apps").performScrollToIndex(apps.take(5).size)
+                    rule.onNodeWithTag("home_apps").performScrollToIndex(apps.take(10).size)
                     val add = rule.onNodeWithTag("home_app_add").assertIsDisplayed()
                         .assertWidthIsEqualTo(96.dp).assertHeightIsEqualTo(96.dp).getBoundsInRoot()
                     inside(add)
                     assertTrue(add.left >= row.left && add.right <= row.right && add.top >= row.top && add.bottom <= row.bottom)
-                    for (app in apps.drop(5)) {
+                    for (app in apps.drop(10)) {
                         rule.onNodeWithTag("home_app_${app.pkg}").assertDoesNotExist()
                         rule.onNodeWithTag("home_missing_${app.pkg}").assertDoesNotExist()
                     }

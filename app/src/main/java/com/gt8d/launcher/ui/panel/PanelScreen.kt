@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -75,6 +76,7 @@ fun PanelScreen(
     }
     val now by MediaWatcher.nowPlaying.collectAsState()
     var showAppList by rememberSaveable { mutableStateOf(false) }
+    val iconPage = rememberSaveable { mutableIntStateOf(0) }
     val environment = rememberPanelEnvironment(AppGraph.catalog)
     val frequent by AppGraph.frequentApps.collectAsState()
     val settings = remember(context, environment.revision) { settingsComponent(context.packageManager) }
@@ -212,7 +214,7 @@ fun PanelScreen(
             onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet, homeAppRowState = homeAppRowState)
     } else {
         val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
-        PanelContent(state = state.copy(view = pending ?: config.panelView,
+        PanelContent(iconPage = iconPage, state = state.copy(view = pending ?: config.panelView,
             sets = config.screenSets, currentSetIndex = currentIndex,
             setAppInfo = { catalog.info(it, installedPkgs) }),
             actions = actions.copy(onSelectView = { view ->

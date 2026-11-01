@@ -16,6 +16,7 @@ import android.os.Process
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -52,6 +53,37 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun panel_tenAppsPageSurvivesAppListAndViewSwitch() {
+        val panels = (1..11).map { "example.paged$it" }
+        panels.forEach { install(packageName = it) }
+        var config by androidx.compose.runtime.mutableStateOf(Defaults.build(emptySet()).copy(
+            panelApps = panels, appListPkgs = emptyList()))
+        rule.setContent { LauncherTheme {
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier
+                .size(516.dp, 800.dp)) {
+                PanelScreen(true, homeConfig = config, onLaunchApp = { launches.add(it) })
+            }
+        } }
+        for (p in panels.take(8)) rule.onNodeWithTag("icon_$p").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("icon_pager").performScrollTo().performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+        for (p in panels.drop(8).take(2)) rule.onNodeWithTag("icon_$p").assertIsDisplayed()
+        rule.onNodeWithTag("icon_${panels.last()}").assertDoesNotExist()
+        rule.onNodeWithTag("icon_add").assertIsDisplayed()
+        rule.onNodeWithTag("icon_${panels[8]}").performClick()
+        assertEquals(listOf(panels[8]), launches)
+        openList()
+        rule.onNodeWithTag("applist_close").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+        rule.onNodeWithTag("panel_view_sets").performClick()
+        rule.runOnIdle { config = config.copy(panelView = PanelView.Sets) }
+        rule.onNodeWithTag("panel_view_apps").performClick()
+        rule.runOnIdle { config = config.copy(panelView = PanelView.Apps) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("icon_pager_dots").assertContentDescriptionEquals("ページ 2/2")
+    }
     private val hidden get() = com.gt8d.launcher.apps.HiddenApps.packages
     private fun installHidden() {
         val pm = Shadows.shadowOf(app.packageManager)
@@ -187,7 +219,7 @@ class PanelScreenTest {
     @Test fun wideHome_panelOrderAndLimitLaunchesPackageAndAddsWhileListKeepsActivities() {
         install(); install("$pkg.B", "Label B")
         installHidden()
-        val panels = (1..6).map { "example.panel$it" }
+        val panels = (1..11).map { "example.panel$it" }
         panels.forEach { install(packageName = it) }
         var added = 0
         val config = Defaults.build(emptySet()).copy(panelApps = panels,
@@ -199,7 +231,7 @@ class PanelScreenTest {
         hidden.forEach { rule.onNodeWithTag("home_app_$it").assertDoesNotExist() }
         rule.onNodeWithTag("home_app_$pkg").assertDoesNotExist()
         var previous = Float.NEGATIVE_INFINITY
-        for ((index, panel) in panels.take(5).withIndex()) {
+        for ((index, panel) in panels.take(10).withIndex()) {
             rule.onNodeWithTag("home_apps").performScrollToIndex(index)
             val node = rule.onNodeWithTag("home_app_$panel").assertIsDisplayed()
             val row = rule.onNodeWithTag("home_apps").fetchSemanticsNode()
@@ -209,10 +241,10 @@ class PanelScreenTest {
             previous = position
             node.performClick()
         }
-        assertEquals(panels.take(5), launches)
+        assertEquals(panels.take(10), launches)
         rule.onNodeWithTag("home_app_${panels.last()}").assertDoesNotExist()
         rule.onNodeWithTag("home_missing_${panels.last()}").assertDoesNotExist()
-        rule.onNodeWithTag("home_apps").performScrollToIndex(5)
+        rule.onNodeWithTag("home_apps").performScrollToIndex(10)
         rule.onNodeWithTag("home_app_add").performClick()
         assertEquals(1, added)
         assertNull(Shadows.shadowOf(app).nextStartedActivity)

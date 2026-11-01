@@ -89,6 +89,18 @@ class HomeAppRowTest {
         assertTrue(rule.onNodeWithTag("home_apps").fetchSemanticsNode()
             .config[androidx.compose.ui.semantics.SemanticsProperties.HorizontalScrollAxisRange].value() > 0f)
     }
+    @Test fun tenAppsAndAdd_scrollToLastWholeCell() {
+        host(width = 300, count = 10)
+        for (index in 0..10) {
+            rule.onNodeWithTag("home_apps").performScrollToIndex(index)
+            val node = rule.onNodeWithTag(if (index == 10) "home_app_add" else "home_app_p${index + 1}")
+                .assertIsDisplayed().assertWidthIsEqualTo(96.dp).assertHeightIsEqualTo(96.dp)
+            val bounds = node.getBoundsInRoot()
+            val area = rule.onNodeWithTag("home_apps").getBoundsInRoot()
+            assertTrue(bounds.left >= area.left && bounds.right <= area.right &&
+                bounds.top >= area.top && bounds.bottom <= area.bottom)
+        }
+    }
     @Test fun width600_uses24dpGap() {
         host(width = 600)
         val a = rule.onNodeWithTag("home_app_p1").assertWidthIsEqualTo(96.dp).getBoundsInRoot()

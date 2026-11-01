@@ -33,6 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -98,7 +100,9 @@ data class PanelActions(
 fun PanelContent(
     state: PanelState,
     actions: PanelActions,
+    iconPage: MutableIntState? = null,
 ) {
+    val selectedIconPage = iconPage ?: remember { mutableIntStateOf(0) }
     var clockText by remember { mutableStateOf(LocalTime.now().format(ClockFormatter)) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -143,6 +147,8 @@ fun PanelContent(
                                 )
 
                                 IconGrid(
+                                    page = selectedIconPage.intValue,
+                                    onPageSettled = { selectedIconPage.intValue = it },
                                     apps = state.panelApps.take(MAX_PANEL_APPS),
                                     onLaunch = actions.onLaunch,
                                     onAdd = actions.onAdd,
