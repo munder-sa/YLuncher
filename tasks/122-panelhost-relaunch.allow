@@ -1,0 +1,8 @@
+write panelhost/src/main/java/com/gt8d/launcher/panelhost/PanelHostActivity.kt
+write panelhost/build.gradle.kts
+create panelhost/src/test/java/com/gt8d/launcher/panelhost/PanelHostActivityTest.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+command /home/munde/tools/gradle-run.sh :panelhost:testDebugUnitTest :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.*'
+command /home/munde/tools/gradle-run.sh :panelhost:testDebugUnitTest :app:testDebugUnitTest --tests com.gt8d.launcher.ui.panel.*
+command /home/munde/tools/gradle-run.sh :panelhost:testDebugUnitTest
