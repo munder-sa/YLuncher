@@ -824,6 +824,28 @@ class SetRunnerTest {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun panelLaunched_oneShotApp_keepsPairAndSaverPartner() = runTest {
+        for (panelLeft in listOf(true, false)) {
+            val e = TestEnv(scope = this)
+            if (panelLeft) {
+                e.config = e.config.copy(screenSets = listOf(
+                    ScreenSet("set1", Slot.Panel, Slot.App("youtube"), SplitRatio.R4_6),
+                ))
+            }
+            val original = e.config.screenSets.first()
+            e.runner.open(1); resumePanelApp(e, "youtube")
+            assertEquals(1, e.runner.readyCount)
+            val pair = e.runner.lastOpenedPair
+            e.runner.panelLaunched("com.ds.backcar")
+            assertEquals(pair, e.runner.lastOpenedPair)
+            e.runner.onPanelPlacementChanged(if (panelLeft) PanelPlacement.Right else PanelPlacement.Left)
+            advanceUntilIdle()
+            assertEquals(original.swapped(), e.config.screenSets.first())
+            assertEquals(pair!!.second to pair.first, e.runner.lastOpenedPair)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun panelLaunched_forwardsPartner() = runTest {
         val e = TestEnv(scope = this)
         e.runner.open(1); resumePanelApp(e, "youtube")

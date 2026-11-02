@@ -1,5 +1,6 @@
 package com.gt8d.launcher.sets
 
+import com.gt8d.launcher.apps.OneShotApps
 import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.apps.SplitRedirect
 import com.gt8d.launcher.apps.SplitRedirects
@@ -347,6 +348,10 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun panelLaunched(pkg: String) {
+        if (OneShotApps.contains(pkg)) {
+            DiagLog.d("SetRunner", "panelLaunched skipped oneShot pkg=$pkg")
+            return
+        }
         if (!panelSessionReady) return
         val pair = lastOpenedPair ?: return
         lastOpenedPair = when (d.panelHostPkg) {
