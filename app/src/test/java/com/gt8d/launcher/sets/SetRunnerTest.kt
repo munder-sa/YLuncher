@@ -7,6 +7,7 @@ import com.gt8d.launcher.apps.SplitRedirects
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
+import com.gt8d.launcher.config.Side
 import com.gt8d.launcher.config.SplitRatio
 import com.gt8d.launcher.config.swapped
 import com.gt8d.launcher.curtain.CurtainController
@@ -42,6 +43,41 @@ import com.gt8d.launcher.split.StockLauncherWarmup
 import com.gt8d.launcher.split.StockLauncherWarmupState
 
 class SetRunnerTest {
+    @Test fun reopenWithApp_buildsPanelAndAppPair_usesCurrentSetRatioOrDefault() {
+        for (side in listOf(Side.Left, Side.Right)) {
+            for (sameSide in listOf(false, true)) {
+                val e = TestEnv(initialLastSetIndex = 1)
+                val setSide = if (sameSide) side else if (side == Side.Left) Side.Right else Side.Left
+                e.config = e.config.copy(screenSets = listOf(ScreenSet(
+                    "current",
+                    if (setSide == Side.Left) Slot.Panel else Slot.App("youtube"),
+                    if (setSide == Side.Right) Slot.Panel else Slot.App("youtube"),
+                    SplitRatio.R5_5,
+                )))
+                assertTrue(e.runner.reopenWithApp("maps", side))
+                val ratio = if (sameSide) SplitRatio.R5_5 else if (side == Side.Right) SplitRatio.R6_4 else SplitRatio.R4_6
+                assertEquals(listOf(SplitCall(
+                    if (side == Side.Left) "com.gt8d.launcher.panel" else "maps",
+                    if (side == Side.Right) "com.gt8d.launcher.panel" else "maps",
+                    ratio,
+                )), e.vendor.calls)
+                assertEquals(1, e.runner.currentIndex)
+            }
+        }
+    }
+
+    @Test fun reopenWithApp_returnsFalseWhileOpening_andKeepsCurrentIndex() {
+        val e = TestEnv(initialLastSetIndex = 2)
+        assertTrue(e.runner.reopenWithApp("maps", Side.Right))
+        assertFalse(e.runner.reopenWithApp("youtube", Side.Left))
+        assertEquals(1, e.vendor.calls.size)
+        assertEquals(2, e.runner.currentIndex)
+        assertEquals(2, e.lastIndex.lastSetIndex)
+        val loading = TestEnv(loading = true)
+        assertFalse(loading.runner.reopenWithApp("maps", Side.Left))
+        assertTrue(loading.vendor.calls.isEmpty())
+    }
+
     private fun coldVendor() = TestEnv().apply { stockState.warmedBootId = null }
 
     private fun finishApps(e: TestEnv, runner: SetRunner = e.runner) {

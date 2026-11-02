@@ -4,6 +4,12 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import com.gt8d.launcher.config.Side
+import com.gt8d.launcher.pip.PipDetector
+import com.gt8d.launcher.pip.AndroidPipDetector
+import com.gt8d.launcher.split.PanelPlacement
 import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
@@ -43,6 +49,8 @@ import com.gt8d.launcher.ui.layout.launcherBackground
 import com.gt8d.launcher.ui.layout.stripSafePadding
 
 class PanelActivity : ComponentActivity() {
+    internal var pipDetector: PipDetector = AndroidPipDetector
+    internal var reopen: (String, Side) -> Boolean = { pkg, side -> AppGraph.runner.reopenWithApp(pkg, side) }
     private var watchingPlacement = false
     private val placementListener = ViewTreeObserver.OnGlobalLayoutListener { reportPlacement() }
     internal var placementBounds: () -> Triple<Int, Int, Int> = {
@@ -67,6 +75,10 @@ class PanelActivity : ComponentActivity() {
         { redirect, adjacent -> activityLauncher.startRedirect(redirect, adjacent) }
     internal var launchComponent: (ComponentName, Boolean) -> Boolean =
         { component, adjacent -> activityLauncher.startComponent(component, adjacent) }
+    // PiP を全画面に戻す起動は、分割の中の画面を起動元にすると PiP のまま残る(実機で確認)。起動元の画面を持たないアプリの Context から開く。
+    private val appLauncher by lazy { AndroidActivityLauncher(applicationContext) }
+    internal var pipLaunchApp: (String) -> Boolean = { pkg -> appLauncher.startApp(pkg, false) }
+    internal var pipLaunchComponent: (ComponentName) -> Boolean = { component -> appLauncher.startComponent(component, false) }
     private var inSplitState by mutableStateOf(false)
     private var settingsOpen by mutableStateOf(false)
     private var settingsInitialRoute: SettingsRoute? = null
@@ -153,11 +165,7 @@ class PanelActivity : ComponentActivity() {
                                 settingsOpen = true
                             } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_route", "permissions"))
                         },
-                        onLaunchComponent = { component ->
-                            val succeeded = launchComponent(component, isInMultiWindowMode)
-                            AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
-                            if (succeeded && isInMultiWindowMode) AppGraph.runner.panelLaunched(component.packageName)
-                        },
+                        onLaunchComponent = ::onLaunchComponent,
                         onLaunchApp = { pkg -> onLaunchApp(pkg) },
                     )
                 }
@@ -165,7 +173,31 @@ class PanelActivity : ComponentActivity() {
         }
     }
 
-    private fun onLaunchApp(pkg: String): Boolean {
+    private fun relaunchPip(pkg: String, launch: () -> Boolean): Boolean {
+        val side = when (AppGraph.panelPlacement.value) {
+            PanelPlacement.Left -> Side.Left
+            PanelPlacement.Right -> Side.Right
+            else -> null
+        }
+        val succeeded = launch()
+        AppGraph.warm.recordAppLaunch(pkg, succeeded)
+        DiagLog.d("Panel", "pip relaunch pkg=$pkg resplit=${side ?: "none"}")
+        if (side != null) Handler(Looper.getMainLooper()).postDelayed({ reopen(pkg, side) }, PIP_RESPLIT_DELAY_MS)
+        return succeeded
+    }
+
+    internal fun onLaunchComponent(component: ComponentName): Boolean {
+        val pkg = component.packageName
+        if (isInMultiWindowMode && pipDetector.isInPip(pkg)) {
+            return relaunchPip(pkg) { pipLaunchComponent(component) }
+        }
+        val succeeded = launchComponent(component, isInMultiWindowMode)
+        AppGraph.warm.recordAppLaunch(pkg, succeeded)
+        if (succeeded && isInMultiWindowMode) AppGraph.runner.panelLaunched(pkg)
+        return succeeded
+    }
+
+    internal fun onLaunchApp(pkg: String): Boolean {
         val redirect = if (isInMultiWindowMode) redirects.forPackage(pkg) else null
         if (redirect != null) {
             val succeeded = if (redirect.component == null && redirect.uri == null) {
@@ -176,6 +208,9 @@ class PanelActivity : ComponentActivity() {
                 AppGraph.runner.panelLaunched(redirect.targetPkg)
                 return true
             }
+        }
+        if (isInMultiWindowMode && pipDetector.isInPip(pkg)) {
+            return relaunchPip(pkg) { pipLaunchApp(pkg) }
         }
         val succeeded = launchApp(pkg, isInMultiWindowMode)
         AppGraph.warm.recordAppLaunch(pkg, succeeded)
@@ -256,5 +291,9 @@ class PanelActivity : ComponentActivity() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         })
         finish()
+    }
+
+    companion object {
+        internal const val PIP_RESPLIT_DELAY_MS = 1200L
     }
 }

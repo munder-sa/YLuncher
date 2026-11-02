@@ -87,7 +87,7 @@ class PermissionsScreenTest {
         rule.onNodeWithTag("perm_row_Accessibility").assertExists()
         rule.runOnIdle { currentMode = SplitMode.LeftOnly }; resume()
         rule.onNodeWithTag("split_status").assertTextEquals("分割が使えなくなりました")
-        rule.onNodeWithTag("perm_row_Accessibility").assertDoesNotExist()
+        rule.onNodeWithTag("perm_row_Accessibility").assertExists()
         rule.onNodeWithTag("split_restore").performScrollTo().performClick()
         assertEquals(1, restoreCalls)
         rule.onNodeWithTag("split_status").assertTextEquals("メーカー方式で動作中")

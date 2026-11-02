@@ -18,6 +18,54 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AndroidActivityLauncherTest {
+    private fun pipLauncher(pkg: String = selected.packageName) = AndroidActivityLauncher(
+        app, com.gt8d.launcher.pip.PipDetector { it == pkg },
+    )
+
+    private fun registerApp() {
+        Shadows.shadowOf(app.packageManager).apply {
+            addOrUpdateActivity(ActivityInfo().apply { name = selected.className; packageName = selected.packageName })
+            addIntentFilterForActivity(selected, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        }
+    }
+
+    private fun assertFullscreen(intent: Intent) {
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK)
+        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+        assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+    }
+
+    @Test fun startApp_adjacent_pipTarget_launchesFullscreenWithoutAdjacent() {
+        registerApp()
+        assertTrue(pipLauncher().startApp(selected.packageName, true))
+        assertFullscreen(Shadows.shadowOf(app).nextStartedActivity)
+    }
+
+    @Test fun startComponent_adjacent_pipTarget_launchesFullscreenWithoutAdjacent() {
+        assertTrue(pipLauncher().startComponent(selected, true))
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, Shadows.shadowOf(app).nextStartedActivity.flags)
+    }
+
+    @Test fun startRedirect_adjacent_pipTarget_launchesWithoutAdjacent() {
+        assertTrue(pipLauncher().startRedirect(com.gt8d.launcher.apps.SplitRedirect(selected.packageName, selected, null), true))
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP, Shadows.shadowOf(app).nextStartedActivity.flags)
+    }
+
+    @Test fun startApp_adjacent_otherAppInPip_keepsAdjacentFlags() {
+        registerApp()
+        assertTrue(pipLauncher("other.app").startApp(selected.packageName, true))
+        val intent = Shadows.shadowOf(app).nextStartedActivity
+        for (flag in listOf(Intent.FLAG_ACTIVITY_NEW_TASK, Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT, Intent.FLAG_ACTIVITY_MULTIPLE_TASK)) {
+            assertEquals(flag, intent.flags and flag)
+        }
+    }
+
+    @Test fun startApp_notAdjacent_pipTarget_unchanged() {
+        registerApp()
+        assertTrue(pipLauncher().startApp(selected.packageName, false))
+        assertFullscreen(Shadows.shadowOf(app).nextStartedActivity)
+    }
+
     @Test fun startRedirect_buildsViewIntentAndAdjacentFlags() {
         val redirect = com.gt8d.launcher.apps.SplitRedirect("example.app", selected, android.net.Uri.parse("https://example.com/voice"))
         assertTrue(AndroidActivityLauncher(app).startRedirect(redirect, true))

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pip_watcher_description">PiP(小窓)で再生中のアプリを見分けます。パネルからそのアプリを開くとき、小窓を全画面に戻すために使います。画面の内容は読み取りません。</string>
+</resources>

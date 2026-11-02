@@ -14,6 +14,7 @@ import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
 import com.gt8d.launcher.media.MediaListenerService
 import com.gt8d.launcher.split.SplitMode
+import com.gt8d.launcher.pip.pipWatcherEnabled
 
 enum class PermissionItem(val label: String) {
     Home("既定のホーム"),
@@ -22,11 +23,11 @@ enum class PermissionItem(val label: String) {
     Browser("既定のブラウザ"),
     Bluetooth("Bluetooth 接続"),
     UsageAccess("使用状況へのアクセス"),
-    Accessibility("アクセシビリティ"),
+    Accessibility("ユーザー補助(PiP の判定)"),
 }
 
 fun permissionItems(mode: SplitMode): List<PermissionItem> =
-    PermissionItem.entries.filter { it != PermissionItem.Accessibility || mode == SplitMode.AppPair }
+    PermissionItem.entries.toList()
 
 interface PermissionChecker { fun granted(item: PermissionItem): Boolean }
 
@@ -42,7 +43,7 @@ class AndroidPermissionChecker(private val context: Context) : PermissionChecker
                 ?.isRoleHeld(RoleManager.ROLE_BROWSER) == true
             PermissionItem.Bluetooth -> context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PERMISSION_GRANTED
             PermissionItem.UsageAccess -> UsageStatsForegroundEvents(context).available()
-            PermissionItem.Accessibility -> false
+            PermissionItem.Accessibility -> pipWatcherEnabled(context)
         }
     }.getOrDefault(false)
 }
