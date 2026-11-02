@@ -32,6 +32,19 @@ class PipWatcherService : AccessibilityService() {
         emptySet()
     }
 
+    // SystemUI の PiP の接続が、PiP の窓の root への ACTION_EXPAND を PiP の解除(expandLeavePip)として扱う(AOSP Android 15)。
+    fun expand(pkg: String): Boolean = try {
+        val root = windows.firstOrNull { it.isInPictureInPictureMode && it.root?.packageName?.toString() == pkg }?.root
+        val id = android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_EXPAND.id
+        val advertised = root?.actionList?.any { it.id == id } == true
+        val result = advertised && root!!.performAction(id)
+        DiagLog.d("PiP", "expand pkg=$pkg root=${root != null} advertised=$advertised result=$result")
+        result
+    } catch (e: Exception) {
+        DiagLog.d("PiP", "expand failed: $e")
+        false
+    }
+
     companion object {
         @Volatile var instance: PipWatcherService? = null
     }

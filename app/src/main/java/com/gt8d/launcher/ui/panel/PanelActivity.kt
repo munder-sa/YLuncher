@@ -51,6 +51,9 @@ import com.gt8d.launcher.ui.layout.stripSafePadding
 class PanelActivity : ComponentActivity() {
     internal var pipDetector: PipDetector = AndroidPipDetector
     internal var reopen: (String, Side) -> Boolean = { pkg, side -> AppGraph.runner.reopenWithApp(pkg, side) }
+    internal var pauseMedia: (String) -> Boolean = { pkg -> com.gt8d.launcher.media.MediaWatcher.pauseIfPlaying(pkg) }
+    internal var resumeMedia: (String) -> Unit = { pkg -> com.gt8d.launcher.media.MediaWatcher.playPackage(pkg) }
+    internal var openingDone: () -> Boolean = { AppGraph.runner.opening.value == null }
     private var watchingPlacement = false
     private val placementListener = ViewTreeObserver.OnGlobalLayoutListener { reportPlacement() }
     internal var placementBounds: () -> Triple<Int, Int, Int> = {
@@ -179,10 +182,35 @@ class PanelActivity : ComponentActivity() {
             PanelPlacement.Right -> Side.Right
             else -> null
         }
-        val succeeded = launch()
+        // 再生中のまま組み直すと、分割の準備で裏に回ったアプリが PiP に入り直し、分割が失敗する(実機で確認)。組み直す間だけ止める。
+        val paused = side != null && pauseMedia(pkg)
+        // アプリからの startActivity では PiP が解除されない(実機で確認)。ユーザー補助の ACTION_EXPAND で解除し、送れなければ起動で試す。
+        val expanded = pipDetector.expand(pkg)
+        val succeeded = expanded || launch()
         AppGraph.warm.recordAppLaunch(pkg, succeeded)
-        DiagLog.d("Panel", "pip relaunch pkg=$pkg resplit=${side ?: "none"}")
-        if (side != null) Handler(Looper.getMainLooper()).postDelayed({ reopen(pkg, side) }, PIP_RESPLIT_DELAY_MS)
+        DiagLog.d("Panel", "pip relaunch pkg=$pkg expanded=$expanded paused=$paused resplit=${side ?: "none"}")
+        if (side == null) return succeeded
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed({
+            // PiP のまま分割を組み直すと失敗し、SystemUI の分割が止まることがある。解除を確かめてから組み直す。
+            val reopened = if (pipDetector.isInPip(pkg)) {
+                DiagLog.d("Panel", "pip still pinned, skip resplit pkg=$pkg")
+                false
+            } else reopen(pkg, side)
+            if (!paused) return@postDelayed
+            if (!reopened) { resumeMedia(pkg); return@postDelayed }
+            var waited = 0L
+            fun resumeWhenDone() {
+                if (openingDone() || waited >= PIP_RESUME_LIMIT_MS) {
+                    DiagLog.d("Panel", "pip resume pkg=$pkg waited=$waited")
+                    resumeMedia(pkg)
+                } else {
+                    waited += PIP_RESUME_POLL_MS
+                    handler.postDelayed({ resumeWhenDone() }, PIP_RESUME_POLL_MS)
+                }
+            }
+            resumeWhenDone()
+        }, PIP_RESPLIT_DELAY_MS)
         return succeeded
     }
 
@@ -295,5 +323,7 @@ class PanelActivity : ComponentActivity() {
 
     companion object {
         internal const val PIP_RESPLIT_DELAY_MS = 1200L
+        internal const val PIP_RESUME_POLL_MS = 200L
+        internal const val PIP_RESUME_LIMIT_MS = 6000L
     }
 }

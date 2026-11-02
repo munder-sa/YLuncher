@@ -51,13 +51,15 @@ class PanelActivityPipTest {
         val reopened = mutableListOf<Pair<String, Side>>()
         try {
             shadowOf(activity).setInMultiWindowMode(true)
-            activity.pipDetector = PipDetector { it == "example.pip" && pip }
+            var pinned = pip
+            activity.pipDetector = PipDetector { it == "example.pip" && pinned }
             activity.redirects = SplitRedirects { null }
             activity.launchApp = { pkg, adjacent -> calls.add(pkg to adjacent); true }
             activity.launchComponent = { cn, adjacent -> calls.add(cn.packageName to adjacent); true }
-            activity.pipLaunchApp = { pkg -> calls.add(pkg to false); true }
-            activity.pipLaunchComponent = { cn -> calls.add(cn.packageName to false); true }
+            activity.pipLaunchApp = { pkg -> calls.add(pkg to false); pinned = false; true }
+            activity.pipLaunchComponent = { cn -> calls.add(cn.packageName to false); pinned = false; true }
             activity.reopen = { pkg, side -> reopened.add(pkg to side); true }
+            activity.pauseMedia = { false }
             AppGraph.reportPanelPlacement(placement)
             assertTrue(if (component) activity.onLaunchComponent(ComponentName("example.pip", "example.pip.Main"))
                 else activity.onLaunchApp("example.pip"))
