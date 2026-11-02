@@ -90,6 +90,8 @@ class PanelActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 中継が、自分で閉じたのかプロセスごと消えたのかを見分けるため。
+        setResult(RESULT_OK)
         redirects = AndroidSplitRedirects(packageManager)
         AppGraph.panelAlive = true
         safetyMode = SafetyGuard.isFallbackActive(this)

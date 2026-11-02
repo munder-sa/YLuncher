@@ -53,4 +53,23 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            val androidAllDir = File(
+                System.getProperty("user.home"),
+                ".m2/repository/org/robolectric/android-all-instrumented/15-robolectric-12650502-i7",
+            )
+            if (androidAllDir.isDirectory) {
+                it.systemProperty("robolectric.offline", "true")
+                it.systemProperty("robolectric.dependency.dir", androidAllDir.path)
+            }
+        }
+    }
+}
+
+dependencies {
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }
