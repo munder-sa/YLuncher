@@ -113,6 +113,7 @@ object AppGraph {
         if (_panelPlacement.value == p) return
         _panelPlacement.value = p
         DiagLog.d("Panel", "placement=$p")
+        runner.panelPlacementChanged(p)
     }
 
     @Volatile var homeResumed: Boolean = false
