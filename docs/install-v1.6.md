@@ -151,6 +151,8 @@ adb shell settings get secure enabled_accessibility_services
 adb shell settings put secure enabled_accessibility_services "<今の値>:com.gt8d.launcher/com.gt8d.launcher.pip.PipWatcherService"
 ```
 
+入れ直す(`install -r`)と、YLuncher のユーザー補助が外れることがある(実機で確認)。通知へのアクセスと同じく、入れた後に有効にし直す。`settings put` は値を丸ごと置き換えるので、ほかのサービス(例: com.carsyso.main の AccessibilityHookerService)を消さないよう、必ず今の値に足す形で書く。
+
 1.6.4 に上げた直後は、古い中継のタスクが残っていると、最初のセットが一度だけ失敗することがある(古い中継は 122 の仕組みを持たないため)。2 回目からは開く。
 
 ## 5. v1.5 に戻す
