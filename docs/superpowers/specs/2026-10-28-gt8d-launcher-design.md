@@ -2,7 +2,7 @@
 
 - 作成日：2026-10-28
 - 対象：Linkifun GT8D（車載AI Box）→ 新型RAV4 GR SPORT（有線CarPlay）
-- 実装体制：Claude Code（設計・指揮・レビュー）＋ Antigravity（実装）
+- 実装体制：Claude Code（設計・指揮・レビュー）＋ Codex CLI（実装。`codex-run` で委譲。2026-10-29 に Antigravity から移行）
 - ステータス：**r4.0(v1.6 の実装を反映)**
 - v1.5 の差分設計：[左パネル対応設計書](2026-10-31-v1.5-left-panel-design.md)。
 - v1.6 の差分設計：[UX 改善設計書](2026-10-31-v1.6-ux-design.md)（段階 A・B）。導入は [v1.6 導入手順](../../install-v1.6.md)。
@@ -508,7 +508,7 @@ Muse への共通ルール：ダーク背景で映える色づかい。
 
 ## 11. ビルド・配布
 
-- **リリース用署名鍵を1つ作成し、Claude Code と Antigravity で共有**（別鍵だと上書きインストールできず設定が消えるため）。鍵はリポジトリ外で保管
+- **リリース用署名鍵を1つ作成し、Claude Code と Codex CLI で共有**（別鍵だと上書きインストールできず設定が消えるため）。鍵はリポジトリ外で保管
 - ビルドは WSL（JDK 17・Android SDK・Gradle wrapper。`~/tools/gradle-run.sh`）
 - インストール：本体と中継の2つ（`install -r app-release.apk`、`install -r panelhost-release.apk`）。同じ鍵で署名する
 - 初回セットアップ（adb で一括、`scripts/setup-device.ps1`）：既定のホーム設定、通知アクセス許可（`cmd notification allow_listener`）、オーバーレイ許可（`appops set com.gt8d.launcher SYSTEM_ALERT_WINDOW allow`）、**使用状況へのアクセス（`appops set com.gt8d.launcher GET_USAGE_STATS allow`）**。既定のブラウザは端末の設定画面で選択
