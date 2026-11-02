@@ -1,0 +1,20 @@
+create app/src/main/java/com/gt8d/launcher/pip/PipWatcherService.kt
+create app/src/main/java/com/gt8d/launcher/pip/PipDetector.kt
+create app/src/main/res/xml/pip_watcher.xml
+create app/src/main/res/values/strings.xml
+create app/src/test/java/com/gt8d/launcher/pip/PipDetectorTest.kt
+write app/src/main/AndroidManifest.xml
+write app/src/main/java/com/gt8d/launcher/split/ActivityLauncher.kt
+write app/src/main/java/com/gt8d/launcher/settings/Permissions.kt
+write app/src/main/java/com/gt8d/launcher/settings/PermissionsScreen.kt
+write app/src/test/java/com/gt8d/launcher/settings/PermissionsTest.kt
+write app/src/test/java/com/gt8d/launcher/settings/PermissionsScreenTest.kt
+write app/src/test/java/com/gt8d/launcher/split/AndroidActivityLauncherTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.split.*' --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.pip.*' --tests 'com.gt8d.launcher.ui.panel.*'
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.split.* --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.pip.* --tests com.gt8d.launcher.ui.panel.*
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityPipTest.kt
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.split.*' --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.pip.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.sets.*'
+command /home/munde/tools/gradle-run.sh testDebugUnitTest --tests com.gt8d.launcher.split.* --tests com.gt8d.launcher.settings.* --tests com.gt8d.launcher.pip.* --tests com.gt8d.launcher.ui.panel.* --tests com.gt8d.launcher.sets.*

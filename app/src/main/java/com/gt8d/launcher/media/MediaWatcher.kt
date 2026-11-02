@@ -73,6 +73,29 @@ object MediaWatcher {
         _nowPlaying.value = null
     }
 
+    // PiP から戻して分割を組み直す間、再生中のアプリが裏に回ったと判断して PiP に入り直すのを防ぐ(実機で確認)。
+    fun pauseIfPlaying(pkg: String): Boolean {
+        val controller = activeControllers.firstOrNull {
+            it.packageName == pkg && it.playbackState?.state == PlaybackState.STATE_PLAYING
+        } ?: return false
+        return try {
+            controller.transportControls.pause()
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "MediaWatcher.pauseIfPlaying failed", e)
+            false
+        }
+    }
+
+    fun playPackage(pkg: String) {
+        val controller = activeControllers.firstOrNull { it.packageName == pkg } ?: return
+        try {
+            controller.transportControls.play()
+        } catch (e: Exception) {
+            Log.w(TAG, "MediaWatcher.playPackage failed", e)
+        }
+    }
+
     fun play() {
         runTransport("play") { it.transportControls.play() }
     }

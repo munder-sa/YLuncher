@@ -393,6 +393,33 @@ class SetRunner(private val d: SetRunnerDeps) {
         return true
     }
 
+    fun reopenWithApp(pkg: String, panelSide: Side): Boolean {
+        stopCancelGuard()
+        cancelLinkCallbacks()
+        val cfg = configForOperation() ?: return false
+        if (_opening.value != null) return false
+        val current = cfg.screenSets.getOrNull(currentIndex - 1)
+        val ratio = current?.takeIf { it.panelSide == panelSide }?.ratio
+            ?: if (panelSide == Side.Right) SplitRatio.R6_4 else SplitRatio.R4_6
+        val left = if (panelSide == Side.Left) Slot.Panel else Slot.App(pkg)
+        val right = if (panelSide == Side.Right) Slot.Panel else Slot.App(pkg)
+        val appPreview = SlotPreview.App(pkg, d.labelFor(pkg))
+        DiagLog.d("SetRunner", "reopenWithApp pkg=$pkg panelSide=$panelSide ratio=$ratio")
+        openSet(
+            ScreenSet("pip", left, right, ratio),
+            CurtainTarget(
+                setName = "PiP から戻す",
+                left = if (panelSide == Side.Left) SlotPreview.Panel else appPreview,
+                right = if (panelSide == Side.Right) SlotPreview.Panel else appPreview,
+                ratio = ratio,
+                position = currentIndex,
+                count = cfg.screenSets.size + 1,
+            ),
+            useCurtain = true,
+        )
+        return true
+    }
+
     private fun notifyLinkNotSplit() {
         val fallback = linkFallback
         cancelLinkCallbacks()
