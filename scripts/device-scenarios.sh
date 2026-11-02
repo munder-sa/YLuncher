@@ -31,6 +31,7 @@ active=''
 home_saved=0
 browser_saved=0
 config_saved=0
+set2_skipped=0
 left_index=''
 original_home=''
 original_browser=''
@@ -127,6 +128,9 @@ cleanup() {
             failed=1
         fi
     fi
+    if ((set2_skipped)); then
+        echo '注意: セット 2 が無いため set_panelCard_switch と link_appPanelFront を飛ばしました' >&2
+    fi
     echo "結果: $summary"
     ((status == 0 && failed == 0)) && exit 0
     exit 1
@@ -136,6 +140,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 adb logcat -G 16M || :
 adb shell am force-stop com.gt8d.launcher || exit 1
+if ! adb shell run-as com.gt8d.launcher true; then
+    row setup FAIL 'com.gt8d.launcher がデバッグ版でない(run-as できない)。場面テストはデバッグ版を入れて流す'; exit 1
+fi
 if ! adb shell "run-as com.gt8d.launcher sh -c 'if [ -f files/config-scenario-backup.json ]; then cat files/config-scenario-backup.json > files/config.json && rm files/config-scenario-backup.json; fi'"; then
     row setup FAIL '前回の設定の復元に失敗(退避: files/config-scenario-backup.json)'; exit 1
 fi
@@ -143,12 +150,41 @@ adb exec-out run-as com.gt8d.launcher cat files/config.json > "$out/config-backu
 adb shell "run-as com.gt8d.launcher sh -c 'cat files/config.json > files/config-scenario-backup.json'" || { row setup FAIL '端末内の設定の退避に失敗'; exit 1; }
 config_saved=1
 # リンクの行き先の期待値は、端末の設定のブラウザ(link.browserPkg)に合わせる。無ければ Chrome。
-# セット 2(index=2)の左右は、端末の今の設定から読む(ユーザーがセットを変えても場面が合うように)
-read -r set2_left set2_right < <(python3 -c 'import json,sys
-c=json.load(open(sys.argv[1]))
-s=c["screenSets"][1]
-f=lambda x: x.get("pkg", "panel")
-print(f(s["left"]), f(s["right"]))' "$out/config-backup.json" 2>/dev/null)
+# セットの件数とセット 1・2 の左右を、退避した設定からまとめて読む。
+if ! set_values=$(python3 -c 'import json,sys
+try:
+    with open(sys.argv[1]) as source:
+        c=json.load(source)
+    sets=c.get("screenSets") if isinstance(c, dict) else None
+    if not isinstance(sets, list):
+        sys.exit(1)
+except (OSError, ValueError):
+    sys.exit(1)
+def slot(index, side):
+    if index >= len(sets) or not isinstance(sets[index], dict):
+        return "-"
+    value=sets[index].get(side)
+    if not isinstance(value, dict):
+        return "-"
+    if "pkg" in value:
+        pkg=value["pkg"]
+        return pkg if isinstance(pkg, str) and pkg else "-"
+    if value.get("type") == "com.gt8d.launcher.config.Slot.Panel":
+        return "com.gt8d.launcher.panel"
+    return "-"
+print(len(sets), slot(0, "left"), slot(0, "right"), slot(1, "left"), slot(1, "right"))' "$out/config-backup.json" 2>/dev/null); then
+    row setup FAIL '設定(config.json)を JSON として読めない'; exit 1
+fi
+read -r set_count set1_left set1_right set2_left set2_right <<< "$set_values"
+[[ $set1_left != - ]] || set1_left=''
+[[ $set1_right != - ]] || set1_right=''
+[[ $set2_left != - ]] || set2_left=''
+[[ $set2_right != - ]] || set2_right=''
+if [[ $set1_left != com.google.android.youtube || $set1_right != com.gt8d.launcher.panel ]]; then
+    row setup FAIL "セット 1 が 左 YouTube | 右 パネル でない(左 ${set1_left:-なし}、右 ${set1_right:-なし})。場面テストの前提"; exit 1
+fi
+set2_ok=0
+[[ -z $set2_left || -z $set2_right ]] || set2_ok=1
 configured_browser=$(sed -n 's/.*"browserPkg":"\([a-zA-Z0-9_.]*\)".*/\1/p' "$out/config-backup.json" | head -n 1)
 [[ -n $configured_browser ]] && browser=$configured_browser
 original_home=$(adb shell cmd role get-role-holders android.app.role.HOME) || exit 1
@@ -613,6 +649,17 @@ run() {
     local name=$1 suffix=$2 version=${3-$2} prerequisite='' key prerequisite_key
     local cancel_guard_count=0 cancel_guard_note=''
     key="$name$version"
+    if ((set2_ok == 0)) && [[ $name == set_panelCard_switch || $name == link_appPanelFront ]]; then
+        if [[ $name == set_panelCard_switch ]]; then
+            row "$name$suffix" SKIP "前提: 設定にセット 2 がない、または枠を読めない(セットは $set_count 件)"
+        else
+            row "$name$suffix" SKIP '前提: セット 2 がないため set_panelCard_switch を飛ばした'
+        fi
+        set2_skipped=1
+        scenario_failed[$key]=1
+        last_name=$name; last_suffix=$version; last_pass=0
+        return
+    fi
     case "$name" in
         link_browserTaskPresent) prerequisite=link_cold_noTasks ;;
         set_panelCard_switch) prerequisite=set_strip_coldPanel ;;
