@@ -64,3 +64,28 @@
 
 ## 報告
 - 変えた箇所、決めたこと、実行したコマンドと結果(件数・失敗数)。
+
+## 追記1: 全画面で戻した後、直前の分割を組み直す(ユーザーの追加の要望、実機で成立を確認済み)
+- 実機の確認: PiP の Morphe を `NEW_TASK` だけで全画面に戻し、約 1.5 秒後に Vendor の分割(パネル | Morphe)を開くと、0.6 秒で ready になり、元の PiP のタスク(#2411)がそのまま分割に入った(タスクは増えない)。PiP のままで Vendor の分割を開くと失敗する(Safety)。
+- `SetRunner` に `fun reopenWithApp(pkg: String, panelSide: Side): Boolean` を足す。`openForLink` にならい、
+  - `stopCancelGuard()`・`cancelLinkCallbacks()`、設定が無い・`_opening.value != null` なら false。
+  - 比率: 今のセット(`currentIndex` のセット)が `panelSide` 側にパネルを持つならその比率。そうでなければ、パネルが右なら `R6_4`、左なら `R4_6`。
+  - セット: `ScreenSet("pip", …)`。パネルを `panelSide` に、`Slot.App(pkg)` を反対側に置く。幕の名前は「PiP から戻す」、`SlotPreview` は openForLink と同じ作り(パネルの側はパネルの SlotPreview を使う。既存の `targetFor` の作り方にならう)。`useCurtain = true`。`currentIndex` は変えない(openForLink と同じ)。
+  - DiagLog `"SetRunner", "reopenWithApp pkg=$pkg panelSide=$panelSide ratio=$ratio"`。
+- `PanelActivity` の `onLaunchApp(pkg)` と `onLaunchComponent` の経路(リダイレクトの経路は除く)で、`isInMultiWindowMode` かつ `pipDetector.isInPip(対象のパッケージ)` のとき:
+  1. 隣の指定なし(`launchApp(pkg, false)` / `launchComponent(component, false)`)で開く(PiP が全画面に戻る)。
+  2. パネルの位置 `AppGraph.panelPlacement.value` が Left か Right なら、`PIP_RESPLIT_DELAY_MS = 1200L` 後に `AppGraph.runner.reopenWithApp(対象, その側)` を呼ぶ(Handler(Looper.getMainLooper()).postDelayed で可。Activity が終わっていても runner の呼び出しは行ってよい)。Full・null なら組み直さない。
+  3. この経路では `runner.panelLaunched` は呼ばない(組み直しで lastOpenedPair が更新されるため)。`AppGraph.warm.recordAppLaunch` は今と同じく呼ぶ。
+  4. DiagLog `"Panel", "pip relaunch pkg=… resplit=${side ?: "none"}"`。
+- `PanelActivity` の PiP 判定は差し替えられるように `internal var pipDetector: PipDetector = AndroidPipDetector` とする(テスト用)。`AndroidActivityLauncher` 側の PiP の分岐(変更 2)は、PanelScreen が直接 `AndroidActivityLauncher` を使う経路の安全策として残す。
+- テストを足す:
+  - SetRunnerTest `reopenWithApp_buildsPanelAndAppPair_usesCurrentSetRatioOrDefault`: パネル右・左それぞれで Vendor に渡る左右と比率。今のセットが同じ側にパネルを持つときはその比率、そうでなければ既定。
+  - SetRunnerTest `reopenWithApp_returnsFalseWhileOpening_andKeepsCurrentIndex`。
+  - PanelActivity のテスト(既存の PanelActivity のテストファイルにならう。無ければ新規 `app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityPipTest.kt`)`pipTarget_inSplit_launchesFullscreen_thenReopensAfterDelay`: 偽の pipDetector・launchApp で、adjacent=false で開き、1200ms 後に reopenWithApp(Robolectric の main looper を進める)。PiP でないときは今のまま adjacent=true で、reopenWithApp は呼ばれない。runner を差し替えにくい場合は、呼び出しを `internal var reopen: (String, Side) -> Boolean` に分けて差し替える。
+- 追加で変えてよいファイル:
+  - write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+  - write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+  - write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+  - create app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityPipTest.kt(既存のファイルに足すならそのファイルを報告し、止まって確認を求める)
+- 使ってよいコマンドに `--tests 'com.gt8d.launcher.sets.*'` を足したもの:
+  `/home/munde/tools/gradle-run.sh testDebugUnitTest --tests 'com.gt8d.launcher.split.*' --tests 'com.gt8d.launcher.settings.*' --tests 'com.gt8d.launcher.pip.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.sets.*'`
