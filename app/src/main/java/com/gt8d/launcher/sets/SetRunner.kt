@@ -133,6 +133,11 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var expectedDelayMs: Long = WarmTracker.COLD_MS
     private val activeTimers = mutableListOf<Cancellable>()
     private var cancelGuard: Cancellable? = null
+    private var guardDeadlineMs: Long? = null
+    private var guardReturns = 0
+    private var guardSince = 0L
+    private var guardWatchesPanel = false
+    private var guardLastPanelHomeMs: Long? = null
     private var warmupTimer: Cancellable? = null
     private var preparing = false
     private var vendorWaiting = false
@@ -141,29 +146,42 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun stopCancelGuard() {
         cancelGuard?.cancel()
         cancelGuard = null
+        guardDeadlineMs = null
+        guardReturns = 0
+        guardSince = 0L
+        guardWatchesPanel = false
+        guardLastPanelHomeMs = null
     }
 
     private fun startCancelGuard(opening: Opening?, cancelledAtMs: Long) {
         stopCancelGuard()
         if (opening == null || !d.watcher.available()) return
         val packages = setOf(opening.left, opening.right, VendorBridge.VENDOR_PKG, STOCK_LAUNCHER_PKG)
-        val deadline = cancelledAtMs + CANCEL_GUARD_MS
-        var since = cancelledAtMs
-        var returns = 0
+        guardDeadlineMs = cancelledAtMs + CANCEL_GUARD_MS
+        guardSince = cancelledAtMs
+        guardWatchesPanel = opening.left == d.panelHostPkg || opening.right == d.panelHostPkg
         fun poll() {
             cancelGuard = d.scheduler.schedule(POLL_MS) {
                 cancelGuard = null
                 val now = d.clock.nowMs()
-                if (now >= deadline || !d.watcher.available()) return@schedule
-                val pkg = d.watcher.lastForegroundSince(since)
-                if (!d.watcher.available()) return@schedule
+                val deadline = guardDeadlineMs ?: return@schedule
+                if (now >= deadline || !d.watcher.available()) {
+                    stopCancelGuard()
+                    return@schedule
+                }
+                if (guardReturns >= 2) return@schedule
+                val pkg = d.watcher.lastForegroundSince(guardSince)
+                if (!d.watcher.available()) {
+                    stopCancelGuard()
+                    return@schedule
+                }
                 if (pkg in packages) {
                     DiagLog.d("SetRunner", "cancel guard home pkg=$pkg")
                     d.startHome()
-                    since = d.clock.nowMs() + 1L
-                    returns++
+                    guardSince = d.clock.nowMs() + 1L
+                    guardReturns++
                 }
-                if (returns < 2) poll()
+                if (guardReturns < 2) poll()
             }
         }
         poll()
@@ -304,6 +322,28 @@ class SetRunner(private val d: SetRunnerDeps) {
     fun panelResumedInSplit() {
         DiagLog.d("SetRunner", "panelResumedInSplit")
         if (!preparing) panelResumed = true
+        cancelGuardPanelSignal()
+    }
+
+    fun panelPlacementChanged(p: PanelPlacement?) {
+        if (p == PanelPlacement.Left || p == PanelPlacement.Right) cancelGuardPanelSignal()
+    }
+
+    private fun cancelGuardPanelSignal() {
+        val deadline = guardDeadlineMs ?: return
+        val now = d.clock.nowMs()
+        if (now >= deadline || guardReturns >= 2 || !guardWatchesPanel) return
+        val lastHome = guardLastPanelHomeMs
+        if (lastHome != null && now - lastHome < CANCEL_GUARD_PANEL_DEBOUNCE_MS) return
+        DiagLog.d("SetRunner", "cancel guard home panel")
+        d.startHome()
+        guardReturns++
+        guardSince = now + 1L
+        guardLastPanelHomeMs = now
+        if (guardReturns >= 2) {
+            cancelGuard?.cancel()
+            cancelGuard = null
+        }
     }
 
     fun panelLaunched(pkg: String) {
@@ -906,5 +946,6 @@ class SetRunner(private val d: SetRunnerDeps) {
         const val RETRY_AT_MS = 3000L
         const val BOOT_CLEAR_MS = 10000L
         const val CANCEL_GUARD_MS = 5000L
+        const val CANCEL_GUARD_PANEL_DEBOUNCE_MS = 500L
     }
 }

@@ -515,6 +515,87 @@ class SetRunnerTest {
         assertEquals(listOf(HideReason.Cancelled), e.curtainView.hiddenReasons)
     }
 
+    @Test fun cancelGuard_panelResumedInSplit_goesHome() {
+        val e = leftPanelEnv()
+        e.runner.open(1)
+        e.runner.cancelOpening()
+        val homes = e.startHomeCount
+        e.scheduler.advanceBy(1000)
+        e.runner.panelResumedInSplit()
+        assertEquals(homes + 1, e.startHomeCount)
+    }
+
+    @Test fun cancelGuard_panelPlacementLeftOrRight_goesHome_fullOrNullDoesNot() {
+        for (placement in listOf(PanelPlacement.Left, PanelPlacement.Right, PanelPlacement.Full, null)) {
+            val e = leftPanelEnv()
+            e.runner.open(1)
+            e.runner.cancelOpening()
+            val homes = e.startHomeCount
+            e.scheduler.advanceBy(1000)
+            e.runner.panelPlacementChanged(placement)
+            val extra = if (placement == PanelPlacement.Left || placement == PanelPlacement.Right) 1 else 0
+            assertEquals("placement=$placement", homes + extra, e.startHomeCount)
+        }
+    }
+
+    @Test fun cancelGuard_panelSignals_debouncedAndShareTwoReturnLimit() {
+        for (foregroundFirst in listOf(false, true)) {
+            val e = leftPanelEnv()
+            e.runner.open(1)
+            e.runner.cancelOpening()
+            val homes = e.startHomeCount
+            e.scheduler.advanceBy(1000)
+            if (foregroundFirst) {
+                e.events.events.add(ResumeEvent("y", e.scheduler.nowMs()))
+                e.scheduler.advanceBy(200)
+            } else {
+                e.runner.panelResumedInSplit()
+                e.scheduler.advanceBy(499)
+                e.runner.panelPlacementChanged(PanelPlacement.Right)
+                assertEquals(homes + 1, e.startHomeCount)
+                e.scheduler.advanceBy(101)
+            }
+            assertEquals(homes + 1, e.startHomeCount)
+            e.runner.panelPlacementChanged(PanelPlacement.Left)
+            assertEquals(homes + 2, e.startHomeCount)
+            e.scheduler.advanceBy(600)
+            e.runner.panelResumedInSplit()
+            e.events.events.add(ResumeEvent("y", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(200)
+            assertEquals(homes + 2, e.startHomeCount)
+        }
+    }
+
+    @Test fun cancelGuard_panelSignal_ignoredAfterDeadlineOrWithoutCancel_orWhenSetHasNoPanel() {
+        for (scenario in listOf("deadline", "withoutCancel", "noPanel", "open", "unavailable", "queryFailure")) {
+            val e = leftPanelEnv()
+            if (scenario == "noPanel") {
+                e.config = e.config.copy(screenSets = listOf(
+                    ScreenSet("s", Slot.App("youtube"), Slot.App("applemusic"), SplitRatio.R5_5),
+                ))
+            }
+            if (scenario == "unavailable") e.events.isAvailable = false
+            e.runner.open(1)
+            if (scenario != "withoutCancel") e.runner.cancelOpening()
+            when (scenario) {
+                "deadline" -> e.scheduler.advanceBy(5000)
+                "open" -> e.runner.open(1)
+                "unavailable" -> e.events.isAvailable = true
+                "queryFailure" -> {
+                    e.events.queryFails = true
+                    e.scheduler.advanceBy(200)
+                    e.events.queryFails = false
+                }
+            }
+            val homes = e.startHomeCount
+            e.runner.panelResumedInSplit()
+            e.runner.panelPlacementChanged(PanelPlacement.Left)
+            e.scheduler.advanceBy(600)
+            e.runner.panelPlacementChanged(PanelPlacement.Right)
+            assertEquals("scenario=$scenario", homes, e.startHomeCount)
+        }
+    }
+
     @Test fun cancelGuard_watchesActualLeftRightPanelAndVendor_notUnrelatedOrPending() {
         for ((index, pkg, expected) in listOf(
             Triple(2, "youtube", 2), Triple(2, "applemusic", 2),
