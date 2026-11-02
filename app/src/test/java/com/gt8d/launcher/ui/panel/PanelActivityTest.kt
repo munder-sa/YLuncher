@@ -39,6 +39,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelActivityTest {
+    @Test fun onCreate_setsResultOk() {
+        controller = Robolectric.buildActivity(PanelActivity::class.java).create()
+        assertEquals(android.app.Activity.RESULT_OK, shadowOf(controller!!.get()).resultCode)
+    }
+
     @Test fun launchRequest_usesPanelLaunchPath() {
         splitPanel()
         controller!!.get().launchApp = { pkg, adjacent -> appCalls.add(pkg to adjacent); false }

@@ -19,8 +19,8 @@ android {
         applicationId = "com.gt8d.launcher.panel"
         minSdk = 35
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.6.3"
+        versionCode = 20
+        versionName = "1.6.4"
     }
 
     signingConfigs {
@@ -53,4 +53,23 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            val androidAllDir = File(
+                System.getProperty("user.home"),
+                ".m2/repository/org/robolectric/android-all-instrumented/15-robolectric-12650502-i7",
+            )
+            if (androidAllDir.isDirectory) {
+                it.systemProperty("robolectric.offline", "true")
+                it.systemProperty("robolectric.dependency.dir", androidAllDir.path)
+            }
+        }
+    }
+}
+
+dependencies {
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }

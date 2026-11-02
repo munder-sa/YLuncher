@@ -135,6 +135,24 @@ adb.exe -s 192.168.137.248:5555 shell cmd role add-role-holder android.app.role.
 ### 導入
 §6 と同じ手順で、release 版を本体 → 中継の順に `install -r`。入れた後に通知へのアクセスを許可し直す(§6 のコマンド)。版は 19 / 1.6.3。
 
+## 10. v1.6.4(2026-11-02)
+
+### 変わったこと
+- 121: PiP(小窓)で再生中のアプリを、分割の中のパネルから開くと、PiP を解いて「そのアプリ | パネル」の分割に組み直す(今までは別のタスクが分割に出て、PiP が黒いまま残った)。再生中なら組み直す間だけ一時停止し、開いたら再生を戻す。使うには、ユーザー補助の許可が要る(下の導入)。許可が無ければ今までどおり。
+- 122: 本体を入れ直した直後(または本体が落ちた後)の最初のセットで、分割がすぐ解けていた。中継が、パネルが消えたときは閉じずにパネルを開き直す。
+
+### 導入
+§6 と同じ手順で、release 版を本体 → 中継の順に `install -r`。入れた後に通知へのアクセスを許可し直す(§6 のコマンド)。版は 20 / 1.6.4。
+
+PiP の対応を使うときは、設定 → ユーザー補助 → 「YLuncher(PiP の判定)」を有効にする(YLuncher の設定の「許可のチェック」の「ユーザー補助(PiP の判定)」からも開ける)。adb なら、今の値に `:com.gt8d.launcher/com.gt8d.launcher.pip.PipWatcherService` を足して設定する:
+
+```sh
+adb shell settings get secure enabled_accessibility_services
+adb shell settings put secure enabled_accessibility_services "<今の値>:com.gt8d.launcher/com.gt8d.launcher.pip.PipWatcherService"
+```
+
+1.6.4 に上げた直後は、古い中継のタスクが残っていると、最初のセットが一度だけ失敗することがある(古い中継は 122 の仕組みを持たないため)。2 回目からは開く。
+
 ## 5. v1.5 に戻す
 
 [v1.0 手順 §9「v1.5 から v1.0 に戻す」](install-v1.0.md#9-v15-から-v10-に戻す) と同じく、純正ホームを既定にしてから本体を停止し、同じ署名鍵の旧版 APK を本体→中継の順に `install -r -d` で上書きする。先に v1.5 の APK を用意する。
