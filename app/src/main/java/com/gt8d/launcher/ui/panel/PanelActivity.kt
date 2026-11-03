@@ -45,6 +45,7 @@ import com.gt8d.launcher.split.placementOf
 import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.home.HomeActivity
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.theme.screenSemantics
 import com.gt8d.launcher.ui.layout.launcherBackground
 import com.gt8d.launcher.ui.layout.stripSafePadding
 
@@ -112,67 +113,69 @@ class PanelActivity : ComponentActivity() {
         setContent {
             val placement by AppGraph.panelPlacement.collectAsState()
             LauncherTheme {
-                if (safetyMode) {
-                    SafetyRecoveryScreen(
-                        onRecover = { safetyRecover(this); goHome() },
-                        onStock = { runCatching { startActivity(stockLauncherIntent()) }; finish() },
-                    )
-                    return@LauncherTheme
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .launcherBackground()
-                        .stripSafePadding()
-                        .twoFingerSwipe { action ->
-                            when (action) {
-                                EdgeAction.Next -> AppGraph.runner.next()
-                                EdgeAction.Prev -> AppGraph.runner.prev()
-                                else -> Unit
-                            }
-                        },
-                ) {
-                    if (settingsOpen) {
-                        SettingsHost(SettingsActions.forApp(this@PanelActivity),
-                            onExit = { settingsOpen = false }, onSafetyCleared = ::goHome,
-                            initialRoute = settingsInitialRoute,
-                            onOpenSet = { settingsOpen = false; AppGraph.runner.open(it) })
-                    } else PanelScreen(
-                        inSplit = inSplitState,
-                        placement = placement,
-                        onNewSet = {
-                            if (isInMultiWindowMode) {
-                                settingsInitialRoute = SettingsRoute.SetEdit(null, true)
-                                settingsOpen = true
-                            } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
-                        },
-                        onEditLists = {
-                            if (AppGraph.runner.opening.value != null) {
-                                DiagLog.d("Panel", "settings ignored while opening")
-                            } else if (isInMultiWindowMode) {
-                                settingsInitialRoute = SettingsRoute.Lists
-                                settingsOpen = true
-                            } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_route", "lists"))
-                        },
-                        onOpenSettings = {
-                            if (AppGraph.runner.opening.value != null) {
-                                DiagLog.d("Panel", "settings ignored while opening")
-                            } else if (isInMultiWindowMode) {
-                                settingsInitialRoute = null
-                                settingsOpen = true
-                            } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java))
-                        },
-                        onOpenPermissionSettings = {
-                            if (AppGraph.runner.opening.value != null) {
-                                DiagLog.d("Panel", "settings ignored while opening")
-                            } else if (isInMultiWindowMode) {
-                                settingsInitialRoute = SettingsRoute.Permissions
-                                settingsOpen = true
-                            } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_route", "permissions"))
-                        },
-                        onLaunchComponent = ::onLaunchComponent,
-                        onLaunchApp = { pkg -> onLaunchApp(pkg) },
-                    )
+                Box(Modifier.fillMaxSize().screenSemantics()) {
+                    if (safetyMode) {
+                        SafetyRecoveryScreen(
+                            onRecover = { safetyRecover(this@PanelActivity); goHome() },
+                            onStock = { runCatching { startActivity(stockLauncherIntent()) }; finish() },
+                        )
+                        return@Box
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .launcherBackground()
+                            .stripSafePadding()
+                            .twoFingerSwipe { action ->
+                                when (action) {
+                                    EdgeAction.Next -> AppGraph.runner.next()
+                                    EdgeAction.Prev -> AppGraph.runner.prev()
+                                    else -> Unit
+                                }
+                            },
+                    ) {
+                        if (settingsOpen) {
+                            SettingsHost(SettingsActions.forApp(this@PanelActivity),
+                                onExit = { settingsOpen = false }, onSafetyCleared = ::goHome,
+                                initialRoute = settingsInitialRoute,
+                                onOpenSet = { settingsOpen = false; AppGraph.runner.open(it) })
+                        } else PanelScreen(
+                            inSplit = inSplitState,
+                            placement = placement,
+                            onNewSet = {
+                                if (isInMultiWindowMode) {
+                                    settingsInitialRoute = SettingsRoute.SetEdit(null, true)
+                                    settingsOpen = true
+                                } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
+                            },
+                            onEditLists = {
+                                if (AppGraph.runner.opening.value != null) {
+                                    DiagLog.d("Panel", "settings ignored while opening")
+                                } else if (isInMultiWindowMode) {
+                                    settingsInitialRoute = SettingsRoute.Lists
+                                    settingsOpen = true
+                                } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_route", "lists"))
+                            },
+                            onOpenSettings = {
+                                if (AppGraph.runner.opening.value != null) {
+                                    DiagLog.d("Panel", "settings ignored while opening")
+                                } else if (isInMultiWindowMode) {
+                                    settingsInitialRoute = null
+                                    settingsOpen = true
+                                } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java))
+                            },
+                            onOpenPermissionSettings = {
+                                if (AppGraph.runner.opening.value != null) {
+                                    DiagLog.d("Panel", "settings ignored while opening")
+                                } else if (isInMultiWindowMode) {
+                                    settingsInitialRoute = SettingsRoute.Permissions
+                                    settingsOpen = true
+                                } else startActivity(Intent(this@PanelActivity, SettingsActivity::class.java).putExtra("open_route", "permissions"))
+                            },
+                            onLaunchComponent = ::onLaunchComponent,
+                            onLaunchApp = { pkg -> onLaunchApp(pkg) },
+                        )
+                    }
                 }
             }
         }
