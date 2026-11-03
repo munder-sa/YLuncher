@@ -2,6 +2,7 @@ package com.gt8d.launcher.ui.home
 
 import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.Canvas
@@ -19,6 +20,8 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,14 +66,17 @@ internal fun interludeLitDots(startMs: Long, endMs: Long, positionMs: Long): Int
 }
 
 @Composable
-private fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position: State<Long>) {
+private fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position: State<Long>, emphasis: State<Float>) {
+    val retained = remember { object { var lit = 0 } }
     Box(Modifier.fillMaxWidth().then(if (current) Modifier.testTag("player_lyrics_interlude") else Modifier),
         contentAlignment = Alignment.CenterStart) {
         Text(" ", color = Color.Transparent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Canvas(Modifier.size(52.dp, 12.dp)) {
             val lit = interludeLitDots(startMs, endMs, position.value)
+            if (current) retained.lit = lit
             repeat(3) { i ->
-                drawCircle(Color.White.copy(alpha = if (!current) 0.25f else if (i < lit) 1f else 0.35f),
+                val activeAlpha = if (i < (if (current) lit else retained.lit)) 1f else 0.35f
+                drawCircle(Color.White.copy(alpha = 0.25f + (activeAlpha - 0.25f) * emphasis.value),
                     radius = 6.dp.toPx(), center = Offset((6 + i * 20).dp.toPx(), 6.dp.toPx()))
             }
         }
@@ -83,18 +89,36 @@ internal fun lyricLineAlpha(distance: Int): Float = when (distance) {
     else -> 0.25f
 }
 
+internal val LyricAlphaKey = SemanticsPropertyKey<Float>("LyricAlpha")
+
 @Composable
-private fun KaraokeLine(text: String, current: Boolean, alpha: Float, hasWords: Boolean, fill: State<Float>) {
+private fun lyricAnimatedValue(target: Float, animate: Boolean, index: Int): State<Float> {
+    val value = remember { Animatable(target) }
+    LaunchedEffect(target, index) {
+        withFrameNanos { }
+        if (animate) value.animateTo(target, tween(300, easing = FastOutSlowInEasing))
+        else value.snapTo(target)
+    }
+    return if (animate) value.asState() else rememberUpdatedState(target)
+}
+
+@Composable
+private fun KaraokeLine(text: String, current: Boolean, alpha: State<Float>, hasWords: Boolean, fill: State<Float>,
+                        emphasis: State<Float>) {
     val textLayout = remember(text) { object { var result: TextLayoutResult? = null } }
+    val retained = remember(text) { object { var fill = 0f } }
     Box(Modifier.fillMaxWidth()) {
-        Text(text, Modifier.fillMaxWidth().then(if (current) Modifier.testTag("player_lyrics_current") else Modifier),
-            color = Color.White.copy(alpha = if (current && !hasWords) 1f else alpha), fontSize = 24.sp, fontWeight = FontWeight.Bold,
+        Text(text, Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha.value }
+            .then(if (current) Modifier.testTag("player_lyrics_current") else Modifier),
+            color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (current && hasWords) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics {
+        if (hasWords && (current || emphasis.value > 0f)) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics {
             testTag = "player_lyrics_fill"
         }
-            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
-                val progress = fill.value
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; this.alpha = if (current) 1f else emphasis.value }
+            .drawWithContent {
+                if (current) retained.fill = fill.value
+                val progress = if (current) fill.value else retained.fill
                 val result = textLayout.result
                 if (progress > 0f && result != null) {
                     drawContent()
@@ -157,6 +181,12 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 val startsBeforeFirst = remember(track, state.lines) {
                     state.lines.firstOrNull()?.let { now.positionAt(clock()) < it.timeMs } ?: true
                 }
+                val history = remember(track, state.lines) { object { var index: Int? = null } }
+                val animateAlpha = remember(track, state.lines, index) {
+                    val previous = history.index
+                    history.index = index
+                    previous != null && (previous >= 0 || startsBeforeFirst) && index == previous + 1
+                }
                 val measured = remember(track, state.lines) {
                     object {
                         var resolved = false
@@ -172,14 +202,22 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 }
                 Layout(content = {
                     state.lines.forEachIndexed { i, line ->
-                        val current = i == index
-                        if (line.text == "♪" || (i == 0 && intro)) {
-                            InterludeDots(current || (i == 0 && intro),
-                                if (intro && i == 0) 0 else line.timeMs,
-                                if (intro && i == 0) line.timeMs else lineEnd(state.lines, i, now.durationMs), position)
-                        } else {
-                            KaraokeLine(line.text, current, lyricLineAlpha(abs(i - index.coerceAtLeast(0))),
-                                line.words.isNotEmpty(), fill)
+                        key(track, state.lines, i) {
+                            val current = i == index
+                            val dotsCurrent = current || (i == 0 && intro)
+                            val alpha = lyricAnimatedValue(if (current && line.words.isEmpty()) 1f
+                                else lyricLineAlpha(abs(i - index.coerceAtLeast(0))), animateAlpha, index)
+                            val emphasis = lyricAnimatedValue(if (dotsCurrent) 1f else 0f, animateAlpha, index)
+                            Box(Modifier.testTag("player_lyrics_line_$i").semantics { this[LyricAlphaKey] = alpha.value }) {
+                                if (line.text == "♪" || (i == 0 && intro)) {
+                                    InterludeDots(dotsCurrent,
+                                        if (intro && i == 0) 0 else line.timeMs,
+                                        if (intro && i == 0) line.timeMs else lineEnd(state.lines, i, now.durationMs), position, emphasis)
+                                } else {
+                                    KaraokeLine(line.text, current, alpha,
+                                        line.words.isNotEmpty(), fill, emphasis)
+                                }
+                            }
                         }
                     }
                 }, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
