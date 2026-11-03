@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.media.lyricsQuery
+import com.gt8d.launcher.media.toNowPlaying
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,62 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class LyricsRepositoryTest {
+    @Test fun appleMusicIdReachesAmllClient() = runTest {
+        DiagLog.clearForTest()
+        val metadata = android.media.MediaMetadata.Builder()
+            .putString(android.media.MediaMetadata.METADATA_KEY_MEDIA_ID, "1537460612")
+            .build()
+        val pkg = "com.apple.android.music"
+        val f = Fixture(this, amllAnswer = { wordResult() })
+        f.now.value = com.gt8d.launcher.media.SessionSnapshot(
+            pkg, "Apple Music", "Dummy song", "Dummy artist", null,
+            250_000, 0, 0, 1f, true, false,
+            lyricsIdentity = com.gt8d.launcher.media.lyricsIdentity(
+                pkg, com.gt8d.launcher.media.LyricsMetadataProbe.read(metadata)),
+        ).toNowPlaying()
+        f.tick(600)
+        assertEquals("1537460612", f.amllCalls.single().identity.appleMusicId)
+        assertEquals(words, f.repo.state.value)
+        assertTrue(f.calls.isEmpty())
+        assertTrue(DiagLog.dump().any { it.contains("amll result Synced source=AMLL") })
+    }
+
+    @Test fun logsAmllResponseAndParseWithoutLyrics() = kotlinx.coroutines.runBlocking {
+        DiagLog.clearForTest()
+        val xml = requireNotNull(javaClass.getResource("/ttml/structure-like-real.ttml")).readText()
+        val client = AmllClient(AmllTransport { _, _ -> HttpResponse(200, xml, null) }, "test")
+        val result = client.fetch(LyricsRequest(
+            LyricsQuery("Dummy song", "Dummy artist", null, 250), LyricsIdentity("1537460612")))
+        assertTrue(result.state is LyricsState.Synced)
+        val logs = DiagLog.dump()
+        assertTrue(logs.any { it.contains("amll try id=1537460612 url=raw.githubusercontent.com") })
+        assertTrue(logs.any { it.contains("amll code=200 ms=") })
+        assertTrue(logs.any { it.contains("amll parse WordSynced lines=54") })
+        assertFalse(logs.any { it.contains("ア") || it.contains("<tt") })
+    }
+
+    @Test fun logsAmllFailuresAndLrclibSelection() = runTest {
+        DiagLog.clearForTest()
+        val f = Fixture(this)
+        f.tick(600)
+        assertTrue(DiagLog.dump().any { it.contains("amll result Synced source=LRCLIB") })
+        for ((body, expected) in listOf(
+            """<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="1">private lyric</p></div></body></tt>""" to "Unsupported no-timed-words",
+            """<tt xmlns="http://www.w3.org/ns/ttml"><body><p begin="bad"/></body></tt>""" to "Invalid timing-or-limit",
+        )) {
+            DiagLog.clearForTest()
+            AmllClient(AmllTransport { _, _ -> HttpResponse(200, body, null) }, "test")
+                .fetch(LyricsRequest(song().lyricsQuery!!, LyricsIdentity("123")))
+            assertTrue(DiagLog.dump().any { it.contains("amll parse $expected") })
+            assertFalse(DiagLog.dump().any { it.contains("private lyric") })
+        }
+        DiagLog.clearForTest()
+        AmllClient(AmllTransport { _, _ -> throw java.io.IOException("private exception detail") }, "test")
+            .fetch(LyricsRequest(song().lyricsQuery!!, LyricsIdentity("123")))
+        assertTrue(DiagLog.dump().any { it.contains("amll code=IOException ms=") })
+        assertFalse(DiagLog.dump().any { it.contains("private exception detail") })
+    }
+
     @get:Rule val folder = TemporaryFolder()
     private val synced = LyricsState.Synced(listOf(LyricLine(1000, "Dummy line")))
     private fun song(title: String = "A") = NowPlaying(

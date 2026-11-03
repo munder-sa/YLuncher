@@ -53,6 +53,7 @@ class LyricsRepository(
                     val amllCached = withContext(io) { amllCache.get(request, null) }
                     if (amllCached?.state.hasWords()) {
                         mutableState.value = amllCached!!.state
+                        logResult(amllCached.state, "AMLL")
                         return@collectLatest
                     }
                     val cached = withContext(io) { cache.get(q) }
@@ -90,10 +91,12 @@ class LyricsRepository(
                         currentCoroutineContext().ensureActive()
                         if (amll.state.hasWords()) {
                             mutableState.value = amll.state
+                            logResult(amll.state, "AMLL")
                             return@collectLatest
                         }
                         if (cached is LyricsState.Synced || cached is LyricsState.Plain) {
                             mutableState.value = cached
+                            logResult(cached, "LRCLIB")
                             return@collectLatest
                         }
                         delay((nextAllowedAt - clock()).coerceAtLeast(0L))
@@ -119,6 +122,7 @@ class LyricsRepository(
                         }
                         currentCoroutineContext().ensureActive()
                         mutableState.value = overall
+                        logResult(overall, if (overall == amll.state && overall != result.state) "AMLL" else "LRCLIB")
                         when (overall) {
                             is LyricsState.Synced, is LyricsState.Plain, LyricsState.Missing -> {
                                 return@collectLatest
@@ -139,4 +143,8 @@ class LyricsRepository(
 
     private fun LyricsState?.hasWords(): Boolean =
         this is LyricsState.Synced && lines.any { it.words.isNotEmpty() }
+
+    private fun logResult(state: LyricsState, source: String) {
+        DiagLog.d("Lyrics", "amll result ${state.javaClass.simpleName} source=$source")
+    }
 }

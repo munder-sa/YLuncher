@@ -10,6 +10,32 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class TtmlParserTest {
+    @Test fun parsesRealStructureFixture() = runBlocking {
+        val source = requireNotNull(javaClass.getResource("/ttml/structure-like-real.ttml")).readText()
+        val result = TtmlParser.parse(source)
+        assertTrue("Expected WordSynced, got $result", result is TtmlParseResult.WordSynced)
+        val lines = (result as TtmlParseResult.WordSynced).lines
+        assertEquals(54, lines.size)
+        assertTrue(lines.all { it.words.isNotEmpty() })
+        assertEquals(1372L, lines.first().timeMs)
+        assertEquals(238431L, lines.last().timeMs)
+    }
+
+    @Test fun headSubtreeIsIgnored() = runBlocking {
+        val source = xml(p()).replace("<body>",
+            """<head><unknown m:role="custom"><p begin="bad"><span begin="bad">metadata</span></p></unknown></head><body>""")
+        assertEquals(parse(p()), TtmlParser.parse(source))
+    }
+
+    @Test fun timedDivAcceptsAbsoluteTimesAndRejectsContradictions() {
+        assertEquals(listOf(LyricLine(62300, "A", listOf(LyricWord(62300, 0)))),
+            lines("<div begin=\"1:00.000\" end=\"1:10.000\">" +
+                p("<span begin=\"1:02.300\">A</span>", "1:02.300", "1:05.000") + "</div>"))
+        invalid("<div begin=\"2\" end=\"1\">${p()}</div>")
+        invalid("<div begin=\"2\" end=\"4\">${p()}</div>")
+        invalid("<div begin=\"0\" end=\"2\">${p()}</div>")
+    }
+
     private fun xml(body: String) = """<tt xmlns="http://www.w3.org/ns/ttml" xmlns:m="http://www.w3.org/ns/ttml#metadata"><body><div>$body</div></body></tt>"""
     private fun p(content: String = "<span begin=\"1\">A</span>", begin: String = "1", end: String = "3") =
         "<p begin=\"$begin\" end=\"$end\">$content</p>"

@@ -18,14 +18,15 @@ object TtmlParser {
     private const val METADATA = "$TT#metadata"
     private const val XML = "http://www.w3.org/XML/1998/namespace"
     private val seconds = Regex("([0-9]+)(?:\\.([0-9]{1,3}))?s?")
-    private val clock = Regex("(?:([0-9]{2,}):)?([0-9]{2}):([0-9]{2})(?:\\.([0-9]{1,3}))?")
+    private val clock = Regex("(?:([0-9]{2,}):)?([0-9]{1,2}):([0-9]{2})(?:\\.([0-9]{1,3}))?")
     private class InvalidData : RuntimeException()
     private data class Word(val start: Long, val end: Long?, val offset: Int)
     private class Line(val start: Long, val end: Long?, val depth: Int) {
         val text = StringBuilder()
         val words = mutableListOf<Word>()
     }
-    private data class Frame(val excluded: Boolean, val preserve: Boolean, val timed: Boolean)
+    private data class Frame(val excluded: Boolean, val preserve: Boolean, val timed: Boolean,
+        val start: Long? = null, val end: Long? = null)
 
     private fun time(value: String): Long {
         val s = seconds.matchEntire(value)
@@ -46,10 +47,14 @@ object TtmlParser {
     }
 
     /** Call off the main thread. Cancellation is checked for every XML token. */
-    suspend fun parse(xml: String, durationMs: Long? = null): TtmlParseResult {
+    suspend fun parse(xml: String, durationMs: Long? = null,
+        diagnostic: (String) -> Unit = {}): TtmlParseResult {
         coroutineContext.ensureActive()
         // Reject before handing any DTD (including external declarations) to the parser.
-        if (xml.contains("<!DOCTYPE", ignoreCase = true)) return TtmlParseResult.Invalid
+        if (xml.contains("<!DOCTYPE", ignoreCase = true)) {
+            diagnostic("Invalid doctype")
+            return TtmlParseResult.Invalid
+        }
         return try {
             val parser = Xml.newPullParser()
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
@@ -61,6 +66,11 @@ object TtmlParser {
             var lineCount = 0
             var wordCount = 0
             var unsupported = false
+            var unsupportedReason = "no-timed-words"
+            fun unsupported(reason: String) {
+                if (!unsupported) unsupportedReason = reason
+                unsupported = true
+            }
             var rootSeen = false
             var event = parser.eventType
             while (event != XmlPullParser.END_DOCUMENT) {
@@ -71,12 +81,14 @@ object TtmlParser {
                         if (parser.depth > 64) throw InvalidData()
                         if (!rootSeen) {
                             rootSeen = true
-                            if (parser.namespace != TT || parser.name != "tt") unsupported = true
+                            if (parser.namespace != TT || parser.name != "tt") unsupported("root")
                         }
                         val parent = stack.lastOrNull()
                         val role = parser.getAttributeValue(METADATA, "role")
-                        val excluded = parent?.excluded == true || role in setOf("x-bg", "x-translation", "x-roman")
-                        if (!excluded && role != null) unsupported = true
+                        val excluded = parent?.excluded == true ||
+                            (parser.namespace == TT && parser.name == "head") ||
+                            role in setOf("x-bg", "x-translation", "x-roman")
+                        if (!excluded && role != null) unsupported("role")
                         val preserve = when (parser.getAttributeValue(XML, "space")) {
                             "preserve" -> true
                             "default" -> false
@@ -84,15 +96,24 @@ object TtmlParser {
                         }
                         val isP = parser.namespace == TT && parser.name == "p"
                         val isSpan = parser.namespace == TT && parser.name == "span"
+                        val isDiv = parser.namespace == TT && parser.name == "div"
                         val begin = parser.getAttributeValue(null, "begin")
                         val end = parser.getAttributeValue(null, "end")
                         if (isP && ++lineCount > 2000) throw InvalidData()
                         if (isSpan && begin != null && ++wordCount > 20000) throw InvalidData()
                         if (!excluded) {
-                            if (parser.getAttributeValue(null, "timeContainer") != null) unsupported = true
+                            if (parser.getAttributeValue(null, "timeContainer") != null) unsupported("timeContainer")
+                            if (isDiv || isP || isSpan) {
+                                val start = begin?.let(::time)
+                                val finish = end?.let(::time)
+                                if (start != null && finish != null && finish <= start ||
+                                    start != null && parent?.start?.let { start < it } == true ||
+                                    start != null && parent?.end?.let { start >= it } == true ||
+                                    finish != null && parent?.end?.let { finish > it } == true) throw InvalidData()
+                            }
                             if (isP) {
                                 if (current != null) throw InvalidData()
-                                if (begin == null) unsupported = true
+                                if (begin == null) unsupported("line-without-begin")
                                 else {
                                     val start = time(begin)
                                     val finish = end?.let(::time)
@@ -101,17 +122,19 @@ object TtmlParser {
                                 }
                             } else if (isSpan && current != null) {
                                 if (begin != null) {
-                                    if (stack.any { it.timed }) unsupported = true
+                                    if (stack.any { it.timed }) unsupported("nested-timed-span")
                                     val start = time(begin)
                                     val finish = end?.let(::time)
                                     if (finish != null && finish <= start) throw InvalidData()
                                     current.words.add(Word(start, finish, current.text.length))
-                                } else if (end != null) unsupported = true
-                            } else if (current != null || (begin != null || end != null) && parser.namespace == TT) {
-                                unsupported = true
+                                } else if (end != null) unsupported("span-end-without-begin")
+                            } else if (current != null || !isDiv && (begin != null || end != null) && parser.namespace == TT) {
+                                unsupported("element-or-timing")
                             }
                         }
-                        stack.add(Frame(excluded, preserve, !excluded && isSpan && begin != null))
+                        stack.add(Frame(excluded, preserve, !excluded && isSpan && begin != null,
+                            if (!excluded && (isDiv || isP || isSpan)) begin?.let(::time) ?: parent?.start else parent?.start,
+                            if (!excluded && (isDiv || isP || isSpan)) end?.let(::time) ?: parent?.end else parent?.end))
                     }
                     XmlPullParser.TEXT, XmlPullParser.CDSECT, XmlPullParser.ENTITY_REF, XmlPullParser.IGNORABLE_WHITESPACE -> {
                         val frame = stack.lastOrNull()
@@ -149,13 +172,17 @@ object TtmlParser {
                     previous = word.start
                 }
             }
-            if (unsupported || sorted.none { it.words.isNotEmpty() }) TtmlParseResult.Unsupported
-            else TtmlParseResult.WordSynced(sorted.map { line ->
+            if (unsupported || sorted.none { it.words.isNotEmpty() }) {
+                diagnostic("Unsupported $unsupportedReason")
+                TtmlParseResult.Unsupported
+            } else TtmlParseResult.WordSynced(sorted.map { line ->
                 LyricLine(line.start, line.text.toString(), line.words.map { LyricWord(it.start, it.offset) })
-            })
+            }).also { diagnostic("WordSynced lines=${it.lines.size}") }
         } catch (_: InvalidData) {
+            diagnostic("Invalid timing-or-limit")
             TtmlParseResult.Invalid
         } catch (_: XmlPullParserException) {
+            diagnostic("Invalid xml")
             TtmlParseResult.Invalid
         }
     }

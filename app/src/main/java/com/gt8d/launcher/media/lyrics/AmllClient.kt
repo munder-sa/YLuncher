@@ -1,6 +1,7 @@
 package com.gt8d.launcher.media.lyrics
 
 import android.util.Xml
+import com.gt8d.launcher.diag.DiagLog
 import java.io.IOException
 import java.io.StringReader
 import java.net.URI
@@ -95,16 +96,27 @@ class AmllClient(
             val host = URI(url).host
             val wait = synchronized(hostWait) { hostWait[host] }
             if (wait != null && wait > clock()) { failure = AmllReason.WAIT; continue }
+            DiagLog.d("Lyrics", "amll try id=${validAppleId(request.identity.appleMusicId) ?: "none"} url=$host")
+            val started = System.nanoTime()
             val response = try {
                 transport.get(url, mapOf("User-Agent" to userAgent, "Accept" to "application/ttml+xml"))
-            } catch (_: IOException) { failure = AmllReason.NETWORK; continue }
+            } catch (e: IOException) {
+                DiagLog.d("Lyrics", "amll code=${e.javaClass.simpleName} ms=${(System.nanoTime() - started) / 1_000_000}")
+                failure = AmllReason.NETWORK
+                continue
+            }
+            DiagLog.d("Lyrics", "amll code=${response.code} ms=${(System.nanoTime() - started) / 1_000_000}")
             kotlin.coroutines.coroutineContext.ensureActive()
             if (response.code == 404) return result(LyricsState.Missing, AmllReason.NOT_FOUND, target, true)
             if (response.code == 429 || response.code == 503) {
                 val seconds = response.retryAfterSec?.takeIf { it > 0 } ?: 60L
                 synchronized(hostWait) { hostWait[host] = deadline(seconds) }
             }
-            if (response.tooLarge) { failure = AmllReason.INVALID; continue }
+            if (response.tooLarge) {
+                DiagLog.d("Lyrics", "amll parse Invalid response-too-large")
+                failure = AmllReason.INVALID
+                continue
+            }
             if (response.code != 200) {
                 failure = AmllReason.HTTP
                 if (response.code == 429 || response.code in 500..599) continue
@@ -112,10 +124,13 @@ class AmllClient(
             }
             // A non-TTML XML/HTML response must not become a cacheable unsupported song.
             if (!isCompleteTtml(response.body)) {
+                DiagLog.d("Lyrics", "amll parse Invalid incomplete-or-non-ttml")
                 failure = AmllReason.INVALID
                 continue
             }
-            when (val parsed = TtmlParser.parse(response.body, request.query.durationSec?.let { it * 1000 })) {
+            when (val parsed = TtmlParser.parse(response.body, request.query.durationSec?.let { it * 1000 }) {
+                DiagLog.d("Lyrics", "amll parse $it")
+            }) {
                 is TtmlParseResult.WordSynced -> return result(LyricsState.Synced(parsed.lines), reason, target, true)
                 TtmlParseResult.Unsupported -> return result(LyricsState.Missing, AmllReason.UNSUPPORTED, target, true)
                 TtmlParseResult.Invalid -> failure = AmllReason.INVALID
