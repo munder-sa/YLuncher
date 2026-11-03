@@ -26,7 +26,7 @@ import com.gt8d.launcher.ui.theme.Palette
 val LyricsIcon: ImageVector = ImageVector.Builder("Lyrics", 40.dp, 40.dp, 40f, 40f).apply {
     addPath(
         pathData = addPathNodes("M9 6h22a5 5 0 0 1 5 5v15a5 5 0 0 1-5 5H17l-8 5v-5a5 5 0 0 1-5-5V11a5 5 0 0 1 5-5Z M12 14h16 M12 22h12"),
-        fill = null, stroke = SolidColor(Color.White), strokeLineWidth = 2.5f,
+        fill = null, stroke = SolidColor(Color.White), strokeLineWidth = 2.5f * 40f / 28f,
         strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
     )
 }.build()

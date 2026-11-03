@@ -45,13 +45,18 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 val startsBeforeFirst = remember(track, state.lines) {
                     state.lines.firstOrNull()?.let { now.positionAt(clock()) < it.timeMs } ?: true
                 }
-                var resolved by remember(track, state.lines) { mutableStateOf(false) }
+                val measured = remember(track, state.lines) {
+                    object {
+                        var resolved = false
+                        var target: Pair<Int, Float>? = null
+                        var animate = false
+                    }
+                }
                 val offset = remember(track, state.lines) { Animatable(0f) }
-                var target by remember(track, state.lines) { mutableStateOf<Pair<Int, Float>?>(null) }
-                var animate by remember(track, state.lines) { mutableStateOf(false) }
-                LaunchedEffect(target, track, state.lines) {
-                    val destination = target ?: return@LaunchedEffect
-                    if (animate) offset.animateTo(destination.second, tween(300)) else offset.snapTo(destination.second)
+                LaunchedEffect(index, track, state.lines) {
+                    withFrameNanos { }
+                    val destination = measured.target ?: return@LaunchedEffect
+                    if (measured.animate) offset.animateTo(destination.second, tween(300)) else offset.snapTo(destination.second)
                 }
                 Layout(content = {
                     state.lines.forEachIndexed { i, line ->
@@ -68,14 +73,15 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                     val selected = index.coerceAtLeast(0)
                     val center = rows.take(selected).sumOf { it.height + gap } + (rows.getOrNull(selected)?.height ?: 0) / 2f
                     val destination = constraints.maxHeight / 2f - center
-                    if (target?.first != index) {
-                        animate = (resolved || startsBeforeFirst) && target != null && index == target!!.first + 1
+                    if (measured.target?.first != index) {
+                        measured.animate = (measured.resolved || startsBeforeFirst) &&
+                            measured.target != null && index == measured.target!!.first + 1
                     }
-                    if (index >= 0) resolved = true
-                    target = index to destination
+                    if (index >= 0) measured.resolved = true
+                    measured.target = index to destination
                     layout(constraints.maxWidth, constraints.maxHeight) {
                         // Jumps use the measured destination in this frame, without waiting for an effect.
-                        var y = (if (animate) offset.value else destination).roundToInt()
+                        var y = (if (measured.animate) offset.value else destination).roundToInt()
                         rows.forEach { row -> row.placeRelative(0, y); y += row.height + gap }
                     }
                 }
