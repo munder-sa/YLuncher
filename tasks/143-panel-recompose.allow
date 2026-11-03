@@ -1,0 +1,15 @@
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/SeekBar.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/MediaCard.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeMiniPlayer.kt
+write app/src/main/java/com/gt8d/launcher/apps/AppCatalog.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeMiniPlayerTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/layout/LayoutMatrixTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/MediaCardTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelContentTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelScreenTest.kt
+write app/src/test/java/com/gt8d/launcher/apps/AppCatalogTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/SeekBarTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.ui.home.*' --tests 'com.gt8d.launcher.apps.*'
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.layout.*'
