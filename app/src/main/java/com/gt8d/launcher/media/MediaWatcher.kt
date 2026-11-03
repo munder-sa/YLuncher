@@ -10,6 +10,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.gt8d.launcher.diag.DiagLog
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -209,6 +210,27 @@ object MediaWatcher {
         if (!lastMetadataTitles.containsKey(pkg) || lastMetadataTitles[pkg] != title) {
             lastMetadataTitles[pkg] = title
             DiagLog.d("Lyrics", "metadata keys pkg=$pkg ${metadata?.keySet()?.sorted()?.joinToString(",").orEmpty()}")
+            for (key in metadata?.keySet().orEmpty().filter { it.contains("LYRICS", ignoreCase = true) }.sorted()) {
+                try {
+                    val text = metadata?.getText(key)?.toString()
+                    val value: Any? = text ?: metadata?.getLong(key)
+                    val type = value?.javaClass?.simpleName ?: "null"
+                    val len = text?.length?.toString() ?: value?.toString() ?: "-"
+                    val head = text?.take(40)?.replace("\n", "\\n") ?: "-"
+                    val file = if (text?.startsWith("/") == true) {
+                        val path = File(text)
+                        val exists = path.exists()
+                        val canRead = path.canRead()
+                        val size = if (canRead) path.length().toString() else "-"
+                        "exists=$exists canRead=$canRead size=$size"
+                    } else {
+                        "-"
+                    }
+                    DiagLog.d("Lyrics", "metadata lyrics key=$key type=$type len=$len head=$head file=$file")
+                } catch (e: Exception) {
+                    DiagLog.d("Lyrics", "metadata lyrics key=$key type=error ${e.javaClass.simpleName}")
+                }
+            }
         }
         val artist = metadata?.getText(MediaMetadata.METADATA_KEY_ARTIST)?.toString()
         val artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
