@@ -12,9 +12,13 @@ import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
 
-/** Only the confirmed Apple Music folder is supported until an index contract is available. */
+/** Fixed folders and safe path components only; the index cannot supply a URL. */
 data class AmllTarget(val folder: String, val id: String) {
-    val safe: Boolean get() = folder == "am-lyrics" && validAppleId(id) != null
+    val safe: Boolean get() = when (folder) {
+        "am-lyrics" -> validAppleId(id) != null
+        "raw-lyrics" -> Regex("[A-Za-z0-9._-]+\\.ttml").matches(id)
+        else -> false
+    }
 }
 
 enum class AmllReason { DIRECT_ID, INDEX_ISRC, INDEX_TEXT, NOT_FOUND, AMBIGUOUS, UNSUPPORTED, UNAVAILABLE, INVALID, NETWORK, HTTP, WAIT }
@@ -92,7 +96,7 @@ class AmllClient(
 
     private suspend fun download(target: AmllTarget, request: LyricsRequest, reason: AmllReason): AmllResult {
         var failure = AmllReason.HTTP
-        for (url in urls(target.id)) {
+        for (url in urls(target)) {
             val host = URI(url).host
             val wait = synchronized(hostWait) { hostWait[host] }
             if (wait != null && wait > clock()) { failure = AmllReason.WAIT; continue }
@@ -184,6 +188,13 @@ class AmllClient(
     }
 
     companion object {
+        internal fun urls(target: AmllTarget): List<String> {
+            require(target.safe)
+            return if (target.folder == "am-lyrics") urls(target.id) else listOf(
+                "https://raw.githubusercontent.com/amll-dev/amll-ttml-db/main/raw-lyrics/${target.id}",
+                "https://amll-ttml-db.gbclstudio.cn/raw-lyrics/${target.id}",
+            )
+        }
         internal fun urls(id: String) = listOf(
             "https://raw.githubusercontent.com/amll-dev/amll-ttml-db/main/am-lyrics/$id.ttml",
             "https://amll-ttml-db.stevexmh.net/am/$id",

@@ -8,6 +8,8 @@ import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.media.lyrics.LyricsCache
 import com.gt8d.launcher.media.lyrics.AmllCache
 import com.gt8d.launcher.media.lyrics.AmllClient
+import com.gt8d.launcher.media.lyrics.AmllIndexStore
+import com.gt8d.launcher.media.lyrics.AmllIndexUrlConnectionTransport
 import com.gt8d.launcher.media.lyrics.AmllUrlConnectionTransport
 import com.gt8d.launcher.media.lyrics.LyricsRepository
 import com.gt8d.launcher.media.lyrics.LrclibClient
@@ -77,7 +79,8 @@ object AppGraph {
         }
         val userAgent = "YLuncher/$versionName (https://github.com/munder-sa/YLuncher)"
         val client = LrclibClient(UrlConnectionTransport(), userAgent)
-        val amll = AmllClient(AmllUrlConnectionTransport(), userAgent)
+        val index = AmllIndexStore(File(app.filesDir, "lyrics/amll-index"), AmllIndexUrlConnectionTransport(userAgent))
+        val amll = AmllClient(AmllUrlConnectionTransport(), userAgent, index)
         LyricsRepository(
             scope = lyricsScope,
             nowPlaying = MediaWatcher.nowPlaying,

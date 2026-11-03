@@ -10,6 +10,18 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class AmllClientTest {
+    @Test fun rawLyricsUsesConfirmedMirrorsAnd404Stops() = runBlocking {
+        val target = AmllTarget("raw-lyrics", "one.ttml")
+        for (code in listOf(500, 404)) {
+            val urls = mutableListOf<String>()
+            val client = AmllClient(AmllTransport { url, _ -> urls += url; if (urls.size == 1) HttpResponse(code, "", null) else ok }, "a",
+                AmllIndexLookup { _, _ -> AmllMatch.Unique(target) })
+            val result = client.fetch(request(null))
+            val expected = listOf("https://raw.githubusercontent.com/amll-dev/amll-ttml-db/main/raw-lyrics/one.ttml", "https://amll-ttml-db.gbclstudio.cn/raw-lyrics/one.ttml")
+            assertEquals(if (code == 404) expected.take(1) else expected, urls)
+            assertEquals(if (code == 404) AmllReason.NOT_FOUND else AmllReason.INDEX_TEXT, result.reason)
+        }
+    }
     private val query = LyricsQuery("架空曲", "架空歌手", null, 10)
     private fun request(id: String? = "123", isrc: String? = null) = LyricsRequest(query, LyricsIdentity(id, isrc))
     private val xml = """<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="1" end="3"><span begin="1">A</span><span begin="2"> B</span></p></div></body></tt>"""
