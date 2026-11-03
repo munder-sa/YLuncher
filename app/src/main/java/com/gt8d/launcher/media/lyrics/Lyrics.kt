@@ -4,7 +4,9 @@ import java.security.MessageDigest
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 
-data class LyricLine(val timeMs: Long, val text: String)
+data class LyricWord(val timeMs: Long, val charStart: Int)
+
+data class LyricLine(val timeMs: Long, val text: String, val words: List<LyricWord> = emptyList())
 
 sealed interface LyricsState {
     data object Off : LyricsState

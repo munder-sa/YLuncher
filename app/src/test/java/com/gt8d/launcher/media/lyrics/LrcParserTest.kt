@@ -4,6 +4,34 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LrcParserTest {
+    @Test fun parsesWordTimestamps() {
+        assertEquals(listOf(LyricLine(10000, "あいうえ", listOf(LyricWord(10000, 0), LyricWord(11000, 2)))),
+            LrcParser.parse("[00:10.00]<00:10.00>あい<00:11.00>うえ"))
+    }
+
+    @Test fun wordTimestampsWithOffset() {
+        assertEquals(listOf(LyricLine(9500, "あいうえ", listOf(LyricWord(9500, 0), LyricWord(10500, 2)))),
+            LrcParser.parse("[offset:+500]\n[00:10.00]<00:10.00>あい<00:11.00>うえ"))
+        assertEquals(listOf(LyricWord(0, 0)),
+            LrcParser.parse("[00:01]<00:01>あ\n[offset:+2000]").single().words)
+    }
+
+    @Test fun noWordTimestampsMeansEmpty() {
+        assertEquals(emptyList<LyricWord>(), LrcParser.parse("[00:10]架空の朝").single().words)
+    }
+
+    @Test fun wordFormatsTrimAndInvalidTimes() {
+        assertEquals(LyricLine(10000, "あいう", listOf(LyricWord(10000, 0), LyricWord(11345, 1))),
+            LrcParser.parse("[00:10]  <00:10>あ<00:11.345>い<00:75>う<999999999999999999999:00>  ").single())
+    }
+
+    @Test fun sortsWordTimesAndAdjustsOverflow() {
+        assertEquals(listOf(LyricWord(10000, 1), LyricWord(12000, 0)),
+            LrcParser.parse("[00:10]<00:12>あ<00:10>い").single().words)
+        assertEquals(Long.MAX_VALUE,
+            LrcParser.parse("[offset:-9223372036854775808]\n[00:10]<00:10>あ").single().words.single().timeMs)
+    }
+
     @Test fun parsesThreeTimeFormats() {
         assertEquals(listOf(LyricLine(62000, "c"), LyricLine(62340, "a"), LyricLine(62345, "b")),
             LrcParser.parse("[01:02.34]a\n[01:02.345]b\n[01:02]c"))

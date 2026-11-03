@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +18,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,13 +35,46 @@ import com.gt8d.launcher.ui.theme.Palette
 import kotlin.math.roundToInt
 import kotlin.math.abs
 
-internal fun fillFraction(lines: List<LyricLine>, index: Int, positionMs: Long, durationMs: Long?): Float {
-    if (index == -1) return 0f
+private fun lineEnd(lines: List<LyricLine>, index: Int, durationMs: Long?): Long {
     val start = lines[index].timeMs
-    val end = lines.getOrNull(index + 1)?.timeMs
-        ?: (start + 5000L).let { if (durationMs != null) minOf(it, durationMs) else it }
-    if (end <= start) return 1f
-    return ((positionMs.toDouble() - start) / (end.toDouble() - start)).toFloat().coerceIn(0f, 1f)
+    return lines.getOrNull(index + 1)?.timeMs
+        ?: (start.coerceAtMost(Long.MAX_VALUE - 5000L) + 5000L)
+            .let { if (durationMs != null) minOf(it, durationMs) else it }
+}
+
+internal fun wordFillPosition(lines: List<LyricLine>, index: Int, positionMs: Long, durationMs: Long?): Float {
+    val line = lines.getOrNull(index) ?: return 0f
+    val wordIndex = line.words.indexOfLast { it.timeMs <= positionMs }
+    if (wordIndex < 0) return 0f
+    val word = line.words[wordIndex]
+    val next = line.words.getOrNull(wordIndex + 1)
+    val end = next?.timeMs ?: lineEnd(lines, index, durationMs)
+    val endChar = next?.charStart ?: line.text.length
+    if (end <= word.timeMs) return endChar.toFloat()
+    val fraction = ((positionMs.toDouble() - word.timeMs) / (end.toDouble() - word.timeMs)).coerceIn(0.0, 1.0)
+    return (word.charStart + (endChar - word.charStart) * fraction).toFloat()
+}
+
+internal fun interludeLitDots(startMs: Long, endMs: Long, positionMs: Long): Int {
+    if (positionMs < startMs) return 0
+    if (endMs <= startMs) return 3
+    return (((positionMs.toDouble() - startMs) / (endMs.toDouble() - startMs)) * 3)
+        .coerceIn(0.0, 3.0).toInt()
+}
+
+@Composable
+private fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position: State<Long>) {
+    Box(Modifier.fillMaxWidth().then(if (current) Modifier.testTag("player_lyrics_interlude") else Modifier),
+        contentAlignment = Alignment.CenterStart) {
+        Text(" ", color = Color.Transparent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Canvas(Modifier.size(52.dp, 12.dp)) {
+            val lit = interludeLitDots(startMs, endMs, position.value)
+            repeat(3) { i ->
+                drawCircle(Color.White.copy(alpha = if (!current) 0.25f else if (i < lit) 1f else 0.35f),
+                    radius = 6.dp.toPx(), center = Offset((6 + i * 20).dp.toPx(), 6.dp.toPx()))
+            }
+        }
+    }
 }
 
 internal fun lyricLineAlpha(distance: Int): Float = when (distance) {
@@ -49,20 +84,21 @@ internal fun lyricLineAlpha(distance: Int): Float = when (distance) {
 }
 
 @Composable
-private fun KaraokeLine(text: String, current: Boolean, alpha: Float, fill: State<Float>) {
+private fun KaraokeLine(text: String, current: Boolean, alpha: Float, hasWords: Boolean, fill: State<Float>) {
     val textLayout = remember(text) { object { var result: TextLayoutResult? = null } }
     Box(Modifier.fillMaxWidth()) {
         Text(text, Modifier.fillMaxWidth().then(if (current) Modifier.testTag("player_lyrics_current") else Modifier),
-            color = Color.White.copy(alpha = alpha), fontSize = 24.sp, fontWeight = FontWeight.Bold,
+            color = Color.White.copy(alpha = if (current && !hasWords) 1f else alpha), fontSize = 24.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (current) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics { }
+        if (current && hasWords) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics {
+            testTag = "player_lyrics_fill"
+        }
             .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
-                val fraction = fill.value
+                val progress = fill.value
                 val result = textLayout.result
-                if (fraction > 0f && result != null) {
+                if (progress > 0f && result != null) {
                     drawContent()
-                    if (fraction < 1f && text.isNotEmpty()) {
-                        val progress = text.length * fraction
+                    if (progress < text.length && text.isNotEmpty()) {
                         val offset = progress.toInt().coerceAtMost(text.lastIndex)
                         val line = result.getLineForOffset(offset)
                         val startX = result.getHorizontalPosition(offset, true)
@@ -104,14 +140,20 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 val track = now.pkg to now.lyricsQuery
                 val index by key(track, state.lines) { rememberLyricIndex(now, state.lines, clock) }
                 val fill = remember(track, state.lines) { mutableFloatStateOf(0f) }
+                val position = remember(now, track, state.lines) { mutableLongStateOf(now.positionAt(clock())) }
                 LaunchedEffect(now, state.lines, index) {
-                    fill.floatValue = fillFraction(state.lines, index, now.positionAt(clock()), now.durationMs)
+                    position.longValue = now.positionAt(clock())
+                    fill.floatValue = wordFillPosition(state.lines, index, position.longValue, now.durationMs)
                     while (now.playing) {
                         withFrameMillis {
-                            fill.floatValue = fillFraction(state.lines, index, now.positionAt(clock()), now.durationMs)
+                            position.longValue = now.positionAt(clock())
+                            fill.floatValue = wordFillPosition(state.lines, index, position.longValue, now.durationMs)
                         }
                     }
                 }
+                val intro = index < 0 && state.lines.firstOrNull()?.let {
+                    it.timeMs.toDouble() - position.longValue >= 5000
+                } == true
                 val startsBeforeFirst = remember(track, state.lines) {
                     state.lines.firstOrNull()?.let { now.positionAt(clock()) < it.timeMs } ?: true
                 }
@@ -131,7 +173,14 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 Layout(content = {
                     state.lines.forEachIndexed { i, line ->
                         val current = i == index
-                        KaraokeLine(line.text, current, lyricLineAlpha(abs(i - index.coerceAtLeast(0))), fill)
+                        if (line.text == "♪" || (i == 0 && intro)) {
+                            InterludeDots(current || (i == 0 && intro),
+                                if (intro && i == 0) 0 else line.timeMs,
+                                if (intro && i == 0) line.timeMs else lineEnd(state.lines, i, now.durationMs), position)
+                        } else {
+                            KaraokeLine(line.text, current, lyricLineAlpha(abs(i - index.coerceAtLeast(0))),
+                                line.words.isNotEmpty(), fill)
+                        }
                     }
                 }, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
                     val rows = measurables.map { it.measure(Constraints(maxWidth = constraints.maxWidth)) }
