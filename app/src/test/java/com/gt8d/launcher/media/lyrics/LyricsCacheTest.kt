@@ -88,22 +88,39 @@ class LyricsCacheTest {
         assertFalse(file.exists())
     }
 
-    @Test fun writtenFileHasVersion2() {
+    @Test fun writtenFileHasVersion3() {
         val dir = temporaryFolder.newFolder()
         LyricsCache(dir, { now }).put(query(), LyricsState.Plain("dummy"))
         val json = kotlinx.serialization.json.Json.parseToJsonElement(
             File(dir, query().cacheKey + ".json").readText()
         ) as kotlinx.serialization.json.JsonObject
-        assertEquals(kotlinx.serialization.json.JsonPrimitive(2), json["v"])
+        assertEquals(kotlinx.serialization.json.JsonPrimitive(3), json["v"])
     }
 
     @Test fun differentVersionIsIgnored() {
         val dir = temporaryFolder.newFolder()
         val file = File(dir, query().cacheKey + ".json")
-        for (version in listOf("1", "3", "\"2\"", "null")) {
+        for (version in listOf("1", "4", "\"2\"", "null")) {
             file.writeText("""{"v":$version,"kind":"plain","savedAt":0,"text":"x"}""")
             assertNull(LyricsCache(dir, { now }).get(query()))
             assertFalse(file.exists())
         }
+    }
+
+    @Test fun roundTripsWordTimestamps() {
+        val dir = temporaryFolder.newFolder()
+        val synced = LyricsState.Synced(listOf(
+            LyricLine(1000, "あいうえ", listOf(LyricWord(1000, 0), LyricWord(1500, 2)))
+        ))
+        LyricsCache(dir, { now }).put(query(), synced)
+        assertEquals(synced, LyricsCache(dir, { now }).get(query()))
+    }
+
+    @Test fun version2FileIsIgnored() {
+        val dir = temporaryFolder.newFolder()
+        val file = File(dir, query().cacheKey + ".json")
+        file.writeText("""{"v":2,"kind":"synced","savedAt":0,"lines":[[1000,"あいうえ"]]}""")
+        assertNull(LyricsCache(dir, { now }).get(query()))
+        assertFalse(file.exists())
     }
 }
