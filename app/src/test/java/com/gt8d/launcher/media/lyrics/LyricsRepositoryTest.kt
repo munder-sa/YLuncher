@@ -33,6 +33,9 @@ class LyricsRepositoryTest {
     private inner class Fixture(
         val scope: TestScope,
         on: Boolean = true,
+        val amllAnswer: suspend (LyricsRequest) -> AmllResult = {
+            AmllResult(LyricsState.Missing, AmllReason.NOT_FOUND, cacheable = true)
+        },
         val answer: suspend (LyricsQuery) -> FetchResult = { FetchResult(synced) },
     ) {
         val now = MutableStateFlow<NowPlaying?>(song())
@@ -40,12 +43,265 @@ class LyricsRepositoryTest {
         val calls = mutableListOf<LyricsQuery>()
         val times = mutableListOf<Long>()
         val cache = LyricsCache(folder.newFolder(), { scope.testScheduler.currentTime })
+        val amllCache = AmllCache(folder.newFolder(), { scope.testScheduler.currentTime })
+        val amllCalls = mutableListOf<LyricsRequest>()
+        val amllTimes = mutableListOf<Long>()
         val repo = LyricsRepository(scope.backgroundScope, now, enabled, cache, {
             calls += it
             times += scope.testScheduler.currentTime
             answer(it)
-        }, { scope.testScheduler.currentTime }, StandardTestDispatcher(scope.testScheduler))
+        }, { scope.testScheduler.currentTime }, StandardTestDispatcher(scope.testScheduler), amllCache, {
+            amllCalls += it
+            amllTimes += scope.testScheduler.currentTime
+            amllAnswer(it)
+        })
         fun tick(ms: Long) { scope.advanceTimeBy(ms); scope.runCurrent() }
+    }
+
+    private val words = LyricsState.Synced(listOf(
+        LyricLine(1000, "架空の朝", listOf(LyricWord(1000, 0), LyricWord(1500, 2))),
+    ))
+    private fun wordResult(cacheable: Boolean = true) = AmllResult(words, AmllReason.DIRECT_ID,
+        AmllTarget("am-lyrics", "123"), cacheable = cacheable)
+
+    @Test fun identityChangeRefetchesButPositionDoesNot() = runTest {
+        val f = Fixture(this)
+        f.tick(600)
+        f.now.value = song().copy(positionMs = 2000, playing = false)
+        f.tick(1000)
+        assertEquals(1, f.amllCalls.size)
+        f.now.value = song().copy(lyricsIdentity = LyricsIdentity("123"))
+        f.tick(599)
+        assertEquals(1, f.amllCalls.size)
+        f.tick(1)
+        assertEquals(listOf(LyricsIdentity(), LyricsIdentity("123")), f.amllCalls.map { it.identity })
+        assertEquals(1, f.calls.size)
+    }
+
+    @Test fun amllUpgradesLegacyLrclibCache() = runTest {
+        for (legacy in listOf(synced, LyricsState.Plain("架空"), LyricsState.Missing)) {
+            val f = Fixture(this, amllAnswer = { wordResult() })
+            f.cache.put(song().lyricsQuery!!, legacy)
+            runCurrent()
+            assertEquals(legacy, f.repo.state.value)
+            f.tick(599)
+            assertTrue(f.amllCalls.isEmpty())
+            f.tick(1)
+            assertEquals(words, f.repo.state.value)
+            assertTrue(f.calls.isEmpty())
+            assertEquals(legacy, f.cache.get(song().lyricsQuery!!))
+            assertEquals(words, f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null)!!.state)
+        }
+    }
+
+    @Test fun amllFailureUsesLrclibCache() = runTest {
+        for (legacy in listOf(synced, LyricsState.Plain("架空"))) {
+            val f = Fixture(this, amllAnswer = { AmllResult(LyricsState.Offline, AmllReason.NETWORK) })
+            f.cache.put(song().lyricsQuery!!, legacy)
+            f.tick(600)
+            assertEquals(legacy, f.repo.state.value)
+            assertEquals(1, f.amllCalls.size)
+            assertTrue(f.calls.isEmpty())
+        }
+    }
+
+    @Test fun amllCachePrecedesLegacyCacheWithoutRequests() = runTest {
+        val f = Fixture(this)
+        f.cache.put(song().lyricsQuery!!, synced)
+        f.amllCache.put(LyricsRequest(song().lyricsQuery!!), null, wordResult())
+        runCurrent()
+        assertEquals(words, f.repo.state.value)
+        assertTrue(f.amllCalls.isEmpty())
+        assertTrue(f.calls.isEmpty())
+        f.tick(300_000)
+        assertTrue(f.amllCalls.isEmpty())
+        assertTrue(f.calls.isEmpty())
+    }
+
+    @Test fun sourcePriorityIsWordThenSyncedThenPlain() = runTest {
+        val first = Fixture(this, amllAnswer = { wordResult() })
+        first.tick(600)
+        assertEquals(words, first.repo.state.value)
+        assertTrue(first.calls.isEmpty())
+        val second = Fixture(this)
+        second.tick(600)
+        assertEquals(synced, second.repo.state.value)
+        val plain = LyricsState.Plain("架空")
+        val third = Fixture(this) { FetchResult(plain) }
+        third.tick(600)
+        assertEquals(plain, third.repo.state.value)
+    }
+
+    @Test fun wordlessAmllUsesLrclib() = runTest {
+        val f = Fixture(this, amllAnswer = {
+            AmllResult(synced, AmllReason.DIRECT_ID, AmllTarget("am-lyrics", "123"), cacheable = true)
+        })
+        f.tick(600)
+        assertEquals(synced, f.repo.state.value)
+        assertEquals(1, f.calls.size)
+        assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null))
+    }
+
+    @Test fun transientAmllFailureIsNotOverallMissing() = runTest {
+        for (state in listOf(LyricsState.Offline, LyricsState.Failed)) {
+            val f = Fixture(this, amllAnswer = { AmllResult(state, AmllReason.NETWORK) }) {
+                FetchResult(LyricsState.Missing)
+            }
+            f.tick(600)
+            assertEquals(state, f.repo.state.value)
+            assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null))
+            assertEquals(LyricsState.Missing, f.cache.get(song().lyricsQuery!!))
+            f.tick(10_000)
+            assertEquals(2, f.calls.size)
+            assertEquals(1, f.amllCalls.size)
+        }
+    }
+
+    @Test fun cacheableFalseIsPreserved() = runTest {
+        val f = Fixture(this, amllAnswer = { wordResult(cacheable = false) })
+        f.tick(600)
+        assertEquals(words, f.repo.state.value)
+        assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null))
+        assertNull(f.cache.get(song().lyricsQuery!!))
+        f.now.value = song("B")
+        f.tick(600)
+        f.now.value = song()
+        f.tick(600)
+        assertEquals(listOf("A", "B", "A"), f.amllCalls.map { it.query.title })
+    }
+
+    @Test fun negativeDoesNotPoisonOtherSource() = runTest {
+        val f = Fixture(this)
+        f.tick(600)
+        assertEquals(synced, f.repo.state.value)
+        assertEquals(LyricsState.Missing, f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null)!!.state)
+        assertEquals(synced, f.cache.get(song().lyricsQuery!!))
+        val reverse = Fixture(this, amllAnswer = { wordResult() })
+        reverse.cache.put(song().lyricsQuery!!, LyricsState.Missing)
+        reverse.tick(600)
+        assertEquals(words, reverse.repo.state.value)
+    }
+
+    @Test fun offMakesZeroRequestsIncludingIndex() = runTest {
+        var indexCalls = 0
+        var transportCalls = 0
+        val client = AmllClient(AmllTransport { _, _ -> transportCalls++; error("unexpected transport") }, "test",
+            AmllIndexLookup { _, _ -> indexCalls++; AmllMatch.NotFound })
+        val f = Fixture(this, on = false, amllAnswer = client::fetch)
+        f.tick(1000)
+        f.now.value = song("B")
+        f.tick(1000)
+        assertTrue(f.amllCalls.isEmpty())
+        assertTrue(f.calls.isEmpty())
+        assertEquals(0, indexCalls)
+        assertEquals(0, transportCalls)
+    }
+
+    @Test fun offDuringReadDisconnects() = runTest {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val released = java.util.concurrent.CountDownLatch(1)
+        val finished = CompletableDeferred<Unit>()
+        val input = object : java.io.InputStream() {
+            @Volatile var closed = false
+            override fun read(): Int {
+                started.countDown()
+                if (!released.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    throw java.io.IOException("test read timed out")
+                }
+                throw java.io.IOException("closed")
+            }
+            override fun close() { closed = true; released.countDown() }
+        }
+        val connection = object : java.net.HttpURLConnection(java.net.URL("https://example.test")) {
+            @Volatile var disconnected = false
+            override fun getResponseCode() = 200
+            override fun getInputStream() = input
+            override fun disconnect() { disconnected = true }
+            override fun connect() { }
+            override fun usingProxy() = false
+        }
+        val client = AmllClient(AmllUrlConnectionTransport { connection }, "test")
+        val f = Fixture(this, amllAnswer = {
+            try { client.fetch(it) } finally { finished.complete(Unit) }
+        })
+        f.now.value = song().copy(lyricsIdentity = LyricsIdentity("123"))
+        f.tick(600)
+        try {
+            assertTrue(started.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        } finally {
+            f.enabled.value = false
+            runCurrent()
+        }
+        finished.await()
+        runCurrent()
+        assertTrue(input.closed)
+        assertTrue(connection.disconnected)
+        assertEquals(LyricsState.Off, f.repo.state.value)
+        assertTrue(f.calls.isEmpty())
+        assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!, LyricsIdentity("123")), null))
+    }
+
+    @Test fun lateResultFromAToBToAIsDropped() = runTest {
+        val pending = CompletableDeferred<AmllResult>()
+        var count = 0
+        val f = Fixture(this, amllAnswer = {
+            if (++count == 1) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { pending.await() }
+            else AmllResult(LyricsState.Missing, AmllReason.NOT_FOUND)
+        })
+        f.tick(600)
+        f.now.value = song("B")
+        runCurrent()
+        f.now.value = song()
+        runCurrent()
+        pending.complete(wordResult())
+        runCurrent()
+        assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null))
+        f.tick(600)
+        assertEquals(synced, f.repo.state.value)
+        assertEquals(2, f.amllCalls.size)
+    }
+
+    @Test fun cancelDoesNotWriteCache() = runTest {
+        val pending = CompletableDeferred<AmllResult>()
+        val f = Fixture(this, amllAnswer = {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { pending.await() }
+        })
+        f.tick(600)
+        f.enabled.value = false
+        runCurrent()
+        pending.complete(wordResult())
+        runCurrent()
+        assertEquals(LyricsState.Off, f.repo.state.value)
+        assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null))
+        assertNull(f.cache.get(song().lyricsQuery!!))
+    }
+
+    @Test fun retry10Then30Then60Seconds() = runTest {
+        val f = Fixture(this, amllAnswer = { AmllResult(LyricsState.Failed, AmllReason.NETWORK) }) {
+            FetchResult(LyricsState.Offline)
+        }
+        f.tick(100_600)
+        assertEquals(listOf(600L, 10_600L, 40_600L, 100_600L), f.times)
+        assertEquals(listOf(600L, 100_600L), f.amllTimes)
+    }
+
+    @Test fun hostCooldownsAreIndependent() = runTest {
+        val f = Fixture(this, amllAnswer = {
+            AmllResult(LyricsState.Failed, AmllReason.HTTP, retryAfterSec = 300,
+                hostWaitUntil = mapOf("raw.githubusercontent.com" to 300_600))
+        }) { FetchResult(LyricsState.Offline, retryAfterSec = 30) }
+        f.tick(30_600)
+        assertEquals(listOf(600L, 30_600L), f.times)
+        assertEquals(listOf(600L), f.amllTimes)
+    }
+
+    @Test fun noAmllUpgradeTimerAfterLrclibSuccess() = runTest {
+        val f = Fixture(this, amllAnswer = { AmllResult(LyricsState.Failed, AmllReason.NETWORK) })
+        f.tick(600)
+        assertEquals(synced, f.repo.state.value)
+        f.tick(300_000)
+        assertEquals(1, f.amllCalls.size)
+        assertEquals(1, f.calls.size)
     }
 
     @Test fun offDoesNotFetch() = runTest {
@@ -72,9 +328,11 @@ class LyricsRepositoryTest {
         val f = Fixture(this)
         f.tick(599)
         assertTrue(f.calls.isEmpty())
+        assertTrue(f.amllCalls.isEmpty())
         assertEquals(LyricsState.Loading, f.repo.state.value)
         f.tick(1)
         assertEquals(1, f.calls.size)
+        assertEquals(1, f.amllCalls.size)
     }
 
     @Test fun rapidChangesFetchOnlyLast() = runTest {

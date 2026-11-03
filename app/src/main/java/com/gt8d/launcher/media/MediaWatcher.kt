@@ -251,6 +251,7 @@ object MediaWatcher {
             hasFavoriteAction = hasFavoriteAction,
             paused = state?.state == PlaybackState.STATE_PAUSED,
             album = metadata?.getText(MediaMetadata.METADATA_KEY_ALBUM)?.toString(),
+            lyricsIdentity = lyricsIdentity(pkg, ids),
         )
     }
 

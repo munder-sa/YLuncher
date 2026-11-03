@@ -5,6 +5,15 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NowPlayingTest {
+    @Test fun identitySurvivesSnapshotMapping() {
+        val identity = com.gt8d.launcher.media.lyrics.LyricsIdentity(appleMusicId = "123")
+        val now = snapshot().copy(lyricsIdentity = identity).toNowPlaying()
+        assertEquals(identity, now.lyricsIdentity)
+        assertEquals(identity, now.lyricsRequest!!.identity)
+        assertEquals(now.lyricsQuery, now.lyricsRequest!!.query)
+        assertNull(now.copy(metaTitle = null).lyricsRequest)
+        assertEquals(com.gt8d.launcher.media.lyrics.LyricsIdentity(), snapshot().toNowPlaying().lyricsIdentity)
+    }
     @Test fun metaTitleNullWhenFilledWithAppLabel() {
         val now = snapshot(title = null).toNowPlaying()
         assertNull(now.metaTitle)
