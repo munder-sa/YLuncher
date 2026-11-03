@@ -278,7 +278,8 @@ internal fun HomeWideContent(
                 }
             }
             HomeMiniPlayer(state.now, state.idleApp, state.positionMs, appInfo, actions.onMediaAction,
-                actions.onSeek, actions.onLaunch, Modifier.width(playerWidth.dp).fillMaxHeight())
+                actions.onSeek, actions.onLaunch, Modifier.width(playerWidth.dp).fillMaxHeight(),
+                lyrics = state.lyrics, lyricsEnabled = state.lyricsEnabled, onToggleLyrics = actions.onToggleLyrics)
             Dock(state.dockStatus, state.dockApps, state.showCar, actions.onHome, actions.onSplit,
                 actions.onCar, actions.onAppList, actions.onAppListLongPress, actions.onLaunch,
                 state.settingsApp, actions.onSettings)
