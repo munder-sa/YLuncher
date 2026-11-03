@@ -30,6 +30,8 @@ object MediaWatcher {
     private var selectedController: MediaController? = null
     private var lastActivePkg: String? = null
     private val lastMetadataTitles = mutableMapOf<String, String?>()
+    // TEMP(157): 正式版の前に外す
+    private val lastMediaIds = mutableMapOf<String, Pair<String?, LyricsMetadataProbe.Result>>()
     private var listenerRegistered = false
 
     private val sessionsChangedListener =
@@ -73,6 +75,8 @@ object MediaWatcher {
         sessionManager = null
         selectedController = null
         _nowPlaying.value = null
+        // TEMP(157): 正式版の前に外す
+        lastMediaIds.clear()
     }
 
     // PiP から戻して分割を組み直す間、再生中のアプリが裏に回ったと判断して PiP に入り直すのを防ぐ(実機で確認)。
@@ -209,6 +213,18 @@ object MediaWatcher {
         if (!lastMetadataTitles.containsKey(pkg) || lastMetadataTitles[pkg] != title) {
             lastMetadataTitles[pkg] = title
             DiagLog.d("Lyrics", "metadata keys pkg=$pkg ${metadata?.keySet()?.sorted()?.joinToString(",").orEmpty()}")
+        }
+        // TEMP(157): 正式版の前に外す
+        val ids = LyricsMetadataProbe.read(metadata)
+        val mediaIdSnapshot = title to ids
+        if (lastMediaIds[pkg] != mediaIdSnapshot) {
+            lastMediaIds[pkg] = mediaIdSnapshot
+            DiagLog.d(
+                "Lyrics",
+                "media id pkg=$pkg title=$title " +
+                    "std=${ids.standard.diagnosticValue} (${ids.standard.type}) " +
+                    "apple=${ids.apple.diagnosticValue} (${ids.apple.type})",
+            )
         }
         val artist = metadata?.getText(MediaMetadata.METADATA_KEY_ARTIST)?.toString()
         val artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
