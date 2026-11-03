@@ -228,6 +228,7 @@ object MediaWatcher {
             playing = playing,
             hasFavoriteAction = hasFavoriteAction,
             paused = state?.state == PlaybackState.STATE_PAUSED,
+            album = metadata?.getText(MediaMetadata.METADATA_KEY_ALBUM)?.toString(),
         )
     }
 

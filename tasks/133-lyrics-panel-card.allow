@@ -1,0 +1,7 @@
+write app/src/main/java/com/gt8d/launcher/ui/panel/MediaCard.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/MediaCardTest.kt
+write README.md
+write docs/install-v1.6.md
+write docs/superpowers/specs/2026-10-28-gt8d-launcher-design.md
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.*'

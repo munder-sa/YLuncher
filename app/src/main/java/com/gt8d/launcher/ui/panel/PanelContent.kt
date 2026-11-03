@@ -77,6 +77,8 @@ data class PanelState(
     val placement: PanelPlacement? = null,
     val missingPermissions: List<MissingPermission> = emptyList(),
     val settingsApp: AppInfo? = null,
+    val lyrics: com.gt8d.launcher.media.lyrics.LyricsState = com.gt8d.launcher.media.lyrics.LyricsState.Off,
+    val lyricsEnabled: Boolean = false,
 )
 
 data class PanelActions(
@@ -94,6 +96,7 @@ data class PanelActions(
     val onOpenSet: (Int) -> Unit = {},
     val onNewSet: () -> Unit = {},
     val onSettings: () -> Unit = {},
+    val onToggleLyrics: () -> Unit = {},
 )
 
 @Composable

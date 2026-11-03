@@ -11,6 +11,13 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class ConfigRepositoryTest {
+    @Test fun resetTurnsLyricsOff() = runTest {
+        val repo = ConfigRepository(File(tempFolder.newFolder(), "config.json")) { installed }
+        repo.update { it.copy(lyricsEnabled = true) }
+        assertTrue(repo.config.first().lyricsEnabled)
+        repo.reset()
+        assertFalse(repo.config.first().lyricsEnabled)
+    }
     private val v2Json = """{"version":2,"screenSets":[{"id":"s1","left":{"pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.Panel"}}],"homeApps":["a"],"panelApps":[],"dockApps":[],"idleApp":"a"}"""
 
     @Test fun migrateFromV2_writesBackupThenV3() = runTest {

@@ -75,6 +75,7 @@ fun PanelScreen(
         if (pending == config.panelView) pending = null
     }
     val now by MediaWatcher.nowPlaying.collectAsState()
+    val lyrics by AppGraph.lyrics.state.collectAsState()
     var showAppList by rememberSaveable { mutableStateOf(false) }
     val iconPage = rememberSaveable { mutableIntStateOf(0) }
     val environment = rememberPanelEnvironment(AppGraph.catalog)
@@ -179,6 +180,8 @@ fun PanelScreen(
         needsPermission = environment.needsPermission,
         missingPermissions = environment.missingPermissions,
         settingsApp = settingsApp,
+        lyrics = lyrics,
+        lyricsEnabled = config.lyricsEnabled,
     )
 
     val actions = PanelActions(
@@ -192,6 +195,17 @@ fun PanelScreen(
             }
         },
         onSeek = { ms -> MediaWatcher.seekTo(ms) },
+        onToggleLyrics = {
+            scope.launch {
+                try {
+                    AppGraph.config.update { it.copy(lyricsEnabled = !it.lyricsEnabled) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    DiagLog.d("Panel", "lyrics toggle save failed: $e")
+                }
+            }
+        },
         onLaunch = onLaunchApp,
         onAdd = onEditLists,
         onHome = { AppGraph.runner.home() },

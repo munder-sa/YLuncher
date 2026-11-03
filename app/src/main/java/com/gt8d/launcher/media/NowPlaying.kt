@@ -1,6 +1,7 @@
 package com.gt8d.launcher.media
 
 import android.graphics.Bitmap
+import com.gt8d.launcher.media.lyrics.LyricsQuery
 
 data class SessionSnapshot(
     val pkg: String,
@@ -15,6 +16,7 @@ data class SessionSnapshot(
     val playing: Boolean,
     val hasFavoriteAction: Boolean,
     val paused: Boolean = false,
+    val album: String? = null,
 )
 
 data class NowPlaying(
@@ -28,6 +30,8 @@ data class NowPlaying(
     val positionMs: Long = 0L,
     val positionUpdatedAt: Long = 0L,
     val speed: Float = 1f,
+    val album: String? = null,
+    val metaTitle: String? = null,
 )
 
 fun SessionSnapshot.toNowPlaying(): NowPlaying = NowPlaying(
@@ -41,7 +45,12 @@ fun SessionSnapshot.toNowPlaying(): NowPlaying = NowPlaying(
     positionMs = positionMs,
     positionUpdatedAt = positionUpdatedAt,
     speed = speed,
+    album = album?.takeIf { it.isNotBlank() },
+    metaTitle = title?.takeIf { it.isNotBlank() },
 )
+
+val NowPlaying.lyricsQuery: LyricsQuery?
+    get() = LyricsQuery.of(metaTitle, artist, album, durationMs)
 
 fun NowPlaying.positionAt(nowMs: Long): Long {
     val raw = if (playing) {

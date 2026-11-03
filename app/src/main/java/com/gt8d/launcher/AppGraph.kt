@@ -3,6 +3,12 @@ package com.gt8d.launcher
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Intent
+import android.os.SystemClock
+import com.gt8d.launcher.media.MediaWatcher
+import com.gt8d.launcher.media.lyrics.LyricsCache
+import com.gt8d.launcher.media.lyrics.LyricsRepository
+import com.gt8d.launcher.media.lyrics.LrclibClient
+import com.gt8d.launcher.media.lyrics.UrlConnectionTransport
 import com.gt8d.launcher.notice.NoticeOverlay
 import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.apps.FrequentApp
@@ -55,8 +61,29 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 object AppGraph {
+    private val lyricsScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val lyrics: LyricsRepository by lazy {
+        val versionName = try {
+            app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
+        } catch (_: Exception) {
+            "?"
+        }
+        val userAgent = "YLuncher/$versionName (https://github.com/munder-sa/YLuncher)"
+        val client = LrclibClient(UrlConnectionTransport(), userAgent)
+        LyricsRepository(
+            scope = lyricsScope,
+            nowPlaying = MediaWatcher.nowPlaying,
+            enabled = latestConfig.map { it?.lyricsEnabled == true },
+            cache = LyricsCache(File(app.filesDir, "lyrics"), System::currentTimeMillis),
+            fetch = { q -> withContext(Dispatchers.IO) { client.fetch(q) } },
+            clock = SystemClock::elapsedRealtime,
+            io = Dispatchers.IO,
+        )
+    }
     private val _frequentApps = MutableStateFlow<List<FrequentApp>?>(null)
     val frequentApps: StateFlow<List<FrequentApp>?> = _frequentApps.asStateFlow()
     private val _usageAvailable = MutableStateFlow(false)

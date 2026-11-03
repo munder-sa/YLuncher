@@ -6,6 +6,15 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ConfigCodecTest {
+    @Test fun decodesOldConfigWithoutLyricsEnabled() {
+        val json = """{"version":3,"screenSets":[],"homeApps":[],"panelApps":[],"dockApps":[],"idleApp":"a"}"""
+        assertEquals(false, ConfigCodec.decode(json)!!.lyricsEnabled)
+    }
+
+    @Test fun lyricsEnabledRoundTrips() {
+        val config = Defaults.build(emptySet()).copy(lyricsEnabled = true)
+        assertEquals(true, ConfigCodec.decode(ConfigCodec.encode(config))!!.lyricsEnabled)
+    }
     @Test fun dockMode_legacyAutoAndManualRoundTrip() {
         val base = Defaults.build(emptySet())
         val legacy = ConfigCodec.encode(base).replace(",\"dockMode\":\"Auto\"", "")

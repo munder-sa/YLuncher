@@ -6,6 +6,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LrclibClientTest {
+    @Test fun tooManyRequestsWithoutHeaderIs60() {
+        response = HttpResponse(429, "", null)
+        assertEquals(FetchResult(LyricsState.Failed, 60), client.fetch(query))
+    }
+
+    @Test fun tooManyRequestsNonPositiveHeaderIs60() {
+        for (seconds in listOf(0L, -1L)) {
+            response = HttpResponse(429, "", seconds)
+            assertEquals(FetchResult(LyricsState.Failed, 60), client.fetch(query))
+        }
+    }
     private val query = LyricsQuery("ダミー", "サンプル", null, null)
     private var response = HttpResponse(200, "{}", null)
     private var url = ""

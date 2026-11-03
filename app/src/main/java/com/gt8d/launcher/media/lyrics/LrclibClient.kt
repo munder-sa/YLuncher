@@ -61,7 +61,7 @@ class LrclibClient(private val transport: HttpTransport, private val userAgent: 
         } catch (_: IOException) {
             return FetchResult(LyricsState.Offline)
         }
-        if (response.code == 429) return FetchResult(LyricsState.Failed, response.retryAfterSec)
+        if (response.code == 429) return FetchResult(LyricsState.Failed, response.retryAfterSec?.takeIf { it > 0 } ?: 60L)
         if (response.code == 404 || response.code == 400) return FetchResult(LyricsState.Missing)
         if (response.tooLarge || response.code != 200) return FetchResult(LyricsState.Failed)
         val json = try {
