@@ -19,16 +19,21 @@ button,select{font:inherit;color:inherit;background:var(--control);border:1px so
 .app{margin-top:14px;margin-bottom:18px;position:relative}
 .app-name{font-size:18px}
 .app-actions{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0}
-.toggle-wrap{position:relative;flex:0 0 72px;width:72px}
-.toggle{position:relative;right:auto;top:auto;display:grid;place-items:center;width:72px;min-width:72px;height:72px;padding:0;border:0;border-radius:0;background:transparent;color:white}
-.toggle::before{content:"";position:absolute;inset:12px;border-radius:12px;background:#454550;pointer-events:none}
+/* 囲みの48dpを行に確保し、押せる範囲は右と上下へ広げる。 */
+.toggle-wrap{position:relative;flex:0 0 48px;width:48px;height:72px}
+.toggle{position:absolute;left:0;right:auto;top:0;display:grid;place-items:center;width:72px;min-width:72px;height:72px;padding:0;border:0;border-radius:0;background:transparent;color:white}
+.toggle::before{content:"";position:absolute;inset:12px 24px 12px 0;border-radius:12px;background:#454550;pointer-events:none}
 .toggle:hover,.toggle[aria-pressed=true]{background:transparent}
 .toggle[aria-pressed=true]{color:#0B0B0F}
 .toggle[aria-pressed=true]::before{background:white}
 .toggle:disabled{opacity:.38;cursor:default}
 .toggle:disabled:hover{background:transparent}
 /* 外形32+線幅3.125を32pxで描画し、見た目の幅を約28dp、線幅を2.5dpにする。 */
-.toggle svg{position:relative;width:32px;height:32px;fill:none;stroke:currentColor;stroke-width:3.125;stroke-linecap:round;stroke-linejoin:round}
+.toggle svg{position:relative;width:32px;height:32px;transform:translateX(-12px);fill:none;stroke:currentColor;stroke-width:3.125;stroke-linecap:round;stroke-linejoin:round}
+/* ☆がある行では押せる範囲を左へ広げ、☆との8dpの間隔を保つ。 */
+.toggle-wrap:has(+ .favorite:not([hidden])) .toggle{left:-24px}
+.toggle-wrap:has(+ .favorite:not([hidden])) .toggle::before{inset:12px 0 12px 24px}
+.toggle-wrap:has(+ .favorite:not([hidden])) .toggle svg{transform:translateX(12px)}
 .toggle-status{font-size:16px;line-height:24px;color:#B0B0BB;white-space:nowrap}
 .toggle-wrap .toggle-status{position:absolute;top:72px;left:50%;transform:translateX(-50%)}
 .metadata-row{display:flex;align-items:center;gap:8px;flex:none}
