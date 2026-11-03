@@ -145,34 +145,41 @@ fun PanelScreen(
         return
     }
 
-    var positionMs by remember(now) {
+    val positionState = remember(now) {
         mutableLongStateOf(now?.positionAt(SystemClock.elapsedRealtime()) ?: 0L)
     }
 
     LaunchedEffect(now) {
         val current = now ?: run {
-            positionMs = 0L
+            positionState.longValue = 0L
             return@LaunchedEffect
         }
-        positionMs = current.positionAt(SystemClock.elapsedRealtime())
+        positionState.longValue = current.positionAt(SystemClock.elapsedRealtime())
         while (current.playing) {
             delay(500L)
-            positionMs = current.positionAt(SystemClock.elapsedRealtime())
+            positionState.longValue = current.positionAt(SystemClock.elapsedRealtime())
         }
     }
 
     val catalog = AppGraph.catalog
     val installedPkgs = environment.installedPkgs
-    val idleApp = catalog.info(config.idleApp, installedPkgs)
-    val panelApps = config.panelApps.map { catalog.info(it, installedPkgs) }
-    val dockApps = dockAppsFor(config.dockMode, config.dockApps, frequent, installedPkgs,
+    val idleApp = remember(config.idleApp, installedPkgs, environment.revision) {
+        catalog.info(config.idleApp, installedPkgs)
+    }
+    val panelApps = remember(config.panelApps, installedPkgs, environment.revision) {
+        config.panelApps.map { catalog.info(it, installedPkgs) }
+    }
+    val dockApps = remember(config.dockMode, config.dockApps, frequent, installedPkgs,
+        settings?.packageName, environment.revision) {
+        dockAppsFor(config.dockMode, config.dockApps, frequent, installedPkgs,
         setOfNotNull(settings?.packageName) + HiddenApps.packages).map { catalog.info(it, installedPkgs) }
+    }
 
     val state = PanelState(
         placement = placement,
         now = now,
         idleApp = idleApp,
-        positionMs = positionMs,
+        position = { positionState.longValue },
         panelApps = panelApps,
         dockApps = dockApps,
         dockStatus = environment.dockStatus,
@@ -249,6 +256,8 @@ fun PanelScreen(
     }
 }
 
+internal val LocalClockCompositionObserver = androidx.compose.runtime.staticCompositionLocalOf<() -> Unit> { {} }
+
 @Composable
 internal fun HomeWideContent(
     state: PanelState,
@@ -269,6 +278,8 @@ internal fun HomeWideContent(
                     if (state.needsPermission) {
                         PermissionBanner(state.missingPermissions, actions.onOpenPermissions)
                     }
+                    val clockCompositionObserver = LocalClockCompositionObserver.current
+                    androidx.compose.runtime.SideEffect { clockCompositionObserver() }
                     HomeClockHeader(clockHeight)
                     HomeSetCards(config.screenSets, appInfo, currentIndex, onOpen, onNewSet,
                         Modifier.fillMaxWidth().weight(1f))
@@ -277,7 +288,7 @@ internal fun HomeWideContent(
                         Modifier.fillMaxWidth(), state = homeAppRowState)
                 }
             }
-            HomeMiniPlayer(state.now, state.idleApp, state.positionMs, appInfo, actions.onMediaAction,
+            HomeMiniPlayer(state.now, state.idleApp, state.position, appInfo, actions.onMediaAction,
                 actions.onSeek, actions.onLaunch, Modifier.width(playerWidth.dp).fillMaxHeight(),
                 lyrics = state.lyrics, lyricsEnabled = state.lyricsEnabled, onToggleLyrics = actions.onToggleLyrics)
             Dock(state.dockStatus, state.dockApps, state.showCar, actions.onHome, actions.onSplit,

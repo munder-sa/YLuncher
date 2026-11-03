@@ -10,11 +10,12 @@ import com.gt8d.launcher.ui.panel.AppInfo
 import java.util.concurrent.ConcurrentHashMap
 
 class AppCatalog(private val context: Context) {
+    private val labelCache = ConcurrentHashMap<String, String>()
     private val iconCache = ConcurrentHashMap<String, ImageBitmap>()
 
-    fun invalidatePackage(pkg: String) { iconCache.remove(pkg) }
+    fun invalidatePackage(pkg: String) { iconCache.remove(pkg); labelCache.remove(pkg) }
 
-    fun invalidateAllIcons() { iconCache.clear() }
+    fun invalidateAllIcons() { iconCache.clear(); labelCache.clear() }
 
     fun installed(): Set<String> {
         return runCatching {
@@ -40,14 +41,16 @@ class AppCatalog(private val context: Context) {
     }
 
     fun label(pkg: String): String {
+        labelCache[pkg]?.let { return it }
         val pm = context.packageManager
         return runCatching {
             val appInfo = pm.getApplicationInfo(pkg, 0)
             pm.getApplicationLabel(appInfo).toString().ifBlank { pkg }
-        }.getOrDefault(pkg)
+        }.getOrDefault(pkg).also { labelCache[pkg] = it }
     }
 
     fun info(pkg: String, installedPkgs: Set<String>): AppInfo {
+        if (pkg !in installedPkgs) invalidatePackage(pkg)
         return AppInfo(
             pkg = pkg,
             label = label(pkg),

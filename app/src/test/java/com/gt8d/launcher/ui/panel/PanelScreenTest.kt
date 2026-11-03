@@ -53,6 +53,42 @@ internal class PanelTestLifecycle : LifecycleOwner {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PanelScreenTest {
+    @Test fun positionTickDoesNotRecomposePanel() {
+        val field = com.gt8d.launcher.media.MediaWatcher::class.java.getDeclaredField("_nowPlaying")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val flow = field.get(com.gt8d.launcher.media.MediaWatcher) as kotlinx.coroutines.flow.MutableStateFlow<com.gt8d.launcher.media.NowPlaying?>
+        val previous = flow.value
+        var compositions = 0
+        val observer: () -> Unit = { compositions++ }
+        try {
+            flow.value = com.gt8d.launcher.media.NowPlaying("music", "Song", "Artist", null,
+                120000L, true, false, positionUpdatedAt = android.os.SystemClock.elapsedRealtime())
+            rule.setContent {
+                CompositionLocalProvider(LocalClockCompositionObserver provides observer) {
+                    LauncherTheme { PanelScreen(false, homeWide = true, onLaunchApp = {}) }
+                }
+            }
+            rule.waitForIdle()
+            rule.mainClock.autoAdvance = false
+            val before = compositions
+            val progressBefore = rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)).fetchSemanticsNode()
+                .config[SemanticsProperties.ProgressBarRangeInfo].current
+            assertTrue(before > 0)
+            rule.runOnIdle {
+                org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(2))
+            }
+            rule.mainClock.advanceTimeBy(2000L)
+            rule.waitForIdle()
+            assertEquals(before, compositions)
+            assertTrue(rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)).fetchSemanticsNode()
+                .config[SemanticsProperties.ProgressBarRangeInfo].current > progressBefore)
+        } finally {
+            flow.value = previous
+            rule.mainClock.autoAdvance = true
+        }
+    }
+
     @Test fun panel_tenAppsPageSurvivesAppListAndViewSwitch() {
         val panels = (1..11).map { "example.paged$it" }
         panels.forEach { install(packageName = it) }

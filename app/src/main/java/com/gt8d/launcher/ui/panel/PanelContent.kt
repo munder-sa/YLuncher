@@ -64,7 +64,7 @@ import java.util.Locale
 data class PanelState(
     val now: NowPlaying?,
     val idleApp: AppInfo?,
-    val positionMs: Long,
+    val position: () -> Long = { 0L },
     val panelApps: List<AppInfo>,
     val dockApps: List<AppInfo>,
     val dockStatus: DockStatus,
@@ -143,7 +143,7 @@ fun PanelContent(
                                 MediaCard(
                                     now = state.now,
                                     idleApp = state.idleApp,
-                                    positionMs = state.positionMs,
+                                    position = state.position,
                                     onAction = actions.onMediaAction,
                                     onSeek = actions.onSeek,
                                     onLaunch = actions.onLaunch,
