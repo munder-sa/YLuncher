@@ -117,3 +117,4 @@ v1.7.1/v2.0 の層による移動・フェード・縮小、静止背景の共�
 - **TTML の形**(Lemon で確認。本文は載せない): ルート `<tt xmlns="http://www.w3.org/ns/ttml" xmlns:amll="http://www.example.com/ns/amll" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" itunes:timing="Word">`。`head/metadata` に `ttm:agent` と `amll:meta key=… value=…`(musicName・artists・album・appleMusicId・isrc・ncmMusicId・qqMusicId・spotifyId・ttmlAuthorGithub・ttmlAuthorGithubLogin)。`body/div/p begin end itunes:key ttm:agent` の中に `span begin end`(単語)。時刻は秒の小数(例 `1.372`)。`span ttm:role="x-translation"`・`"x-roman"` は翻訳・ローマ字(捨てる)。背景の歌詞(`x-bg`)はこの例には無いが、あれば捨てる。
 - 時刻の形は秒の小数のほか、`mm:ss.mmm` などもありうるので、読み取りは両方を受け付ける。不正な時刻・単語の順の矛盾などがあれば、§5 どおり **TTML 全体を棄却**し(Invalid)、LRCLIB へ回す(一部の行だけを使わない)。
 - (2026-11-04 司令塔)§6 の「索引の世代が変わったら負のキャッシュを無効化」は v2.1.0 では**延期**。未収録の記録は 24 時間で切れるので、索引の更新の反映が最大 1 日遅れる。
+- (2026-11-04 ユーザーの判断)AMLL の「未収録」は保存しない。LRCLIB の同期・平文・未収録の曲は、曲を再生するたびに AMLL だけを確かめる(同じ曲の間は1回)。Task 158b。
