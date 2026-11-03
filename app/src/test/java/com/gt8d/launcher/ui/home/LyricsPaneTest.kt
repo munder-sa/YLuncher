@@ -29,13 +29,16 @@ class LyricsPaneTest {
     private lateinit var controller: ActivityController<ComponentActivity>
     private val lines = listOf(LyricLine(1000, "一"), LyricLine(2000, "二"), LyricLine(3000, "三"))
     private var clock = 1000L
+    private val observer = LyricsPaneObserver()
     private var now by mutableStateOf(NowPlaying("dummy", "架空の曲", "架空の人", null, null, false, false,
         positionMs = 2500, metaTitle = "架空の曲"))
     private fun show(state: LyricsState = LyricsState.Synced(lines)) {
         rule.mainClock.autoAdvance = false
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
-            LyricsPane(state, now, Modifier.size(329.dp, 240.dp)) { clock }
+            CompositionLocalProvider(LocalLyricsPaneObserver provides observer) {
+                LyricsPane(state, now, Modifier.size(329.dp, 240.dp)) { clock }
+            }
         } }
         controller.visible()
         rule.mainClock.advanceTimeBy(400)
@@ -68,10 +71,10 @@ class LyricsPaneTest {
         rule.runOnIdle { clock = 2100 }
         rule.mainClock.advanceTimeBy(200)
         rule.mainClock.advanceTimeByFrame()
-        rule.mainClock.advanceTimeBy(150)
+        rule.mainClock.advanceTimeBy(200)
         rule.onNodeWithTag("player_lyrics_current").assertTextEquals("二")
-        assertTrue(center("二") > areaCenter() + 0.5f)
-        rule.mainClock.advanceTimeBy(300)
+        assertTrue("line=${center("二")}, area=${areaCenter()}", center("二") > areaCenter() + 0.5f)
+        rule.mainClock.advanceTimeBy(500)
         assertEquals(areaCenter(), center("二"), 0.5f)
     }
     @Test fun jumpSnapsWithoutAnimation() {
@@ -188,7 +191,7 @@ class LyricsPaneTest {
     }
 
     private fun alpha(index: Int): Float = rule.onNodeWithTag("player_lyrics_line_$index")
-        .fetchSemanticsNode().config[LyricAlphaKey]
+        .fetchSemanticsNode().config[LyricDrawProbeKey].alpha
 
     @Test fun currentLineFadesIn() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
@@ -197,9 +200,9 @@ class LyricsPaneTest {
         rule.runOnIdle { clock = 2100 }
         rule.mainClock.advanceTimeBy(200)
         rule.mainClock.advanceTimeByFrame()
-        rule.mainClock.advanceTimeBy(150)
+        rule.mainClock.advanceTimeBy(250)
         assertTrue(alpha(1) > 0.45f && alpha(1) < 1f)
-        rule.mainClock.advanceTimeBy(300)
+        rule.mainClock.advanceTimeBy(500)
         assertEquals(1f, alpha(1), 0f)
     }
 
@@ -210,9 +213,9 @@ class LyricsPaneTest {
         rule.runOnIdle { clock = 2100 }
         rule.mainClock.advanceTimeBy(200)
         rule.mainClock.advanceTimeByFrame()
-        rule.mainClock.advanceTimeBy(150)
+        rule.mainClock.advanceTimeBy(250)
         assertTrue(alpha(0) > 0.45f && alpha(0) < 1f)
-        rule.mainClock.advanceTimeBy(300)
+        rule.mainClock.advanceTimeBy(500)
         assertEquals(0.45f, alpha(0), 0f)
     }
 
@@ -224,5 +227,35 @@ class LyricsPaneTest {
         rule.mainClock.advanceTimeByFrame()
         assertEquals(1f, alpha(2), 0f)
         assertEquals(0.35f, alpha(0), 0f)
+    }
+
+    @Test fun noPerFrameLoopForLineLevelLyrics() {
+        now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
+        show()
+        val before = observer.compositions
+        val framesBefore = observer.frameUpdates
+        repeat(30) {
+            rule.runOnIdle { clock += 16 }
+            rule.mainClock.advanceTimeByFrame()
+        }
+        rule.waitForIdle()
+        assertEquals(before, observer.compositions)
+        assertEquals(framesBefore, observer.frameUpdates)
+    }
+
+    @Test fun scrollAnimationDoesNotRelayout() {
+        now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
+        show()
+        rule.runOnIdle { clock = 2100 }
+        rule.mainClock.advanceTimeBy(200)
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        val before = observer.measures
+        val placementsBefore = observer.placements
+        repeat(32) { rule.mainClock.advanceTimeByFrame() }
+        rule.waitForIdle()
+        assertEquals(before, observer.measures)
+        assertEquals(placementsBefore, observer.placements)
+        assertEquals(areaCenter(), center("二"), 0.5f)
     }
 }
