@@ -1,0 +1,86 @@
+[INFO] codex-ask: ログ .codex-bak/ask-20261103-232148-235418/
+**改善できます。おすすめは「ジャケット由来の暗い静止グラデーション＋現在行の明確な強調＋控えめな行送り」です。** GT8D では、ぼかしや常時動く背景より、配色と視線の誘導に予算を使う方が効果的です。
+
+以下の負荷評価は、提示された実測とコードに基づく**推測**です。追加効果の実機計測はしていません。
+
+**1. AMLL のライセンス**
+
+AMLL は **AGPL-3.0**。コードの複製・改変は可能ですが、条件付きです。改変物の配布では、対象となる作品のライセンス・対応ソース提供などが問題になります。**TypeScript を Kotlin に書き直しても、コードの翻案なら条件を避けられるとは限りません。** 出典表記だけで済むライセンスではありません。[LICENSE §4〜6・§13](https://github.com/amll-dev/applemusic-like-lyrics/blob/main/LICENSE)
+
+今回のおすすめは、**見た目や原理を参考に、Compose 標準機能で独自実装すること**です。コードやシェーダーを移植するなら、先に YLuncher の配布方針との適合確認が必要です。
+
+AMLL の実装では、次を確認しました。
+
+- 行間隔に応じたばねの調整：[base/spring.ts L25〜73](https://github.com/amll-dev/applemusic-like-lyrics/blob/main/packages/core/src/lyric-player/base/spring.ts#L25)
+- 行の縮小・透明度・ぼかし・遅延の管理：[base/line.ts L48〜60](https://github.com/amll-dev/applemusic-like-lyrics/blob/main/packages/core/src/lyric-player/base/line.ts#L48)
+- 間奏の点灯・呼吸・入退場：[interlude-dots.ts L35〜79](https://github.com/amll-dev/applemusic-like-lyrics/blob/main/packages/core/src/lyric-player/base/interlude-dots.ts#L35)
+- WebGL のメッシュ背景：[mesh-renderer/index.ts L6〜21](https://github.com/amll-dev/applemusic-like-lyrics/blob/main/packages/core/src/bg-render/mesh-renderer/index.ts#L6)
+
+**2. 歌詞：優先順の提案**
+
+現状でも距離別の透明度、上下端フェード、間奏の3点表示が入っています。[LyricsPane.kt:63](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:63)、[同:90](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:90)、[同:172](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:172)
+
+| 優先 | 工夫・判定 | 効果と負荷の見込み／Compose の要点 |
+|---|---|---|
+| 1 | **現在行と次行の明暗を調整：推奨** | 現在行を白、次行を読める明るさ、過去・遠方を抑える。追加負荷はほぼ現状同等。既存の距離別 alpha を調整し、500ms フェードを維持する。背景変更後に再調整する。 |
+| 2 | **跳ね返らない、ばね風の送り：推奨** | 動きの出だしと収束を自然にする。まず共通の移動値1つで試す。既存の `Animatable` と層での移動を維持し、減衰の強い `spring`、または800msの easing 調整。追加 GPU 負荷は小さい見込みだが、収束が長いと描画時間が増える。 |
+| 3 | **非現在行をわずかに縮小：条件付き** | ぼかしなしで奥行きを出せる。例えば現在行1.0、他0.96程度を試す。行全体の `graphicsLayer` で左中央基準に縮小し、文字サイズやレイアウト寸法は変えない。負荷は小さい見込み。22spをさらに小さく見せるため、視認性を優先して判断する。 |
+| 4 | **行ごとの短い時間差：後回し** | 列が柔らかく追従する。ただし約53ms間隔では微小な遅延は見えにくい。試すなら可視行だけ、隣接行約50ms・総遅延100ms程度から。新しい行へ切り替わる際は現在位置から再目標化し、シークは即時移動。行間が詰まる・重なる問題の検証が必要。 |
+| 5 | **間奏は現状の3段階点灯を維持：推奨** | AMLL の呼吸・拡縮は採らず、落ち着いた表示を維持。現状は間奏中も毎フレーム時刻を更新するので、点灯境界での更新へ絞る余地がある。主に更新処理の削減であり、大きな GPU 改善は期待しない。 |
+
+現在の送りは800ms、層での移動で、通常の次行以外は即時移動する構造です。この性質は維持したいです。[LyricsPane.kt:232](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:232)、[同:270](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:270)
+
+**非現在行のぼかしは非推奨です。** 全画面ぼかしより対象は小さいものの、可視行それぞれのフィルター処理を増やします。既存にも歌詞領域のオフスクリーン合成と単語塗りの合成があり、GPU に余裕がない条件では追加する根拠が弱いです。[LyricsPane.kt:134](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:134)、[同:173](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:173)
+
+**3. ミニプレイヤーの背景**
+
+現在は `Surface` が `Palette.Panel` を使い、その値が `#2E2E38` です。[HomeMiniPlayer.kt:54](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/HomeMiniPlayer.kt:54)、[Theme.kt:20](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/theme/Theme.kt:20)
+
+**色抽出は、まず自前の小さな処理で十分です。**
+
+| 方法 | 評価 |
+|---|---|
+| 縮小画像の平均色 | 最も単純。背景の薄い色付けに向く。ただし補色が混ざると灰色・濁った色になる。最初の候補。 |
+| 粗い色ヒストグラムの主要色 | ジャケットらしさが出やすい。透明画素を除き、近い色をまとめる。黒白ばかりの画像へのフォールバックが必要。平均色で物足りない場合に採用。 |
+| `androidx.palette` | 鮮やか・落ち着いた色などの候補を安定して選びたいなら導入理由になる。ただし今回の薄い背景色だけなら必須ではない。公式も抽出結果のキャッシュを推奨。[Palette公式資料](https://developer.android.com/develop/ui/views/graphics/palette-colors) |
+
+提案する処理は、ジャケット変更時だけワーカースレッドで32×32程度に縮小して抽出し、結果を保持する方法です。再生位置の更新で再抽出せず、曲変更時に古い抽出結果が反映されないようにします。ジャケットなし・抽出失敗時は既存色へ戻します。元の画像は既に `Bitmap` として取得しています。[MediaWatcher.kt:214](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/media/MediaWatcher.kt:214)
+
+背景の比較は次のとおりです。
+
+| 案 | 見た目 | 負荷の見込み |
+|---|---|---|
+| 抽出色を混ぜた単色 | 曲との一体感が出る | 最小。常時アニメーション不要 |
+| **静止グラデーション** | 奥行きが出る。おすすめ | 単色より描画量は増えるが、継続的な更新を起こさない |
+| ゆっくり動くメッシュ風 | 雰囲気は強い | 常時描画を起こす。周期を長くしても毎フレーム更新なら負荷は減らない |
+
+静止案は、暗い地色に**大きな放射状グラデーションを2つ程度**重ねれば十分です。`drawWithCache` で Brush を保持し、ぼかしは使いません。さらに描画を単純化するなら、サイズ・配色変更時だけ小さな背景 Bitmap を生成して拡大表示します。
+
+動かす場合は、その背景 Bitmap だけを少し大きめに置き、`graphicsLayer` の平行移動で20〜40秒かけて小さく往復させる案が比較的軽量です。文字の層は動かさず、非表示・一時停止時は更新を止めます。ただし**低解像度画像でも最終的なパネル面積の合成は必要**なので、静止案より軽くはなりません。
+
+文字の読みやすさは、抽出色をそのまま敷かず、彩度と明るさを抑えた上で守ります。
+
+- 白文字だけでなく、現在の補助文字 `#B0B0BB` と、透過した歌詞の**合成後の色**を確認する。[Theme.kt:25](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/theme/Theme.kt:25)
+- 主要文字・補助情報は、背景の最も明るい場所でもコントラスト比4.5:1を設計目標にする。
+- グラデーション全体を暗く制限し、必要なら文字領域の背後に固定の暗い面を足す。動く背景でも文字色は頻繁に切り替えない。
+
+**4. おすすめの組み合わせと Task 分割**
+
+初回は **静止グラデーション＋明暗調整**。次に **共通のばね風送り**を試し、縮小・時間差は比較結果を見て判断するのがおすすめです。実測約53msは約19fpsなので、演出を足してフレーム数を改善する期待は持てません。仕様にも描画側の上限が記録されています。[仕様:150](/mnt/f/YLuncher/docs/superpowers/specs/2026-11-03-lyrics-design.md:150)
+
+1. **Task A：背景色抽出と静止背景**  
+   依存追加なし。抽出・暗色化・フォールバック・古い結果の破棄・コントラスト確認をまとめる。
+2. **Task B：歌詞の明暗と送り**  
+   22sp・現在行中央を維持。ばね風送りを比較し、途中の次行変更・シーク・2行折り返しで跳びや重なりがないことを確認。
+3. **Task C：GT8Dで比較計測**  
+   同じ曲・同じ区間で、フレーム間隔、描画処理、視認性を比較。既存の組み立て・計測回数の観測も利用する。[LyricsPane.kt:99](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:99)
+4. **Task D：任意の演出試作**  
+   縮小・時間差・背景移動を1つずつ比較。常時背景移動は最後に判断する。
+
+補足として、曲名・アーティストには現在 `MarqueeText` が使われています。「マーキーを使わない」を画面全体へ適用するなら、その停止も仕様変更に含めてください。[HomeMiniPlayer.kt:170](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/HomeMiniPlayer.kt:170)
+
+ファイルの作成・変更、ビルド・テストはしていません。調査は `cat`、`nl -ba`、`sed -n`、`rg` と Web 閲覧で実施しました。
+
+**決めたこと**
+
+- 実装上の確定事項はなし。数値・方式は比較用の提案です。exit=0
