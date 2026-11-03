@@ -77,3 +77,7 @@
 
 ## 報告
 - 実行したコマンドと結果(テストの件数・失敗数)、直した既存テストとその理由、決めたこと(RULES.md 1)。
+
+## 追記(codex の質問への回答)
+- この Task の仕様と食い違う既存テスト(例: `searchNotUsedWhenServerError` の「503 では検索しない」、検索の失敗で `cacheable=true`/Missing・Plain を期待するもの、Missing の 7 日、取り直しの 30・60・90 秒)は、**新しい仕様に合わせて期待値・呼び出し回数を直してよい**。検証している項目は減らさない(回数・保存の可否・状態を新しい値で確かめる)。直したテストは名前と変更内容をすべて報告する。
+- DiagLog は `app/src/main/java/com/gt8d/launcher/diag/DiagLog.kt`(`com.gt8d.launcher.diag.DiagLog`)。
