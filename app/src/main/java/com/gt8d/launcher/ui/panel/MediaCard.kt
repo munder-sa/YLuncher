@@ -49,6 +49,8 @@ import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.media.lyricsQuery
 import com.gt8d.launcher.media.lyrics.LyricsState
 import com.gt8d.launcher.ui.home.rememberLyricIndex
+import com.gt8d.launcher.ui.home.rememberArtworkBackground
+import com.gt8d.launcher.ui.home.artworkBackground
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.layout.OneLineText
@@ -67,23 +69,26 @@ fun MediaCard(
     lyrics: LyricsState = LyricsState.Off,
     lyricsEnabled: Boolean = false,
 ) {
+    val background = rememberArtworkBackground(now)
     Surface(
         color = Palette.Panel,
         shape = RoundedCornerShape(24.dp),
         modifier = Modifier.fillMaxWidth().testTag("media_card"),
     ) {
-        if (now == null) {
-            IdleMediaContent(idleApp = idleApp, onLaunch = onLaunch)
-        } else {
-            ActiveMediaContent(
-                now = now,
-                position = position,
-                onAction = onAction,
-                onSeek = onSeek,
-                onLaunch = onLaunch,
-                lyrics = lyrics,
-                lyricsEnabled = lyricsEnabled,
-            )
+        Box(Modifier.artworkBackground(background.value)) {
+            if (now == null) {
+                IdleMediaContent(idleApp = idleApp, onLaunch = onLaunch)
+            } else {
+                ActiveMediaContent(
+                    now = now,
+                    position = position,
+                    onAction = onAction,
+                    onSeek = onSeek,
+                    onLaunch = onLaunch,
+                    lyrics = lyrics,
+                    lyricsEnabled = lyricsEnabled,
+                )
+            }
         }
     }
 }

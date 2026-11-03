@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -32,6 +33,120 @@ import org.robolectric.annotation.TextLayoutMode
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w600dp-h1000dp")
 class HomeMiniPlayerTest {
+    private fun playerImage(): androidx.compose.ui.graphics.ImageBitmap {
+        val bounds = rule.onNodeWithTag("home_player").fetchSemanticsNode().boundsInRoot
+        return rule.runOnIdle {
+            val view = controller.get().findViewById<android.view.View>(android.R.id.content)
+            val full = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+            view.draw(android.graphics.Canvas(full))
+            val crop = android.graphics.Bitmap.createBitmap(full, bounds.left.toInt(), bounds.top.toInt(),
+                bounds.width.toInt(), bounds.height.toInt())
+            if (crop !== full) full.recycle()
+            crop.asImageBitmap()
+        }
+    }
+    private fun redArtwork() = android.graphics.Bitmap.createBitmap(16, 8, android.graphics.Bitmap.Config.ARGB_8888)
+        .apply { eraseColor(android.graphics.Color.RED) }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun backgroundCoversCardInsideShape() {
+        host(song.copy(title = "Song", artwork = redArtwork(), playing = false))
+        rule.waitUntil(5000) {
+            val image = playerImage()
+            val pixels = IntArray(image.width * image.height)
+            image.readPixels(pixels)
+            val c = androidx.compose.ui.graphics.Color(pixels[4 * image.width + image.width / 2])
+            c.red > c.green * 1.5f
+        }
+        val image = playerImage()
+        val pixels = IntArray(image.width * image.height)
+        image.readPixels(pixels)
+        val padding = androidx.compose.ui.graphics.Color(pixels[4 * image.width + image.width / 2])
+        assertTrue(padding.red > padding.green * 1.5f)
+        assertTrue(padding.red <= 56f / 255)
+        val corner = androidx.compose.ui.graphics.Color(pixels[0])
+        assertNotEquals(padding, corner)
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun idleKeepsPanel() {
+        host(now = null)
+        val image = playerImage()
+        val pixels = IntArray(image.width * image.height)
+        image.readPixels(pixels)
+        assertEquals(com.gt8d.launcher.ui.theme.Palette.Panel,
+            androidx.compose.ui.graphics.Color(pixels[4 * image.width + image.width / 2]))
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun toggleDoesNotReextractOrChangeLayout() {
+        val enabled = mutableStateOf(false)
+        val art = redArtwork()
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        controller.get().setContent { LauncherTheme {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val holder = androidx.compose.runtime.remember {
+                ArtworkBackgroundHolder(scope, extract = { calls.incrementAndGet(); sampleArtworkColors(it) })
+            }
+            CompositionLocalProvider(LocalArtworkBackgroundHolder provides holder) {
+            HomeMiniPlayer(lyricSong.copy(artwork = art), idle, { 0L }, { idle }, {}, {}, {},
+                Modifier.size(409.dp, 694.dp), synced, enabled.value, { enabled.value = !enabled.value })
+            }
+        } }
+        controller.visible()
+        rule.waitUntil(5000) {
+            val image = playerImage()
+            val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+            val c = androidx.compose.ui.graphics.Color(pixels[4 * image.width + image.width / 2])
+            c.red > c.green * 1.5f
+        }
+        val before = bounds("home_player")
+        val title = bounds("player_title")
+        val image = playerImage()
+        val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+        val color = pixels[4 * image.width + image.width / 2]
+        rule.onNodeWithTag("player_lyrics_toggle").performClick()
+        assertEquals(before, bounds("home_player"))
+        assertEquals(title, bounds("player_title"))
+        val after = playerImage()
+        val next = IntArray(after.width * after.height); after.readPixels(next)
+        assertEquals(color, next[4 * after.width + after.width / 2])
+        assertEquals(1, calls.get())
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun backgroundDoesNotRequestContinuousFrames() {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val now = song.copy(title = "Song", artwork = redArtwork(), playing = false)
+        lateinit var holder: ArtworkBackgroundHolder
+        controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        controller.get().setContent { LauncherTheme {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            holder = androidx.compose.runtime.remember {
+                ArtworkBackgroundHolder(scope, extract = { calls.incrementAndGet(); sampleArtworkColors(it) })
+            }
+            CompositionLocalProvider(LocalArtworkBackgroundHolder provides holder) {
+                HomeMiniPlayer(now, idle, { 0L }, { idle }, {}, {}, {}, Modifier.size(360.dp, 800.dp))
+            }
+        } }
+        controller.visible()
+        rule.waitForIdle()
+        rule.waitUntil(5000) { holder.colors.value != null }
+        rule.waitForIdle()
+        var draws = 0
+        val listener = android.view.ViewTreeObserver.OnDrawListener { draws++ }
+        rule.runOnIdle { controller.get().window.decorView.viewTreeObserver.addOnDrawListener(listener) }
+        rule.mainClock.advanceTimeBy(1000)
+        rule.waitForIdle()
+        val settled = draws
+        rule.mainClock.advanceTimeBy(1000)
+        rule.waitForIdle()
+        assertEquals(settled, draws)
+        assertEquals(1, calls.get())
+        rule.runOnIdle { controller.get().window.decorView.viewTreeObserver.removeOnDrawListener(listener) }
+    }
+
     @get:Rule val rule = createEmptyComposeRule()
     private lateinit var controller: ActivityController<ComponentActivity>
     private val song = NowPlaying("music", "長い曲名".repeat(30), "アーティスト", null, 120000L, true, true)
