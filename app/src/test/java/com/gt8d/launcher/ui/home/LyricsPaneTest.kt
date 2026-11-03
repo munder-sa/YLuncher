@@ -6,9 +6,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.media.lyrics.LyricLine
 import com.gt8d.launcher.media.lyrics.LyricWord
@@ -80,8 +83,54 @@ class LyricsPaneTest {
         rule.mainClock.advanceTimeBy(200)
         rule.onNodeWithTag("player_lyrics_current").assertTextEquals("二")
         assertTrue("line=${center("二")}, area=${areaCenter()}", center("二") > areaCenter() + 0.5f)
-        rule.mainClock.advanceTimeBy(500)
+        rule.mainClock.advanceTimeBy(700)
         assertEquals(areaCenter(), center("二"), 0.5f)
+    }
+    @Test fun scrollTakes800msWhileFadeTakes500ms() {
+        now = now.copy(positionMs = 1000)
+        show(detailSemantics = true)
+        rule.runOnIdle {
+            now = now.copy(positionMs = 2000)
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeBy(600)
+        rule.onNodeWithTag("player_lyrics_current").assertTextEquals("二")
+        assertEquals(1f, alpha(1), 0f)
+        assertTrue(center("二") > areaCenter() + 0.5f)
+        rule.mainClock.advanceTimeBy(300)
+        assertEquals(areaCenter(), center("二"), 0.5f)
+    }
+    @Test fun retargetDuringScrollIsContinuous() {
+        now = now.copy(positionMs = 1000)
+        show(detailSemantics = true)
+        val rowDistance = center("三") - center("二")
+        rule.runOnIdle {
+            now = now.copy(positionMs = 2000)
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeBy(300)
+        var before = center("三")
+        rule.runOnIdle {
+            now = now.copy(positionMs = 3000)
+            Snapshot.sendApplyNotifications()
+        }
+        repeat(2) {
+            rule.mainClock.advanceTimeByFrame()
+            val after = center("三")
+            assertTrue("before=$before, after=$after, rowDistance=$rowDistance",
+                kotlin.math.abs(after - before) < rowDistance)
+            before = after
+        }
+        rule.onNodeWithTag("player_lyrics_current").assertTextEquals("三")
+        rule.mainClock.advanceTimeBy(900)
+        assertEquals(areaCenter(), center("三"), 0.5f)
+    }
+    @Test fun lyricTextIs22sp() {
+        show(detailSemantics = true)
+        val results = mutableListOf<TextLayoutResult>()
+        rule.onNodeWithTag("player_lyrics_current")
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        assertEquals(22.sp, results.single().layoutInput.style.fontSize)
     }
     @Test fun jumpSnapsWithoutAnimation() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
@@ -258,7 +307,7 @@ class LyricsPaneTest {
         rule.waitForIdle()
         val before = observer.measures
         val placementsBefore = observer.placements
-        repeat(32) { rule.mainClock.advanceTimeByFrame() }
+        repeat(56) { rule.mainClock.advanceTimeByFrame() }
         rule.waitForIdle()
         assertEquals(before, observer.measures)
         assertEquals(placementsBefore, observer.placements)

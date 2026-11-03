@@ -74,7 +74,7 @@ private fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position
     Box(Modifier.fillMaxWidth().then(if (detailSemantics && current) Modifier.testTag("player_lyrics_interlude") else Modifier),
         contentAlignment = Alignment.CenterStart) {
         Text(" ", if (detailSemantics) Modifier else Modifier.clearAndSetSemantics {},
-            color = Color.Transparent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            color = Color.Transparent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Canvas(Modifier.size(52.dp, 12.dp)) {
             val lit = interludeLitDots(startMs, endMs, position.value)
             if (current) retained.lit = lit
@@ -126,7 +126,7 @@ private fun KaraokeLine(text: String, current: Boolean, alpha: State<Float>, has
         Text(text, Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha.value; probe.alpha = this.alpha }
             .then(if (!detailSemantics) Modifier.clearAndSetSemantics {}
                 else if (current) Modifier.testTag("player_lyrics_current") else Modifier),
-            color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+            color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (hasWords) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics {
             if (detailSemantics) testTag = "player_lyrics_fill"
@@ -157,7 +157,7 @@ private fun KaraokeLine(text: String, current: Boolean, alpha: State<Float>, has
                             Size(size.width, size.height - bottom), blendMode = BlendMode.Clear)
                     }
                 }
-            }, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+            }, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis,
             onTextLayout = { textLayout.result = it })
     }
@@ -233,7 +233,7 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 LaunchedEffect(index, track, state.lines) {
                     withFrameNanos { }
                     val destination = measured.target ?: return@LaunchedEffect
-                    if (measured.animate) offset.animateTo(destination.second, tween(500, easing = FastOutSlowInEasing)) else offset.snapTo(destination.second)
+                    if (measured.animate) offset.animateTo(destination.second, tween(800, easing = FastOutSlowInEasing)) else offset.snapTo(destination.second)
                 }
                 Layout(content = {
                     state.lines.forEachIndexed { i, line ->
@@ -260,11 +260,7 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                             }
                         }
                     }
-                }, modifier = Modifier.fillMaxSize().graphicsLayer {
-                    // Observe the animation even when the preceding layout was a snap.
-                    val animatedOffset = offset.value
-                    translationY = if (measured.animate) animatedOffset - (measured.target?.second ?: 0f) else 0f
-                }) { measurables, constraints ->
+                }, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
                     observer?.let { it.measures++ }
                     val rows = measurables.map { it.measure(Constraints(maxWidth = constraints.maxWidth)) }
                     val gap = 16.dp.roundToPx()
@@ -277,11 +273,19 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                     }
                     if (index >= 0) measured.resolved = true
                     measured.target = index to destination
+                    val animate = measured.animate
                     layout(constraints.maxWidth, constraints.maxHeight) {
                         observer?.let { it.placements++ }
                         // Jumps use the measured destination in this frame, without waiting for an effect.
                         var y = destination.roundToInt()
-                        rows.forEach { row -> row.placeRelative(0, y); y += row.height + gap }
+                        rows.forEach { row ->
+                            row.placeRelativeWithLayer(0, y) {
+                                // Read on every layer update, including after a snap.
+                                val animatedOffset = offset.value
+                                translationY = if (animate) animatedOffset - destination else 0f
+                            }
+                            y += row.height + gap
+                        }
                     }
                 }
             }
