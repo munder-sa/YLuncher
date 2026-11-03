@@ -1,0 +1,5 @@
+create app/src/main/java/com/gt8d/launcher/ui/theme/ArtworkColors.kt
+create app/src/main/java/com/gt8d/launcher/ui/theme/LyricsVisualStyle.kt
+create app/src/test/java/com/gt8d/launcher/ui/theme/ArtworkColorsTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/theme/LyricsVisualStyleTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.theme.*'
