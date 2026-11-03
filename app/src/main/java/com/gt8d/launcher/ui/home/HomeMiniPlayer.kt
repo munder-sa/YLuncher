@@ -51,8 +51,9 @@ fun HomeMiniPlayer(
     lyricsEnabled: Boolean = false,
     onToggleLyrics: () -> Unit = {},
 ) {
+    val background = rememberArtworkBackground(now)
     Surface(modifier.testTag("home_player"), shape = RoundedCornerShape(24.dp), color = Palette.Panel) {
-        BoxWithConstraints(Modifier.fillMaxSize().padding(start = 40.dp, top = 40.dp, end = 40.dp, bottom = 32.dp)) {
+        BoxWithConstraints(Modifier.fillMaxSize().artworkBackground(background.value).padding(start = 40.dp, top = 40.dp, end = 40.dp, bottom = 32.dp)) {
             if (now == null) {
                 if (idleApp != null) {
                     Column(Modifier.fillMaxWidth().align(Alignment.TopStart).testTag("player_idle_app")) {

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -45,6 +46,46 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MediaCardTest {
+    private lateinit var backgroundView: android.view.View
+    private fun cardImage(): androidx.compose.ui.graphics.ImageBitmap {
+        val bounds = rule.onNodeWithTag("media_card").fetchSemanticsNode().boundsInRoot
+        return rule.runOnIdle {
+            val full = android.graphics.Bitmap.createBitmap(backgroundView.width, backgroundView.height,
+                android.graphics.Bitmap.Config.ARGB_8888)
+            backgroundView.draw(android.graphics.Canvas(full))
+            val crop = android.graphics.Bitmap.createBitmap(full, bounds.left.toInt(), bounds.top.toInt(),
+                bounds.width.toInt(), bounds.height.toInt())
+            if (crop !== full) full.recycle()
+            crop.asImageBitmap()
+        }
+    }
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun backgroundUsesArtworkColors() {
+        val art = android.graphics.Bitmap.createBitmap(16, 8, android.graphics.Bitmap.Config.ARGB_8888)
+            .apply { eraseColor(android.graphics.Color.RED) }
+        rule.setContent { LauncherTheme {
+            backgroundView = androidx.compose.ui.platform.LocalView.current
+            MediaCard(lyricNow().copy(artwork = art), null, { 0L }, {}, {}, {})
+        } }
+        rule.waitUntil(5000) {
+            val image = cardImage()
+            val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+            val c = Color(pixels[2 * image.width + image.width / 2])
+            c.red > c.green * 1.5f && c.red <= 56f / 255
+        }
+    }
+
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun missingArtworkKeepsPanel() {
+        rule.setContent { LauncherTheme {
+            backgroundView = androidx.compose.ui.platform.LocalView.current
+            MediaCard(lyricNow(), null, { 0L }, {}, {}, {})
+        } }
+        val image = cardImage()
+        val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+        assertEquals(com.gt8d.launcher.ui.theme.Palette.Panel, Color(pixels[2 * image.width + image.width / 2]))
+    }
+
     private val lyricLines = listOf(LyricLine(1000L, "一"), LyricLine(2000L, "二"))
     private fun lyricNow(position: Long = 2500L) = NowPlaying(
         "music", "架空の曲", "架空の歌手", null, 120000L, false, false,
