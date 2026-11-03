@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -26,6 +27,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.gt8d.launcher.R
 import com.gt8d.launcher.media.NowPlaying
+import com.gt8d.launcher.media.lyricsQuery
+import com.gt8d.launcher.media.lyrics.LyricsState
 import com.gt8d.launcher.ui.layout.OneLineText
 import com.gt8d.launcher.ui.layout.MarqueeText
 import com.gt8d.launcher.ui.panel.AppInfo
@@ -44,6 +47,9 @@ fun HomeMiniPlayer(
     onSeek: (Long) -> Unit,
     onLaunch: (String) -> Unit,
     modifier: Modifier = Modifier,
+    lyrics: LyricsState = LyricsState.Off,
+    lyricsEnabled: Boolean = false,
+    onToggleLyrics: () -> Unit = {},
 ) {
     Surface(modifier.testTag("home_player"), shape = RoundedCornerShape(24.dp), color = Palette.Panel) {
         BoxWithConstraints(Modifier.fillMaxSize().padding(start = 40.dp, top = 40.dp, end = 40.dp, bottom = 32.dp)) {
@@ -85,6 +91,8 @@ fun HomeMiniPlayer(
                 val timeHeight = lineHeight("0:00", 20)
                 val seekHeight = if ((now.durationMs ?: 0L) > 0L) 72.dp else 0.dp
                 val controlsHeight = 96.dp
+                val showToggle = now.lyricsQuery != null
+                val appRowHeight = if (showToggle) 48.dp else 44.dp
                 fun layout(spacing: PlayerSpacing): PlayerLayout {
                     val textHeight = titleHeight + artistHeight +
                         (if (now.artist != null) spacing.titleToArtist else 0.dp)
@@ -93,11 +101,12 @@ fun HomeMiniPlayer(
                     fun gaps(details: Boolean, art: Boolean) = playerGaps(
                         spacing, details, art, now.artist != null, seekHeight > 0.dp)
                     fun fixed(details: Boolean, art: Boolean) = required +
-                        (if (details) 44.dp + (if (seekHeight > 0.dp) timeHeight else 0.dp) else 0.dp) +
+                        (if (details) appRowHeight + (if (seekHeight > 0.dp) timeHeight else 0.dp) else 0.dp) +
                         gaps(details, art).total
                     val details = maxHeight >= fixed(true, false)
                     val art = minOf(maxWidth, (maxHeight - fixed(details, true)).coerceAtLeast(0.dp))
-                    return PlayerLayout(details, art, gaps(details, art > 0.dp), fixed(details, false))
+                    return PlayerLayout(details, art, gaps(details, art > 0.dp), fixed(details, false),
+                        (maxHeight - fixed(details, true)).coerceAtLeast(0.dp))
                 }
                 val normal = layout(PlayerSpacing.Normal)
                 val layout = if (normal.artSize >= 120.dp && normal.fixedHeight <= maxHeight) normal else {
@@ -107,16 +116,44 @@ fun HomeMiniPlayer(
                 val showDetails = layout.showDetails
                 val artSize = layout.artSize
                 val gaps = layout.gaps
+                val showLyrics = showToggle && lyricsEnabled && layout.lyricsHeight >= 120.dp &&
+                    (lyrics is LyricsState.Synced || lyrics is LyricsState.Plain || lyrics is LyricsState.Loading)
+                val available = !(lyricsEnabled && !showLyrics)
+                val reason = if (!available) when (lyrics) {
+                    LyricsState.Missing -> "歌詞なし"
+                    LyricsState.Offline -> "オフライン"
+                    LyricsState.Failed -> "取得できません"
+                    else -> null
+                } else null
+                val description = when {
+                    !lyricsEnabled -> "歌詞を表示"
+                    available -> "ジャケットを表示"
+                    else -> "${reason ?: "表示する場所がありません"}。押すと歌詞表示をオフ"
+                }
                 val restartKey = now.pkg to now.title to now.artist
                 Column(Modifier.fillMaxSize()) {
                     if (showDetails) {
-                        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically,
+                        Row(Modifier.fillMaxWidth().height(appRowHeight).testTag("player_app_row"), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             AppImage(app, Modifier.size(36.dp))
                             OneLineText(app.label, Modifier.weight(1f), color = Palette.Muted)
+                            if (showToggle) {
+                                reason?.let { Text(it, color = Palette.Muted, fontSize = 20.sp,
+                                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
+                                LyricsToggle(lyricsEnabled, available, description, onToggleLyrics,
+                                    Modifier.layout { measurable, constraints ->
+                                        val size = 72.dp.roundToPx()
+                                        val box = 48.dp.roundToPx()
+                                        val child = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(size, size))
+                                        layout(box, box) { child.placeRelative(-12.dp.roundToPx(), -12.dp.roundToPx()) }
+                                    })
+                            }
                         }
                     }
-                    if (artSize > 0.dp) {
+                    if (showLyrics) {
+                        Spacer(Modifier.height(gaps.beforeArt))
+                        LyricsPane(lyrics, now, Modifier.fillMaxWidth().height(layout.lyricsHeight))
+                    } else if (artSize > 0.dp) {
                         Spacer(Modifier.height(gaps.beforeArt))
                         val artwork = now.artwork
                         val artModifier = Modifier.size(artSize).align(Alignment.CenterHorizontally)
@@ -136,6 +173,18 @@ fun HomeMiniPlayer(
                                 Spacer(Modifier.height(gaps.beforeArtist))
                                 MarqueeText(it, Modifier.fillMaxWidth(), tag = "player_artist", color = Palette.Muted, restartKey = restartKey)
                             }
+                        }
+                        if (showToggle && !showDetails) {
+                            Spacer(Modifier.width(8.dp))
+                            LyricsToggle(lyricsEnabled, available, description, onToggleLyrics,
+                                Modifier.layout { measurable, _ ->
+                                    val size = 72.dp.roundToPx()
+                                    val child = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(size, size))
+                                    layout(48.dp.roundToPx(), 0) {
+                                        child.placeRelative(-24.dp.roundToPx(), -size / 2)
+                                    }
+                                },
+                                boxAlignment = Alignment.CenterEnd)
                         }
                         if (now.hasFavorite) {
                             Spacer(Modifier.width(8.dp))
@@ -165,7 +214,8 @@ private data class PlayerGaps(
     val total get() = beforeArt + beforeTitle + beforeSeek + beforeControls
 }
 
-private data class PlayerLayout(val showDetails: Boolean, val artSize: Dp, val gaps: PlayerGaps, val fixedHeight: Dp)
+private data class PlayerLayout(val showDetails: Boolean, val artSize: Dp, val gaps: PlayerGaps,
+                              val fixedHeight: Dp, val lyricsHeight: Dp)
 
 private enum class PlayerSpacing(val appToArt: Dp, val artToTitle: Dp, val titleToArtist: Dp,
                                val artistToSeek: Dp, val beforeControls: Dp) {
