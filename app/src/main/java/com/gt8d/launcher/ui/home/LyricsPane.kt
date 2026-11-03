@@ -36,8 +36,9 @@ import com.gt8d.launcher.media.positionAt
 import com.gt8d.launcher.media.lyrics.LyricsState
 import com.gt8d.launcher.media.lyrics.LyricLine
 import com.gt8d.launcher.ui.theme.Palette
+import com.gt8d.launcher.ui.theme.LyricsVisualStyle
+import com.gt8d.launcher.ui.theme.lineTargetAlpha
 import kotlin.math.roundToInt
-import kotlin.math.abs
 import kotlinx.coroutines.delay
 
 private fun lineEnd(lines: List<LyricLine>, index: Int, durationMs: Long?): Long {
@@ -87,20 +88,23 @@ private fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position
     }
 }
 
-internal fun lyricLineAlpha(distance: Int): Float = when (distance) {
-    0, 1 -> 0.45f
-    2 -> 0.35f
-    else -> 0.25f
-}
-
 internal val LyricAlphaKey = SemanticsPropertyKey<Float>("LyricAlpha")
-internal class LyricDrawProbe { var alpha = 0f }
+internal class LyricDrawProbe {
+    var alpha = 0f
+    var top = 0f
+    var scale = 1f
+    var height = 0
+    var origin = TransformOrigin(0f, 0.5f)
+    var delayMs = 0
+    var animated = false
+}
 internal val LyricDrawProbeKey = SemanticsPropertyKey<LyricDrawProbe>("LyricDrawProbe")
 internal class LyricsPaneObserver {
     var compositions = 0
     var measures = 0
     var placements = 0
     var frameUpdates = 0
+    var motionFrames = 0
 }
 internal val LocalLyricsPaneObserver = staticCompositionLocalOf<LyricsPaneObserver?> { null }
 internal val LocalLyricsDetailSemantics = staticCompositionLocalOf { false }
@@ -110,7 +114,7 @@ private fun lyricAnimatedValue(target: Float, animate: Boolean, index: Int): Sta
     val value = remember { Animatable(target) }
     LaunchedEffect(target, index) {
         withFrameNanos { }
-        if (animate) value.animateTo(target, tween(500, easing = FastOutSlowInEasing))
+        if (animate) value.animateTo(target, tween(LyricsVisualStyle.FadeMs, easing = FastOutSlowInEasing))
         else value.snapTo(target)
     }
     return if (animate) value.asState() else rememberUpdatedState(target)
@@ -222,29 +226,20 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                     history.index = index
                     previous != null && (previous >= 0 || startsBeforeFirst) && index == previous + 1
                 }
-                val measured = remember(track, state.lines) {
-                    object {
-                        var resolved = false
-                        var target: Pair<Int, Float>? = null
-                        var animate = false
-                    }
-                }
-                val offset = remember(track, state.lines) { Animatable(0f) }
-                LaunchedEffect(index, track, state.lines) {
-                    withFrameNanos { }
-                    val destination = measured.target ?: return@LaunchedEffect
-                    if (measured.animate) offset.animateTo(destination.second, tween(800, easing = FastOutSlowInEasing)) else offset.snapTo(destination.second)
+                val motion = remember(track, state.lines) { LyricMotion() }
+                val probes = remember(track, state.lines) { state.lines.map { LyricDrawProbe() } }
+                LaunchedEffect(motion) {
+                    motion.run { observer?.let { it.motionFrames++ } }
                 }
                 Layout(content = {
                     state.lines.forEachIndexed { i, line ->
                         key(track, state.lines, i) {
                             val current = i == index
                             val dotsCurrent = current || (i == 0 && intro)
-                            val targetAlpha = if (current && line.words.isEmpty()) 1f
-                                else lyricLineAlpha(abs(i - index.coerceAtLeast(0)))
+                            val targetAlpha = lineTargetAlpha(i, index, line.words.isNotEmpty())
                             val alpha = lyricAnimatedValue(targetAlpha, animateAlpha, index)
                             val emphasis = lyricAnimatedValue(if (dotsCurrent) 1f else 0f, animateAlpha, index)
-                            val probe = remember { LyricDrawProbe() }
+                            val probe = probes[i]
                             Box(if (detailSemantics) Modifier.testTag("player_lyrics_line_$i").semantics {
                                 this[LyricAlphaKey] = targetAlpha
                                 this[LyricDrawProbeKey] = probe
@@ -267,24 +262,30 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                     val selected = index.coerceAtLeast(0)
                     val center = rows.take(selected).sumOf { it.height + gap } + (rows.getOrNull(selected)?.height ?: 0) / 2f
                     val destination = constraints.maxHeight / 2f - center
-                    if (measured.target?.first != index) {
-                        measured.animate = (measured.resolved || startsBeforeFirst) &&
-                            measured.target != null && index == measured.target!!.first + 1
-                    }
-                    if (index >= 0) measured.resolved = true
-                    measured.target = index to destination
-                    val animate = measured.animate
+                    var top = destination
+                    val targets = rows.map { row -> top.also { top += row.height + gap } }
+                    motion.prepare(index, targets, rows.map { it.height }, constraints.maxHeight, constraints.maxWidth)
+                    val motionRows = motion.rows
                     layout(constraints.maxWidth, constraints.maxHeight) {
                         observer?.let { it.placements++ }
-                        // Jumps use the measured destination in this frame, without waiting for an effect.
-                        var y = destination.roundToInt()
-                        rows.forEach { row ->
+                        rows.forEachIndexed { i, row ->
+                            val motionRow = motionRows[i]
+                            val y = targets[i].roundToInt()
                             row.placeRelativeWithLayer(0, y) {
-                                // Read on every layer update, including after a snap.
-                                val animatedOffset = offset.value
-                                translationY = if (animate) animatedOffset - destination else 0f
+                                val sample = motionRow.sample()
+                                translationY = sample.top - y
+                                scaleX = sample.scale
+                                scaleY = sample.scale
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                                probes[i].let {
+                                    it.top = sample.top
+                                    it.scale = sample.scale
+                                    it.height = row.height
+                                    it.origin = transformOrigin
+                                    it.delayMs = motionRow.delayMs
+                                    it.animated = motionRow.animated
+                                }
                             }
-                            y += row.height + gap
                         }
                     }
                 }

@@ -7,16 +7,20 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.media.lyrics.LyricLine
 import com.gt8d.launcher.media.lyrics.LyricWord
 import com.gt8d.launcher.media.lyrics.LyricsState
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.theme.LyricsVisualStyle
+import com.gt8d.launcher.ui.theme.lineTargetAlpha
 import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
@@ -39,7 +43,7 @@ class LyricsPaneTest {
         rule.mainClock.autoAdvance = false
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
-            CompositionLocalProvider(LocalLyricsPaneObserver provides observer) {
+            CompositionLocalProvider(LocalLyricsPaneObserver provides observer, LocalDensity provides Density(1f, 1f)) {
                 if (detailSemantics) {
                     CompositionLocalProvider(LocalLyricsDetailSemantics provides true) {
                         LyricsPane(state, now, Modifier.size(329.dp, 240.dp)) { clock }
@@ -55,7 +59,7 @@ class LyricsPaneTest {
     }
     @After fun cleanup() { if (::controller.isInitialized) controller.pause().stop().destroy() }
     private fun center(text: String): Float {
-        val rect = rule.onNodeWithText(text).getUnclippedBoundsInRoot()
+        val rect = rule.onNodeWithText(text).getBoundsInRoot()
         return (rect.top.value + rect.bottom.value) / 2
     }
     private fun areaCenter(): Float {
@@ -165,6 +169,11 @@ class LyricsPaneTest {
     @Test fun loadingText() {
         show(LyricsState.Loading)
         rule.onNodeWithText("歌詞を探しています…").assertIsDisplayed()
+        rule.onNodeWithTag("player_lyrics_line_0").assertDoesNotExist()
+        val before = rule.onNodeWithText("歌詞を探しています…").getBoundsInRoot()
+        rule.mainClock.advanceTimeBy(1000)
+        assertEquals(before, rule.onNodeWithText("歌詞を探しています…").getBoundsInRoot())
+        assertEquals(0, observer.motionFrames)
     }
     @Test fun lyricsAreaNotClickable() {
         show()
@@ -223,10 +232,13 @@ class LyricsPaneTest {
         assertEquals(4f, wordFillPosition(duplicate, 0, 3000, null), 0f)
     }
     @Test fun lineAlphaByDistance() {
-        assertEquals(0.45f, lyricLineAlpha(1), 0f)
-        assertEquals(0.35f, lyricLineAlpha(2), 0f)
-        assertEquals(0.25f, lyricLineAlpha(3), 0f)
-        assertEquals(0.25f, lyricLineAlpha(10), 0f)
+        assertEquals(1f, lineTargetAlpha(3, 3, false), 0f)
+        assertEquals(0.62f, lineTargetAlpha(4, 3, false), 0f)
+        assertEquals(0.45f, lineTargetAlpha(2, 3, false), 0f)
+        assertEquals(0.35f, lineTargetAlpha(1, 3, false), 0f)
+        assertEquals(0.35f, lineTargetAlpha(5, 3, false), 0f)
+        assertEquals(0.25f, lineTargetAlpha(0, 3, false), 0f)
+        assertEquals(0.25f, lineTargetAlpha(13, 3, false), 0f)
     }
     @Test fun linesAreLeftAligned() {
         show(detailSemantics = true)
@@ -239,10 +251,11 @@ class LyricsPaneTest {
         show(detailSemantics = true)
         val current = rule.onNodeWithTag("player_lyrics_current").getBoundsInRoot()
         assertEquals(areaCenter(), (current.top.value + current.bottom.value) / 2, 1f)
-        listOf("一", "三").forEach {
-            val other = rule.onNodeWithText(it).getBoundsInRoot()
-            assertEquals(current.bottom.value - current.top.value, other.bottom.value - other.top.value, 0f)
+        listOf(0, 2).forEach {
+            assertEquals(probe(1).height, probe(it).height)
+            assertEquals(LyricsVisualStyle.InactiveScale, probe(it).scale, 0f)
         }
+        assertEquals(1f, probe(1).scale, 0f)
     }
 
     private fun alpha(index: Int): Float = rule.onNodeWithTag("player_lyrics_line_$index")
@@ -251,12 +264,12 @@ class LyricsPaneTest {
     @Test fun currentLineFadesIn() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
         show(detailSemantics = true)
-        assertEquals(0.45f, alpha(1), 0f)
+        assertEquals(0.62f, alpha(1), 0f)
         rule.runOnIdle { clock = 2100 }
         rule.mainClock.advanceTimeBy(200)
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeBy(250)
-        assertTrue(alpha(1) > 0.45f && alpha(1) < 1f)
+        assertTrue(alpha(1) > 0.62f && alpha(1) < 1f)
         rule.mainClock.advanceTimeBy(500)
         assertEquals(1f, alpha(1), 0f)
     }
@@ -335,5 +348,71 @@ class LyricsPaneTest {
         val after = rule.onNodeWithTag("player_lyrics", useUnmergedTree = true)
             .fetchSemanticsNode().config
         assertEquals(before, after)
+    }
+
+    private fun probe(index: Int): LyricDrawProbe = rule.onNodeWithTag("player_lyrics_line_$index")
+        .fetchSemanticsNode().config[LyricDrawProbeKey]
+
+    @Test fun scaleOriginIsLeftCenter() {
+        show(detailSemantics = true)
+        for (i in lines.indices) {
+            assertEquals(0f, probe(i).origin.pivotFractionX, 0f)
+            assertEquals(0.5f, probe(i).origin.pivotFractionY, 0f)
+        }
+    }
+
+    @Test fun scaleDoesNotChangeMeasuredRows() {
+        val sample = listOf(LyricLine(1000, "短い行"), LyricLine(2000, "二行の\n架空の歌詞"), LyricLine(3000, "最後"))
+        now = now.copy(positionMs = 1000)
+        show(LyricsState.Synced(sample), detailSemantics = true)
+        val heights = sample.indices.map { probe(it).height }
+        assertTrue(heights[1] > heights[0])
+        val gap = probe(1).top - probe(0).top - heights[0]
+        rule.runOnIdle { now = now.copy(positionMs = 2000); Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(1000)
+        sample.indices.forEach { assertEquals(heights[it], probe(it).height) }
+        assertEquals(gap, probe(1).top - probe(0).top - heights[0], 0.5f)
+        assertEquals(16f, gap, 0.5f)
+    }
+
+    @Test fun nextLineAndWordBaseUseReadableAlpha() {
+        now = now.copy(positionMs = 1000)
+        show(LyricsState.Synced(listOf(LyricLine(1000, "単語", listOf(LyricWord(1000, 0))), LyricLine(2000, "次"))), true)
+        assertEquals(0.62f, alpha(0), 0f)
+        assertEquals(0.62f, alpha(1), 0f)
+    }
+
+    @Test fun fadeCompletesIn500ms() {
+        now = now.copy(positionMs = 1000)
+        show(detailSemantics = true)
+        rule.runOnIdle { now = now.copy(positionMs = 2000); Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(250)
+        assertTrue(alpha(1) > 0.62f && alpha(1) < 1f)
+        rule.mainClock.advanceTimeBy(350)
+        assertEquals(1f, alpha(1), 0f)
+        assertEquals(0.97f, probe(0).scale, 0f)
+        assertEquals(1f, probe(1).scale, 0f)
+    }
+
+    @Test fun plainAndLoadingDoNotStaggerOrScale() {
+        show(LyricsState.Plain("静止"), true)
+        rule.onNodeWithTag("player_lyrics_line_0").assertDoesNotExist()
+        val before = rule.onNodeWithText("静止").getUnclippedBoundsInRoot()
+        rule.mainClock.advanceTimeBy(1000)
+        assertEquals(before, rule.onNodeWithText("静止").getUnclippedBoundsInRoot())
+        assertEquals(0, observer.motionFrames)
+    }
+
+    @Test fun staggerAndScaleDoNotRecomposeOrRelayout() {
+        now = now.copy(positionMs = 1000)
+        show(detailSemantics = true)
+        rule.runOnIdle { now = now.copy(positionMs = 2000); Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(64)
+        rule.waitForIdle()
+        val counts = listOf(observer.compositions, observer.measures, observer.placements)
+        rule.mainClock.advanceTimeBy(900)
+        rule.waitForIdle()
+        assertEquals(counts, listOf(observer.compositions, observer.measures, observer.placements))
+        assertEquals(areaCenter(), center("二"), 0.5f)
     }
 }
