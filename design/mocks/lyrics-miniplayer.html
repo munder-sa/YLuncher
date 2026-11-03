@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ミニプレイヤー 歌詞表示 · 案A 第2版</title>
+<style>
+:root{color-scheme:dark;--muted:#B0B0BB;--panel:#2E2E38;--control:#454550}
+*{box-sizing:border-box}body{margin:0;padding:32px;background:#0B0B0F;color:white;font:20px/1.5 system-ui,sans-serif}h1{font-size:28px;margin:0 0 8px}h2{font-size:23px;margin:0 0 8px}p{margin:0 0 16px}.muted,.description{color:var(--muted)}
+button,select{font:inherit;color:inherit;background:var(--control);border:1px solid #777783;border-radius:16px;min-height:72px;padding:12px 20px;cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible,.lyrics:focus-visible{outline:3px solid white;outline-offset:4px}button:hover{background:#585864}button[aria-pressed=true]{background:white;color:#0B0B0F}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:16px;background:#202028;padding:20px;border-radius:20px;margin:24px 0}label{display:flex;gap:12px;align-items:center}.clock{font-variant-numeric:tabular-nums;min-width:150px}.comparison{display:flex;gap:28px;align-items:flex-start;overflow-x:auto;padding:8px 0 24px}.proposal{width:409px;flex:0 0 409px}.description{font-size:18px;min-height:54px}
+.player{position:relative;width:409px;height:694px;padding:40px 40px 32px;border-radius:24px;background:var(--panel);display:flex;flex-direction:column;gap:12px;overflow:hidden}.app{height:44px;flex:0 0 44px;display:flex;align-items:center;gap:8px;margin-bottom:4px;color:var(--muted)}.app-icon{width:36px;height:36px;flex:0 0 36px;border-radius:8px;background:var(--control);color:white;display:grid;place-items:center;font-size:26px}.app-name{font-size:20px;white-space:nowrap}.toggle{position:absolute;right:26px;top:26px;min-width:72px;height:72px;padding:8px;border-radius:40px;font-size:20px}.a .app-name{font-size:18px}
+.hero{flex:1;min-height:0;display:flex;justify-content:center;position:relative;overflow:hidden}.art{height:100%;max-width:100%;aspect-ratio:1;border-radius:8px;background:linear-gradient(140deg,#66638a 0%,#a07374 42%,#3d435e 75%,#252633 100%)}.metadata{flex:none;min-width:0}.title{font-size:28px;font-weight:650;line-height:36px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.artist{font-size:20px;color:var(--muted);line-height:28px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.track-row{display:flex;align-items:center;gap:16px;flex:none;height:96px}.track-row .art{width:96px;height:96px;flex:0 0 96px}.track-row .metadata{flex:1}.track-row .title{font-size:28px}
+.lyrics{width:100%;height:100%;position:relative;overflow:hidden;min-height:0}.lines{position:absolute;top:50%;left:0;width:100%;transition:transform 300ms ease}.line{height:64px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:20px;line-height:30px;padding:0 2px;overflow:hidden}.line.current{font-size:26px;font-weight:700;color:white;line-height:31px}.lyrics.static{overflow-y:auto;overscroll-behavior:contain}.static .lines{position:static;transform:none!important;transition:none}.static .line{height:auto;min-height:52px;padding:8px 0;font-size:20px;font-weight:400;color:white}.message{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;color:var(--muted);font-size:20px;line-height:1.6;padding:8px}.message small{font-size:18px;margin-top:12px}.single{flex:none;font-size:22px;line-height:32px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.single.status{color:var(--muted)}[hidden]{display:none!important}
+.seek{height:72px;flex:0 0 72px;display:flex;flex-direction:column;justify-content:center}.seek input{appearance:none;width:100%;margin:0;height:32px;background:transparent;cursor:pointer}.seek input::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:linear-gradient(to right,white var(--progress),#60606a var(--progress))}.seek input::-webkit-slider-thumb{appearance:none;width:16px;height:16px;margin-top:-6px;border-radius:50%;background:white}.seek input::-moz-range-track{height:4px;background:#60606a}.seek input::-moz-range-progress{height:4px;background:white}.seek input::-moz-range-thumb{width:16px;height:16px;border:0;background:white;border-radius:50%}.times{display:flex;justify-content:space-between;color:var(--muted);font-size:20px;font-variant-numeric:tabular-nums}.controls{display:flex;align-items:center;justify-content:center;gap:8px;flex:0 0 96px;margin-top:auto}.controls button{border:0;width:72px;height:72px;padding:0;border-radius:50%;font-size:32px;display:grid;place-items:center}.controls .play{width:96px;height:96px;background:white;color:#0B0B0F}.controls svg{width:40px;height:40px;fill:currentColor}
+.short .player{height:500px;gap:8px}.short .app{display:none}footer{color:var(--muted);font-size:16px;margin-top:24px}
+@media(prefers-reduced-motion:reduce){.lines{transition:none}}
+/* 案A 第2版。ボタンの上下14dpもカードの内側に確保する。 */
+.app{margin-top:14px;margin-bottom:18px;position:relative}
+.app-name{font-size:18px}
+.app-actions{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0}
+.toggle-wrap{position:relative;flex:0 0 72px;width:72px}
+.toggle{position:relative;right:auto;top:auto;display:grid;place-items:center;width:72px;min-width:72px;height:72px;padding:0;border:0;border-radius:0;background:transparent;color:white}
+.toggle::before{content:"";position:absolute;inset:12px;border-radius:12px;background:#454550;pointer-events:none}
+.toggle:hover,.toggle[aria-pressed=true]{background:transparent}
+.toggle[aria-pressed=true]{color:#0B0B0F}
+.toggle[aria-pressed=true]::before{background:white}
+.toggle:disabled{opacity:.38;cursor:default}
+.toggle:disabled:hover{background:transparent}
+/* 外形32+線幅3.125を32pxで描画し、見た目の幅を約28dp、線幅を2.5dpにする。 */
+.toggle svg{position:relative;width:32px;height:32px;fill:none;stroke:currentColor;stroke-width:3.125;stroke-linecap:round;stroke-linejoin:round}
+.toggle-status{font-size:16px;line-height:24px;color:#B0B0BB;white-space:nowrap}
+.toggle-wrap .toggle-status{position:absolute;top:72px;left:50%;transform:translateX(-50%)}
+.metadata-row{display:flex;align-items:center;gap:8px;flex:none}
+.metadata-row .metadata{flex:1;min-width:0}
+.favorite{width:72px;height:72px;flex:0 0 72px;padding:0;border:0;border-radius:50%;font-size:40px;line-height:1}
+.lyrics{mask-image:linear-gradient(to bottom,transparent 0,#000 32px,#000 calc(100% - 32px),transparent 100%);-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 32px,#000 calc(100% - 32px),transparent 100%)}
+.short .metadata-row{margin-bottom:24px}
+</style>
+</head>
+<body>
+<h1>ホームのミニプレイヤーに歌詞を添える</h1>
+<p class="muted">案A 第2版 · 検討用モック · 1 CSS px = 1dp · 幅409dp固定。狭いブラウザでは横にスクロールできます。</p>
+<div class="toolbar" aria-label="操作パネル">
+ <button id="master-play" type="button">再生</button>
+ <label>歌詞の状態<select id="state"><option value="synced">同期歌詞あり</option><option value="static">同期なし</option><option value="loading">取得中</option><option value="missing">歌詞なし</option><option value="offline">オフライン</option></select></label>
+ <label>高さ<select id="height"><option value="694">694dp（ホーム）</option><option value="500">500dp（狭い場面）</option></select></label>
+ <label>☆<select id="favorite"><option value="none">なし</option><option value="shown">あり</option></select></label>
+ <span id="clock" class="clock">0:00 / 3:30</span>
+</div>
+<p class="muted">吹き出しボタンで歌詞とジャケットを切り替えます。前へ／次へでダミーの曲と歌詞の有無を切り替えます。同期なしの全文は手動でスクロールできます。</p>
+<main id="comparison" class="comparison"></main>
+<footer>歌詞・音源・通信はすべてダミーです。音は出ません。初期状態は一時停止。点滅・マーキーは使用せず、同期歌詞の行送りだけを動かします。</footer>
+<script>
+'use strict';
+// このモック専用の架空の文。時刻は秒、曲長は210秒。
+const lyrics = [
+ [0,'四角い朝をひらいたら'],[15,'青い余白が目をさます'],
+ [30,'ポケットの雲をならべて'],[45,'小さな地図に丸をかく'],
+ [60,'風の積み木をひとつ置く'],[75,'名前のない色がゆれる'],
+ [90,'架空の星を数えながら新しい余白に明日の形を描く'],
+ [105,'紙の小舟はひと休み'],[120,'遠い時計に手をふって'],
+ [135,'透明な橋をわたろう'],[150,'夕べのかけらをたたんで'],
+ [165,'まだない景色をならべる'],[180,'まるい静けさを抱えて'],[195,'次の余白に灯をともす']
+];
+const specs=[['a','案A: ジャケットと歌詞の切り替え','吹き出しボタンで表示を交換。前後の行も大きく。']];
+const symbols={play:'<path d="M13 7v26l21-13z"/>',pause:'<path d="M11 8h6v24h-6zm12 0h6v24h-6z"/>',prev:'<path d="M9 9h4v22H9zm22 0v22L14 20z"/>',next:'<path d="M27 9h4v22h-4zM9 9l17 11L9 31z"/>'};
+const icon=name=>`<svg viewBox="0 0 40 40" aria-hidden="true">${symbols[name]}</svg>`;
+const metadata='<div class="metadata"><div class="title" title="ダミーソング">ダミーソング</div><div class="artist" title="サンプルアーティスト">サンプルアーティスト</div></div>';
+const art='<div class="art" role="img" aria-label="グラデーションのダミージャケット"></div>';
+const comparison=document.querySelector('#comparison');
+const lyricsIcon='<svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M9 6h22a5 5 0 0 1 5 5v15a5 5 0 0 1-5 5H17l-8 5v-5a5 5 0 0 1-5-5V11a5 5 0 0 1 5-5Z"/><path d="M12 14h16M12 22h12"/></svg>';
+for(const [id,title,description] of specs){
+ const article=document.createElement('section');article.className=`proposal ${id}`;article.setAttribute('aria-labelledby',`heading-${id}`);
+ article.innerHTML=`<h2 id="heading-${id}">${title}</h2><p class="description">${description}</p><div class="player" aria-label="${title}"><div class="app"><span class="app-icon" aria-hidden="true">♪</span><span class="app-name">Apple Music</span><div class="app-actions"><span class="toggle-status app-status" hidden></span></div></div><div class="hero"><div class="lyrics" tabindex="0" aria-label="歌詞"></div></div><div class="metadata-row">${metadata}<div class="toggle-wrap"><button type="button" class="toggle" aria-pressed="true" aria-label="ジャケットを表示">${lyricsIcon}</button><span id="lyrics-status" class="toggle-status" hidden></span></div><button type="button" class="favorite" aria-label="お気に入り" aria-pressed="false" hidden>☆</button></div><div class="seek"><input type="range" min="0" max="210" step="0.1" value="0" aria-label="${title}の再生位置"><div class="times"><span class="elapsed">0:00</span><span class="remaining">−3:30</span></div></div><div class="controls"><button type="button" class="prev" aria-label="前の曲へ">${icon('prev')}</button><button type="button" class="play" aria-label="再生">${icon('play')}</button><button type="button" class="next" aria-label="次の曲へ">${icon('next')}</button></div></div>`;
+ comparison.append(article);
+}
+let position=0,playing=false,showLyrics=true,state='synced',track=0,lastTick=performance.now();
+const cards=[...document.querySelectorAll('.proposal')];
+const format=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
+const currentIndex=()=>Math.max(0,lyrics.findLastIndex(line=>line[0]<=position));
+function renderLyrics(){
+ const index=currentIndex();
+ for(const card of cards){
+  const unavailable=state==='missing'||state==='offline';
+  const short=comparison.classList.contains('short');
+  const wrap=card.querySelector('.toggle-wrap');
+  const toggle=wrap.querySelector('.toggle');
+  const appActions=card.querySelector('.app-actions');
+  const destination=short?card.querySelector('.metadata-row'):appActions;
+  if(wrap.parentElement!==destination){
+   if(short)destination.insertBefore(wrap,card.querySelector('.favorite'));
+   else destination.append(wrap);
+  }
+  toggle.disabled=unavailable;
+  toggle.setAttribute('aria-pressed',String(showLyrics));
+  toggle.setAttribute('aria-label',showLyrics?'ジャケットを表示':'歌詞を表示');
+  const statusText=unavailable?(state==='missing'?'歌詞なし':'オフライン'):'';
+  const appStatus=card.querySelector('.app-status');
+  const status=wrap.querySelector('.toggle-status');
+  appStatus.textContent=statusText;appStatus.hidden=!unavailable||short;
+  status.textContent=statusText;status.hidden=!unavailable||!short;
+  appStatus.id='app-lyrics-status';
+  if(unavailable)toggle.setAttribute('aria-describedby',short?'lyrics-status':'app-lyrics-status');
+  else toggle.removeAttribute('aria-describedby');
+  const hero=card.querySelector('.hero');
+  if(!showLyrics||unavailable){if(!hero.querySelector('.art'))hero.innerHTML=art;continue;}
+  let viewport=hero.querySelector('.lyrics');
+  if(!viewport){hero.innerHTML='<div class="lyrics" tabindex="0" aria-label="歌詞"></div>';viewport=hero.firstElementChild;}
+  const mode=['synced','static'].includes(state)?state:'message';
+  if(viewport.dataset.mode!==mode){
+   viewport.dataset.mode=mode;viewport.classList.toggle('static',mode==='static');viewport.replaceChildren();
+   if(mode==='message'){
+    const status=document.createElement('div');status.className='message';viewport.append(status);
+   }else{
+    const lines=document.createElement('div');lines.className='lines';
+    for(const [time,words] of lyrics){const line=document.createElement('div');line.className='line';line.textContent=words;line.title=`${format(time)} ${words}`;lines.append(line);}
+    viewport.append(lines);viewport.scrollTop=0;
+   }
+  }
+  if(mode==='message'){
+   const status=viewport.firstElementChild;status.textContent=message();
+  }else{
+   const lines=viewport.firstElementChild;
+   [...lines.children].forEach((line,i)=>line.classList.toggle('current',mode==='synced'&&i===index));
+   if(mode==='synced')lines.style.transform=`translateY(${-index*64-32}px)`;
+  }
+ }
+}
+function message(){return state==='loading'?'歌詞を探しています…':'';}
+function render(){
+ document.querySelector('#clock').textContent=`${format(position)} / 3:30`;
+ document.querySelector('#master-play').textContent=playing?'一時停止':'再生';
+ for(const card of cards){
+  const title=card.querySelector('.title');title.textContent=track===0?'ダミーソング':'ダミーソング2';title.title=title.textContent;
+  const range=card.querySelector('input');range.value=position;range.style.setProperty('--progress',`${position/210*100}%`);range.setAttribute('aria-valuetext',`${format(position)} / 3:30`);
+  card.querySelector('.elapsed').textContent=format(position);card.querySelector('.remaining').textContent=`−${format(210-position)}`;
+  const play=card.querySelector('.play');play.innerHTML=icon(playing?'pause':'play');play.setAttribute('aria-label',playing?'一時停止':'再生');
+ }
+ renderLyrics();
+}
+function togglePlay(){if(position>=210)position=0;playing=!playing;lastTick=performance.now();render();}
+document.querySelector('#master-play').addEventListener('click',togglePlay);
+document.querySelector('#state').addEventListener('change',event=>{state=event.target.value;renderLyrics();});
+document.querySelector('#height').addEventListener('change',event=>{comparison.classList.toggle('short',event.target.value==='500');renderLyrics();});
+document.querySelector('#favorite').addEventListener('change',event=>{document.querySelector('.favorite').hidden=event.target.value!=='shown';});
+document.querySelector('.favorite').addEventListener('click',event=>{const button=event.currentTarget;const selected=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(selected));button.textContent=selected?'★':'☆';});
+document.querySelector('.toggle').addEventListener('click',()=>{showLyrics=!showLyrics;renderLyrics();});
+function changeTrack(){
+ track=1-track;position=0;state=track===0?'synced':'missing';
+ document.querySelector('#state').value=state;
+ lastTick=performance.now();render();
+}
+for(const card of cards){
+ card.querySelector('.play').addEventListener('click',togglePlay);
+ card.querySelector('input').addEventListener('input',event=>{position=Number(event.target.value);if(position>=210)playing=false;lastTick=performance.now();render();});
+ card.querySelector('.prev').addEventListener('click',changeTrack);
+ card.querySelector('.next').addEventListener('click',changeTrack);
+}
+setInterval(()=>{const now=performance.now();if(playing){position=Math.min(210,position+(now-lastTick)/1000);if(position===210)playing=false;render();}lastTick=now;},100);
+render();
+</script>
+</body>
+</html>
