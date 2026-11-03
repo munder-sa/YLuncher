@@ -10,9 +10,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -23,8 +28,64 @@ import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.media.lyricsQuery
 import com.gt8d.launcher.media.positionAt
 import com.gt8d.launcher.media.lyrics.LyricsState
+import com.gt8d.launcher.media.lyrics.LyricLine
 import com.gt8d.launcher.ui.theme.Palette
 import kotlin.math.roundToInt
+import kotlin.math.abs
+
+internal fun fillFraction(lines: List<LyricLine>, index: Int, positionMs: Long, durationMs: Long?): Float {
+    if (index == -1) return 0f
+    val start = lines[index].timeMs
+    val end = lines.getOrNull(index + 1)?.timeMs
+        ?: (start + 5000L).let { if (durationMs != null) minOf(it, durationMs) else it }
+    if (end <= start) return 1f
+    return ((positionMs.toDouble() - start) / (end.toDouble() - start)).toFloat().coerceIn(0f, 1f)
+}
+
+internal fun lyricLineAlpha(distance: Int): Float = when (distance) {
+    0, 1 -> 0.45f
+    2 -> 0.35f
+    else -> 0.25f
+}
+
+@Composable
+private fun KaraokeLine(text: String, current: Boolean, alpha: Float, fill: State<Float>) {
+    val textLayout = remember(text) { object { var result: TextLayoutResult? = null } }
+    Box(Modifier.fillMaxWidth()) {
+        Text(text, Modifier.fillMaxWidth().then(if (current) Modifier.testTag("player_lyrics_current") else Modifier),
+            color = Color.White.copy(alpha = alpha), fontSize = 24.sp, fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (current) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics { }
+            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
+                val fraction = fill.value
+                val result = textLayout.result
+                if (fraction > 0f && result != null) {
+                    drawContent()
+                    if (fraction < 1f && text.isNotEmpty()) {
+                        val progress = text.length * fraction
+                        val offset = progress.toInt().coerceAtMost(text.lastIndex)
+                        val line = result.getLineForOffset(offset)
+                        val startX = result.getHorizontalPosition(offset, true)
+                        val nextX = if (offset + 1 < result.getLineEnd(line)) {
+                            result.getHorizontalPosition(offset + 1, true)
+                        } else result.getLineRight(line)
+                        val x = startX + (nextX - startX) * (progress - offset)
+                        val top = result.getLineTop(line)
+                        val bottom = result.getLineBottom(line)
+                        clipRect(0f, top, size.width, bottom) {
+                            drawRect(Brush.horizontalGradient(listOf(Color.Black, Color.Transparent),
+                                startX = x - 12.dp.toPx(), endX = x + 12.dp.toPx()),
+                                blendMode = BlendMode.DstIn)
+                        }
+                        if (bottom < size.height) drawRect(Color.Transparent, Offset(0f, bottom),
+                            Size(size.width, size.height - bottom), blendMode = BlendMode.Clear)
+                    }
+                }
+            }, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            onTextLayout = { textLayout.result = it })
+    }
+}
 
 @Composable
 fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifier,
@@ -42,6 +103,15 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
             is LyricsState.Synced -> {
                 val track = now.pkg to now.lyricsQuery
                 val index by key(track, state.lines) { rememberLyricIndex(now, state.lines, clock) }
+                val fill = remember(track, state.lines) { mutableFloatStateOf(0f) }
+                LaunchedEffect(now, state.lines, index) {
+                    fill.floatValue = fillFraction(state.lines, index, now.positionAt(clock()), now.durationMs)
+                    while (now.playing) {
+                        withFrameMillis {
+                            fill.floatValue = fillFraction(state.lines, index, now.positionAt(clock()), now.durationMs)
+                        }
+                    }
+                }
                 val startsBeforeFirst = remember(track, state.lines) {
                     state.lines.firstOrNull()?.let { now.positionAt(clock()) < it.timeMs } ?: true
                 }
@@ -61,11 +131,7 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 Layout(content = {
                     state.lines.forEachIndexed { i, line ->
                         val current = i == index
-                        Text(line.text, Modifier.fillMaxWidth().then(if (current) Modifier.testTag("player_lyrics_current") else Modifier),
-                            color = if (current) Color.White else Palette.Muted,
-                            fontSize = if (current) 26.sp else 20.sp,
-                            fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
-                            textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        KaraokeLine(line.text, current, lyricLineAlpha(abs(i - index.coerceAtLeast(0))), fill)
                     }
                 }, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
                     val rows = measurables.map { it.measure(Constraints(maxWidth = constraints.maxWidth)) }

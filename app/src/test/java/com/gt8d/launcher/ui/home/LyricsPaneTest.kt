@@ -111,4 +111,44 @@ class LyricsPaneTest {
         show()
         rule.onNodeWithTag("player_lyrics").assert(hasClickAction().not())
     }
+    @Test fun fillFractionBasics() {
+        val sample = listOf(LyricLine(1000, "架空の朝"), LyricLine(3000, "架空の空"))
+        assertEquals(0f, fillFraction(sample, 0, 1000, null), 0f)
+        assertEquals(0.5f, fillFraction(sample, 0, 2000, null), 0f)
+        assertEquals(1f, fillFraction(sample, 0, 3000, null), 0f)
+        assertEquals(0f, fillFraction(sample, 0, 500, null), 0f)
+        assertEquals(0f, fillFraction(sample, -1, 500, null), 0f)
+    }
+    @Test fun fillFractionLastLine() {
+        val sample = listOf(LyricLine(3000, "架空の空"))
+        assertEquals(0.5f, fillFraction(sample, 0, 5500, null), 0f)
+        assertEquals(0.5f, fillFraction(sample, 0, 3500, 4000), 0f)
+    }
+    @Test fun fillFractionNonPositiveInterval() {
+        val sample = listOf(LyricLine(1000, "架空の朝"), LyricLine(1000, "架空の空"))
+        assertEquals(1f, fillFraction(sample, 0, 1000, null), 0f)
+        assertEquals(1f, fillFraction(sample, 1, 1000, 500), 0f)
+    }
+    @Test fun lineAlphaByDistance() {
+        assertEquals(0.45f, lyricLineAlpha(1), 0f)
+        assertEquals(0.35f, lyricLineAlpha(2), 0f)
+        assertEquals(0.25f, lyricLineAlpha(3), 0f)
+        assertEquals(0.25f, lyricLineAlpha(10), 0f)
+    }
+    @Test fun linesAreLeftAligned() {
+        show()
+        val left = rule.onNodeWithTag("player_lyrics").getBoundsInRoot().left.value
+        lines.forEach {
+            assertEquals(left, rule.onNodeWithText(it.text).getBoundsInRoot().left.value, 1f)
+        }
+    }
+    @Test fun currentLineCenteredWithUniformSize() {
+        show()
+        val current = rule.onNodeWithTag("player_lyrics_current").getBoundsInRoot()
+        assertEquals(areaCenter(), (current.top.value + current.bottom.value) / 2, 1f)
+        listOf("一", "三").forEach {
+            val other = rule.onNodeWithText(it).getBoundsInRoot()
+            assertEquals(current.bottom.value - current.top.value, other.bottom.value - other.top.value, 0f)
+        }
+    }
 }
