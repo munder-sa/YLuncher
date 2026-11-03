@@ -109,3 +109,10 @@ v1.7.1/v2.0 の層による移動・フェード・縮小、静止背景の共�
 - テスト: 偽通信・偽時計・一時ディレクトリ・架空TTMLで、境界値、誤照合拒否、キャッシュからの格上げ、キャンセル、通信ゼロ、層/semantics の回帰を確認する。
 - 人の実機確認: Apple Music と他アプリ、ID有無、初回/キャッシュ/オフライン、未収録、曲送り、停止/シーク、長い曲、休符の近似、ホーム/分割の同期。v1.7.1/v2.0 の性能比較方法を使い、動作中フレーム間隔の悪化+5ms以内・jank+5ポイント以内を基準にする。
 - **ベータ実機確認 → 全テスト → main → タグ → リリース**。診断用 MEDIA_ID 値の記録は正式版前に除去する。
+
+## 実機・データの確認(Task 157 Step 3・4、2026-11-04、Claude)
+- **MEDIA_ID は Apple Music のカタログの曲 ID**(確定)。`android.media.metadata.MEDIA_ID` と `com.apple.android.music.playback.metadata.METADATA_KEY_MEDIA_ID` は同じ値の文字列(Apple Music for Android、GT8D)。例: 夜の踊り子=604748203、なんてったって春=604748204。iTunes Lookup(`https://itunes.apple.com/lookup?id=<id>&country=jp`)で曲名・アーティスト・アルバムが一致。曲送り・戻しで値が変わる。
+- よって Apple Music の再生では `am-lyrics/<MEDIA_ID>.ttml` を直接取る経路を採る(索引の照合より優先)。404 は「未収録」(夜の踊り子 604748203 は 404)。Lemon の 1537460612 は 200。
+- ISRC は metadata に無い(採らない)。
+- **TTML の形**(Lemon で確認。本文は載せない): ルート `<tt xmlns="http://www.w3.org/ns/ttml" xmlns:amll="http://www.example.com/ns/amll" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" itunes:timing="Word">`。`head/metadata` に `ttm:agent` と `amll:meta key=… value=…`(musicName・artists・album・appleMusicId・isrc・ncmMusicId・qqMusicId・spotifyId・ttmlAuthorGithub・ttmlAuthorGithubLogin)。`body/div/p begin end itunes:key ttm:agent` の中に `span begin end`(単語)。時刻は秒の小数(例 `1.372`)。`span ttm:role="x-translation"`・`"x-roman"` は翻訳・ローマ字(捨てる)。背景の歌詞(`x-bg`)はこの例には無いが、あれば捨てる。
+- 時刻の形は秒の小数のほか、`mm:ss.mmm` などもありうるので、読み取りは両方を受け付ける(読めない行は捨てる)。
