@@ -22,6 +22,7 @@ class LrclibClientTest {
     private var url = ""
     private var headers = emptyMap<String, String>()
     private val client = LrclibClient(HttpTransport { u, h ->
+        if (u.startsWith("https://lrclib.net/api/search?")) return@HttpTransport HttpResponse(200, "[]", null)
         url = u
         headers = h
         response
@@ -106,5 +107,122 @@ class LrclibClientTest {
             response = HttpResponse(200, body, null)
             assertEquals(FetchResult(LyricsState.Missing), client.fetch(query))
         }
+    }
+
+    private val searchQuery = LyricsQuery("Dummy Song&1", "Dummy Artist", " Album A ", 302)
+    private val plainResponse = HttpResponse(200, """{"plainLyrics":"dummy plain"}""", null)
+    private val plainResult = FetchResult(LyricsState.Plain("dummy plain"))
+    private val calls = mutableListOf<String>()
+    private val requestHeaders = mutableListOf<Map<String, String>>()
+
+    private fun searchClient(
+        get: HttpResponse = plainResponse,
+        search: () -> HttpResponse = { HttpResponse(200, "[]", null) }
+    ) = LrclibClient(HttpTransport { u, h ->
+        calls.add(u)
+        requestHeaders.add(h)
+        if (u.startsWith("https://lrclib.net/api/search?")) search() else get
+    }, "DummyLauncher/1")
+
+    private fun entry(text: String, duration: String = "302", album: String = "other") =
+        """{"syncedLyrics":"[00:01.00]$text","duration":$duration,"albumName":"$album"}"""
+
+    private fun synced(text: String) = FetchResult(LyricsState.Synced(LrcParser.parse("[00:01.00]$text")))
+
+    private fun searchResponse(body: String) = HttpResponse(200, body, null)
+
+    @Test fun searchUsedWhenGetIsPlain() {
+        assertEquals(synced("dummy"), searchClient { searchResponse("[${entry("dummy")}]") }.fetch(searchQuery))
+        assertEquals(2, calls.size)
+    }
+
+    @Test fun searchUsedWhenGetIsNotFound() {
+        assertEquals(synced("dummy"), searchClient(HttpResponse(404, "", null)) {
+            searchResponse("[${entry("dummy")}]")
+        }.fetch(searchQuery))
+        assertEquals(2, calls.size)
+    }
+
+    @Test fun searchNotUsedWhenGetIsSynced() {
+        assertEquals(synced("dummy"), searchClient(searchResponse(entry("dummy"))).fetch(searchQuery))
+        assertEquals(1, calls.size)
+        assertTrue(calls.single().startsWith("https://lrclib.net/api/get?"))
+    }
+
+    @Test fun searchNotUsedWhenInstrumental() {
+        assertEquals(FetchResult(LyricsState.Missing), searchClient(searchResponse("""{"instrumental":true}""")).fetch(searchQuery))
+        assertEquals(1, calls.size)
+    }
+
+    @Test fun searchNotUsedWhenOffline() {
+        val offline = LrclibClient(HttpTransport { u, _ -> calls.add(u); throw IOException("dummy") }, "dummy")
+        assertEquals(FetchResult(LyricsState.Offline), offline.fetch(searchQuery))
+        assertEquals(1, calls.size)
+    }
+
+    @Test fun searchNotUsedWhenServerError() {
+        assertEquals(FetchResult(LyricsState.Failed), searchClient(HttpResponse(503, "", null)).fetch(searchQuery))
+        assertEquals(1, calls.size)
+    }
+
+    @Test fun searchUrl() {
+        searchClient().fetch(searchQuery)
+        assertEquals("https://lrclib.net/api/search?track_name=Dummy%20Song%261&artist_name=Dummy%20Artist", calls[1])
+        assertEquals(requestHeaders[0], requestHeaders[1])
+    }
+
+    @Test fun searchSkipsDurationMismatch() {
+        assertEquals(plainResult, searchClient {
+            searchResponse("[${entry("a", "315")},${entry("b", "233")}]")
+        }.fetch(searchQuery))
+    }
+
+    @Test fun searchPrefersSameAlbum() {
+        assertEquals(synced("b"), searchClient {
+            searchResponse("[${entry("a")},${entry("b", "303", "album a")}]")
+        }.fetch(searchQuery))
+    }
+
+    @Test fun searchPrefersCloserDuration() {
+        assertEquals(synced("b"), searchClient {
+            searchResponse("[${entry("a", "304")},${entry("b")}]")
+        }.fetch(searchQuery))
+    }
+
+    @Test fun searchIgnoresEntriesWithoutDuration() {
+        assertEquals(plainResult, searchClient {
+            searchResponse("""[{"syncedLyrics":"[00:01.00]dummy"}]""")
+        }.fetch(searchQuery))
+    }
+
+    @Test fun searchWithoutQueryDurationAcceptsAny() {
+        val noDuration = LyricsQuery("dummy", "artist", null, null)
+        assertEquals(synced("a"), searchClient {
+            searchResponse("[${entry("a", "315")},${entry("b", "233")}]")
+        }.fetch(noDuration))
+        assertEquals(synced("b"), searchClient {
+            searchResponse("[${entry("a", "315")},${entry("b", "233", "ALBUM A")}]")
+        }.fetch(LyricsQuery("dummy", "artist", "album a", null)))
+    }
+
+    @Test fun searchFailureFallsBackToGet() {
+        assertEquals(plainResult, searchClient { throw IOException("dummy") }.fetch(searchQuery))
+        for (response in listOf(HttpResponse(500, "", null), searchResponse("{}"), searchResponse("{broken"))) {
+            assertEquals(plainResult, searchClient { response }.fetch(searchQuery))
+        }
+    }
+
+    @Test fun searchTooManyRequestsCarriesRetryAfter() {
+        for (seconds in listOf(null, 0L, -1L, 30L)) {
+            assertEquals(plainResult.copy(retryAfterSec = if (seconds == 30L) 30L else 60L),
+                searchClient { HttpResponse(429, "", seconds) }.fetch(searchQuery))
+        }
+    }
+
+    @Test fun searchSkipsInvalidCandidatesAndKeepsArrayOrder() {
+        val invalid = """null,42,{"instrumental":true,"duration":302,"syncedLyrics":"[00:01.00]bad"},{"duration":302,"syncedLyrics":"no timestamp"},{"duration":"302","syncedLyrics":"[00:01.00]bad"}"""
+        assertEquals(synced("a"), searchClient {
+            searchResponse("[$invalid,${entry("a", "304")},${entry("b", "304")}]")
+        }.fetch(searchQuery))
     }
 }

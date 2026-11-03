@@ -14,6 +14,7 @@ class LyricsCache(private val dir: File, private val clock: () -> Long, private 
             file = File(dir, q.cacheKey + ".json")
             if (!file.exists()) return null
             val json = Json.parseToJsonElement(file.readText(Charsets.UTF_8)) as JsonObject
+            require(json["v"] == JsonPrimitive(2))
             val savedAt = number(json["savedAt"])
             when (string(json["kind"])) {
                 "synced" -> LyricsState.Synced((json["lines"] as JsonArray).map { element ->
@@ -40,7 +41,7 @@ class LyricsCache(private val dir: File, private val clock: () -> Long, private 
     fun put(q: LyricsQuery, state: LyricsState) {
         if (state !is LyricsState.Synced && state !is LyricsState.Plain && state != LyricsState.Missing) return
         try {
-            val fields = mutableMapOf<String, JsonElement>("savedAt" to JsonPrimitive(clock()))
+            val fields = mutableMapOf<String, JsonElement>("v" to JsonPrimitive(2), "savedAt" to JsonPrimitive(clock()))
             when (state) {
                 is LyricsState.Synced -> {
                     fields["kind"] = JsonPrimitive("synced")

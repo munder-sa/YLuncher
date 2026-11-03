@@ -79,4 +79,31 @@ class LyricsCacheTest {
         assertNull(cache.get(query()))
         assertTrue(file.isFile)
     }
+
+    @Test fun fileWithoutVersionIsIgnored() {
+        val dir = temporaryFolder.newFolder()
+        val file = File(dir, query().cacheKey + ".json")
+        file.writeText("""{"kind":"plain","savedAt":0,"text":"x"}""")
+        assertNull(LyricsCache(dir, { now }).get(query()))
+        assertFalse(file.exists())
+    }
+
+    @Test fun writtenFileHasVersion2() {
+        val dir = temporaryFolder.newFolder()
+        LyricsCache(dir, { now }).put(query(), LyricsState.Plain("dummy"))
+        val json = kotlinx.serialization.json.Json.parseToJsonElement(
+            File(dir, query().cacheKey + ".json").readText()
+        ) as kotlinx.serialization.json.JsonObject
+        assertEquals(kotlinx.serialization.json.JsonPrimitive(2), json["v"])
+    }
+
+    @Test fun differentVersionIsIgnored() {
+        val dir = temporaryFolder.newFolder()
+        val file = File(dir, query().cacheKey + ".json")
+        for (version in listOf("1", "3", "\"2\"", "null")) {
+            file.writeText("""{"v":$version,"kind":"plain","savedAt":0,"text":"x"}""")
+            assertNull(LyricsCache(dir, { now }).get(query()))
+            assertFalse(file.exists())
+        }
+    }
 }

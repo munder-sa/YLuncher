@@ -6,6 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -49,8 +50,9 @@ class UrlConnectionTransport : HttpTransport {
 data class FetchResult(val state: LyricsState, val retryAfterSec: Long? = null)
 
 class LrclibClient(private val transport: HttpTransport, private val userAgent: String) {
+    private fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
     fun fetch(q: LyricsQuery): FetchResult {
-        fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
         val url = buildString {
             append("https://lrclib.net/api/get?track_name=${encode(q.title)}&artist_name=${encode(q.artist)}")
             q.album?.let { append("&album_name=${encode(it)}") }
@@ -62,7 +64,7 @@ class LrclibClient(private val transport: HttpTransport, private val userAgent: 
             return FetchResult(LyricsState.Offline)
         }
         if (response.code == 429) return FetchResult(LyricsState.Failed, response.retryAfterSec?.takeIf { it > 0 } ?: 60L)
-        if (response.code == 404 || response.code == 400) return FetchResult(LyricsState.Missing)
+        if (response.code == 404 || response.code == 400) return search(q, FetchResult(LyricsState.Missing))
         if (response.tooLarge || response.code != 200) return FetchResult(LyricsState.Failed)
         val json = try {
             Json.parseToJsonElement(response.body) as? JsonObject
@@ -76,8 +78,44 @@ class LrclibClient(private val transport: HttpTransport, private val userAgent: 
             if (lines.isNotEmpty()) return FetchResult(LyricsState.Synced(lines))
         }
         string("plainLyrics")?.trim()?.takeIf { it.isNotEmpty() }?.let {
-            return FetchResult(LyricsState.Plain(it))
+            return search(q, FetchResult(LyricsState.Plain(it)))
         }
-        return FetchResult(LyricsState.Missing)
+        return search(q, FetchResult(LyricsState.Missing))
+    }
+
+    private fun search(q: LyricsQuery, fallback: FetchResult): FetchResult {
+        val response = try {
+            transport.get(
+                "https://lrclib.net/api/search?track_name=${encode(q.title)}&artist_name=${encode(q.artist)}",
+                mapOf("User-Agent" to userAgent, "Accept" to "application/json")
+            )
+        } catch (_: IOException) {
+            return fallback
+        }
+        if (response.code == 429) return fallback.copy(retryAfterSec = response.retryAfterSec?.takeIf { it > 0 } ?: 60L)
+        if (response.tooLarge || response.code != 200) return fallback
+        val entries = try {
+            Json.parseToJsonElement(response.body) as? JsonArray
+        } catch (_: IllegalArgumentException) {
+            null
+        } ?: return fallback
+        data class Candidate(val state: LyricsState.Synced, val sameAlbum: Boolean, val difference: Double)
+        val candidates = entries.mapNotNull { element ->
+            val entry = element as? JsonObject ?: return@mapNotNull null
+            if (entry["instrumental"] == JsonPrimitive(true)) return@mapNotNull null
+            val synced = (entry["syncedLyrics"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?: return@mapNotNull null
+            val lines = LrcParser.parse(synced)
+            if (lines.isEmpty()) return@mapNotNull null
+            val difference = q.durationSec?.let { duration ->
+                val seconds = (entry["duration"] as? JsonPrimitive)?.takeIf { !it.isString }
+                    ?.content?.toDoubleOrNull() ?: return@mapNotNull null
+                kotlin.math.abs(seconds - duration).takeIf { it <= 2.0 } ?: return@mapNotNull null
+            } ?: 0.0
+            val album = (entry["albumName"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            Candidate(LyricsState.Synced(lines), q.album != null && album?.trim()?.lowercase() == q.album.trim().lowercase(), difference)
+        }
+        val best = candidates.sortedWith(compareByDescending<Candidate> { it.sameAlbum }.thenBy { it.difference }).firstOrNull()
+        return best?.let { FetchResult(it.state) } ?: fallback
     }
 }
