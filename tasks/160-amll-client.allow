@@ -1,0 +1,8 @@
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AmllClient.kt
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AmllCache.kt
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AmllTransport.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AmllClientTest.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AmllCacheTest.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AmllTransportTest.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/Lyrics.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AmllClientTest' --tests 'com.gt8d.launcher.media.lyrics.AmllCacheTest' --tests 'com.gt8d.launcher.media.lyrics.AmllTransportTest'
