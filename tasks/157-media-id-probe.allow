@@ -1,0 +1,4 @@
+create app/src/main/java/com/gt8d/launcher/media/LyricsMetadataProbe.kt
+create app/src/test/java/com/gt8d/launcher/media/LyricsMetadataProbeTest.kt
+write app/src/main/java/com/gt8d/launcher/media/MediaWatcher.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.LyricsMetadataProbeTest'
