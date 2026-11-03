@@ -29,6 +29,8 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.geometry.Offset
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.media.NowPlaying
+import com.gt8d.launcher.media.lyrics.LyricLine
+import com.gt8d.launcher.media.lyrics.LyricsState
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -43,6 +45,100 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MediaCardTest {
+    private val lyricLines = listOf(LyricLine(1000L, "一"), LyricLine(2000L, "二"))
+    private fun lyricNow(position: Long = 2500L) = NowPlaying(
+        "music", "架空の曲", "架空の歌手", null, 120000L, false, false,
+        positionMs = position, metaTitle = "架空の曲",
+    )
+
+    @Test fun syncedShowsCurrentLine() {
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(lyricNow(), null, 0L, {}, {}, {},
+                    lyrics = LyricsState.Synced(lyricLines), lyricsEnabled = true)
+            }
+        }
+        rule.onNodeWithTag("media_lyric_line").assertTextEquals("二")
+    }
+
+    @Test fun beforeFirstLineShowsNote() {
+        var position by mutableStateOf(500L)
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(lyricNow(position), null, 0L, {}, {}, {},
+                    lyrics = LyricsState.Synced(lyricLines + LyricLine(3000L, "♪")),
+                    lyricsEnabled = true)
+            }
+        }
+        rule.onNodeWithTag("media_lyric_line").assertTextEquals("♪")
+        rule.runOnIdle { position = 3500L }
+        rule.onNodeWithTag("media_lyric_line").assertTextEquals("♪")
+    }
+
+    @Test fun longLineEllipsized() {
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.width(320.dp)) {
+                    MediaCard(lyricNow(), null, 0L, {}, {}, {},
+                        lyrics = LyricsState.Synced(listOf(LyricLine(1000L, "架空の長い本文".repeat(30)))),
+                        lyricsEnabled = true)
+                }
+            }
+        }
+        val results = mutableListOf<TextLayoutResult>()
+        rule.onNodeWithTag("media_lyric_line")
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        assertEquals(1, results.single().lineCount)
+        assertTrue(results.single().hasVisualOverflow)
+    }
+
+    @Test fun lineReservedWhileEnabled() {
+        var lyrics by mutableStateOf<LyricsState>(LyricsState.Synced(lyricLines))
+        rule.setContent {
+            LauncherTheme {
+                MediaCard(lyricNow(), null, 0L, {}, {}, {}, lyrics = lyrics, lyricsEnabled = true)
+            }
+        }
+        fun height(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.height
+        rule.onNodeWithTag("media_lyric_line").assertTextEquals("二")
+        val cardHeight = height("media_card")
+        val lineHeight = height("media_lyric_line")
+        for (state in listOf(LyricsState.Loading, LyricsState.Plain("架空の本文"),
+            LyricsState.Missing, LyricsState.Offline, LyricsState.Failed, LyricsState.Off)) {
+            rule.runOnIdle { lyrics = state }
+            rule.onNodeWithTag("media_lyric_line").assertExists().assertTextEquals("")
+            assertEquals(cardHeight, height("media_card"), 0f)
+            assertEquals(lineHeight, height("media_lyric_line"), 0f)
+        }
+    }
+
+    @Test fun noLineWhenOffOrNoQuery() {
+        var mode by mutableStateOf(0)
+        rule.setContent {
+            LauncherTheme {
+                if (mode == 0) {
+                    MediaCard(lyricNow(), null, 0L, {}, {}, {})
+                } else {
+                    val now = when (mode) {
+                        2 -> lyricNow().copy(artist = null)
+                        3 -> lyricNow().copy(metaTitle = null)
+                        else -> lyricNow()
+                    }
+                    MediaCard(now, null, 0L, {}, {}, {},
+                        lyrics = LyricsState.Synced(lyricLines), lyricsEnabled = mode != 1)
+                }
+            }
+        }
+        fun height() = rule.onNodeWithTag("media_card").fetchSemanticsNode().boundsInRoot.height
+        val defaultHeight = height()
+        rule.onNodeWithTag("media_lyric_line").assertDoesNotExist()
+        for (next in 1..3) {
+            rule.runOnIdle { mode = next }
+            rule.onNodeWithTag("media_lyric_line").assertDoesNotExist()
+            assertEquals(defaultHeight, height(), 0f)
+        }
+    }
+
     @Test fun idle_innerWidthBoundary_andMissingApp() {
         var innerWidth by mutableStateOf(299)
         var installed by mutableStateOf(true)

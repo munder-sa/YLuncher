@@ -147,6 +147,8 @@ fun PanelContent(
                                     onAction = actions.onMediaAction,
                                     onSeek = actions.onSeek,
                                     onLaunch = actions.onLaunch,
+                                    lyrics = state.lyrics,
+                                    lyricsEnabled = state.lyricsEnabled,
                                 )
 
                                 IconGrid(
