@@ -1,0 +1,10 @@
+create app/src/main/java/com/gt8d/launcher/ui/theme/ScreenSemantics.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeActivity.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/main/java/com/gt8d/launcher/edge/CurtainWindow.kt
+write app/src/main/java/com/gt8d/launcher/LauncherApp.kt
+write app/src/test/java/com/gt8d/launcher/TestApp.kt
+create app/src/test/java/com/gt8d/launcher/ui/theme/ScreenSemanticsTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.*' --tests 'com.gt8d.launcher.edge.*'
+write app/src/test/java/com/gt8d/launcher/LauncherAppTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.LauncherAppTest'

@@ -32,12 +32,18 @@ class LyricsPaneTest {
     private val observer = LyricsPaneObserver()
     private var now by mutableStateOf(NowPlaying("dummy", "架空の曲", "架空の人", null, null, false, false,
         positionMs = 2500, metaTitle = "架空の曲"))
-    private fun show(state: LyricsState = LyricsState.Synced(lines)) {
+    private fun show(state: LyricsState = LyricsState.Synced(lines), detailSemantics: Boolean = false) {
         rule.mainClock.autoAdvance = false
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
             CompositionLocalProvider(LocalLyricsPaneObserver provides observer) {
-                LyricsPane(state, now, Modifier.size(329.dp, 240.dp)) { clock }
+                if (detailSemantics) {
+                    CompositionLocalProvider(LocalLyricsDetailSemantics provides true) {
+                        LyricsPane(state, now, Modifier.size(329.dp, 240.dp)) { clock }
+                    }
+                } else {
+                    LyricsPane(state, now, Modifier.size(329.dp, 240.dp)) { clock }
+                }
             }
         } }
         controller.visible()
@@ -54,19 +60,19 @@ class LyricsPaneTest {
         return (rect.top.value + rect.bottom.value) / 2
     }
     @Test fun highlightsCurrentLine() {
-        show()
+        show(detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_current").assertTextEquals("二")
     }
     @Test fun beforeFirstLineHasNoCurrent() {
         now = now.copy(positionMs = 500)
-        show()
+        show(detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_current").assertDoesNotExist()
         rule.onNodeWithText("一").assertIsDisplayed()
         assertEquals(areaCenter(), center("一"), 0.5f)
     }
     @Test fun nextLineAnimates() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
-        show()
+        show(detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_current").assertTextEquals("一")
         rule.runOnIdle { clock = 2100 }
         rule.mainClock.advanceTimeBy(200)
@@ -79,7 +85,7 @@ class LyricsPaneTest {
     }
     @Test fun jumpSnapsWithoutAnimation() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
-        show()
+        show(detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_current").assertTextEquals("一")
         rule.runOnIdle { clock = 3500 }
         rule.mainClock.advanceTimeBy(200)
@@ -97,7 +103,7 @@ class LyricsPaneTest {
     }
     @Test fun trackChangeSnapsWithoutAnimation() {
         now = now.copy(positionMs = 1000)
-        show()
+        show(detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_current").assertTextEquals("一")
         rule.runOnIdle {
             now = now.copy(title = "次の架空曲", metaTitle = "次の架空曲", positionMs = 2500)
@@ -116,21 +122,21 @@ class LyricsPaneTest {
         rule.onNodeWithTag("player_lyrics").assert(hasClickAction().not())
     }
     @Test fun lineLevelHighlightWhenNoWords() {
-        show()
+        show(detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_current").assertTextEquals("二").assertIsDisplayed()
         rule.onNodeWithTag("player_lyrics_fill", useUnmergedTree = true).assertDoesNotExist()
     }
     @Test fun wordFillWhenWordsPresent() {
-        show(LyricsState.Synced(listOf(LyricLine(1000, "架空の朝", listOf(LyricWord(1000, 0))))))
+        show(LyricsState.Synced(listOf(LyricLine(1000, "架空の朝", listOf(LyricWord(1000, 0))))), detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_fill", useUnmergedTree = true).assertExists()
     }
     @Test fun interludeDotsOnEmptyLine() {
-        show(LyricsState.Synced(listOf(LyricLine(1000, "♪"), LyricLine(4000, "架空の朝"))))
+        show(LyricsState.Synced(listOf(LyricLine(1000, "♪"), LyricLine(4000, "架空の朝"))), detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_interlude").assertIsDisplayed()
     }
     @Test fun introDotsBeforeFirstLine() {
         now = now.copy(positionMs = 1000)
-        show(LyricsState.Synced(listOf(LyricLine(10000, "架空の朝"))))
+        show(LyricsState.Synced(listOf(LyricLine(10000, "架空の朝"))), detailSemantics = true)
         rule.onNodeWithTag("player_lyrics_interlude").assertIsDisplayed()
         rule.runOnIdle {
             now = now.copy(positionMs = 6000)
@@ -174,14 +180,14 @@ class LyricsPaneTest {
         assertEquals(0.25f, lyricLineAlpha(10), 0f)
     }
     @Test fun linesAreLeftAligned() {
-        show()
+        show(detailSemantics = true)
         val left = rule.onNodeWithTag("player_lyrics").getBoundsInRoot().left.value
         lines.forEach {
             assertEquals(left, rule.onNodeWithText(it.text).getBoundsInRoot().left.value, 1f)
         }
     }
     @Test fun currentLineCenteredWithUniformSize() {
-        show()
+        show(detailSemantics = true)
         val current = rule.onNodeWithTag("player_lyrics_current").getBoundsInRoot()
         assertEquals(areaCenter(), (current.top.value + current.bottom.value) / 2, 1f)
         listOf("一", "三").forEach {
@@ -195,7 +201,7 @@ class LyricsPaneTest {
 
     @Test fun currentLineFadesIn() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
-        show()
+        show(detailSemantics = true)
         assertEquals(0.45f, alpha(1), 0f)
         rule.runOnIdle { clock = 2100 }
         rule.mainClock.advanceTimeBy(200)
@@ -208,7 +214,7 @@ class LyricsPaneTest {
 
     @Test fun previousLineFadesOut() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
-        show()
+        show(detailSemantics = true)
         assertEquals(1f, alpha(0), 0f)
         rule.runOnIdle { clock = 2100 }
         rule.mainClock.advanceTimeBy(200)
@@ -221,7 +227,7 @@ class LyricsPaneTest {
 
     @Test fun jumpSetsAlphaImmediately() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
-        show()
+        show(detailSemantics = true)
         rule.runOnIdle { clock = 3500 }
         rule.mainClock.advanceTimeBy(200)
         rule.mainClock.advanceTimeByFrame()
@@ -245,7 +251,7 @@ class LyricsPaneTest {
 
     @Test fun scrollAnimationDoesNotRelayout() {
         now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
-        show()
+        show(detailSemantics = true)
         rule.runOnIdle { clock = 2100 }
         rule.mainClock.advanceTimeBy(200)
         rule.mainClock.advanceTimeByFrame()
@@ -257,5 +263,28 @@ class LyricsPaneTest {
         assertEquals(before, observer.measures)
         assertEquals(placementsBefore, observer.placements)
         assertEquals(areaCenter(), center("二"), 0.5f)
+    }
+
+    @Test fun syncedLyricsExposeSingleNode() {
+        show()
+        rule.onAllNodesWithTag("player_lyrics", useUnmergedTree = true).assertCountEquals(1)
+        rule.onNodeWithTag("player_lyrics", useUnmergedTree = true)
+            .assertContentDescriptionEquals("歌詞")
+        rule.onAllNodesWithText("一", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test fun semanticsStableAcrossLineChange() {
+        now = now.copy(positionMs = 1000)
+        show()
+        val before = rule.onNodeWithTag("player_lyrics", useUnmergedTree = true)
+            .fetchSemanticsNode().config
+        rule.runOnIdle {
+            now = now.copy(positionMs = 2500)
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeBy(32)
+        val after = rule.onNodeWithTag("player_lyrics", useUnmergedTree = true)
+            .fetchSemanticsNode().config
+        assertEquals(before, after)
     }
 }

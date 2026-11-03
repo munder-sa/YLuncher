@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.semantics
@@ -68,10 +69,12 @@ internal fun interludeLitDots(startMs: Long, endMs: Long, positionMs: Long): Int
 
 @Composable
 private fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position: State<Long>, emphasis: State<Float>) {
+    val detailSemantics = LocalLyricsDetailSemantics.current
     val retained = remember { object { var lit = 0 } }
-    Box(Modifier.fillMaxWidth().then(if (current) Modifier.testTag("player_lyrics_interlude") else Modifier),
+    Box(Modifier.fillMaxWidth().then(if (detailSemantics && current) Modifier.testTag("player_lyrics_interlude") else Modifier),
         contentAlignment = Alignment.CenterStart) {
-        Text(" ", color = Color.Transparent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(" ", if (detailSemantics) Modifier else Modifier.clearAndSetSemantics {},
+            color = Color.Transparent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Canvas(Modifier.size(52.dp, 12.dp)) {
             val lit = interludeLitDots(startMs, endMs, position.value)
             if (current) retained.lit = lit
@@ -100,6 +103,7 @@ internal class LyricsPaneObserver {
     var frameUpdates = 0
 }
 internal val LocalLyricsPaneObserver = staticCompositionLocalOf<LyricsPaneObserver?> { null }
+internal val LocalLyricsDetailSemantics = staticCompositionLocalOf { false }
 
 @Composable
 private fun lyricAnimatedValue(target: Float, animate: Boolean, index: Int): State<Float> {
@@ -115,15 +119,17 @@ private fun lyricAnimatedValue(target: Float, animate: Boolean, index: Int): Sta
 @Composable
 private fun KaraokeLine(text: String, current: Boolean, alpha: State<Float>, hasWords: Boolean, fill: State<Float>,
                         emphasis: State<Float>, probe: LyricDrawProbe) {
+    val detailSemantics = LocalLyricsDetailSemantics.current
     val textLayout = remember(text) { object { var result: TextLayoutResult? = null } }
     val retained = remember(text) { object { var fill = 0f } }
     Box(Modifier.fillMaxWidth()) {
         Text(text, Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha.value; probe.alpha = this.alpha }
-            .then(if (current) Modifier.testTag("player_lyrics_current") else Modifier),
+            .then(if (!detailSemantics) Modifier.clearAndSetSemantics {}
+                else if (current) Modifier.testTag("player_lyrics_current") else Modifier),
             color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (hasWords) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics {
-            testTag = "player_lyrics_fill"
+            if (detailSemantics) testTag = "player_lyrics_fill"
         }
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; this.alpha = if (current) 1f else emphasis.value }
             .drawWithContent {
@@ -161,6 +167,7 @@ private fun KaraokeLine(text: String, current: Boolean, alpha: State<Float>, has
 fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifier,
                clock: () -> Long = { SystemClock.elapsedRealtime() }) {
     val observer = LocalLyricsPaneObserver.current
+    val detailSemantics = LocalLyricsDetailSemantics.current
     SideEffect { observer?.let { it.compositions++ } }
     val fade = if (state is LyricsState.Synced || state is LyricsState.Plain) {
         Modifier.graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
@@ -170,7 +177,13 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 (size.height - edge) / size.height to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
         }
     } else Modifier
-    Box(modifier.testTag("player_lyrics").clipToBounds().then(fade)) {
+    val lyricsSemantics = if (state is LyricsState.Synced && !detailSemantics) {
+        Modifier.clearAndSetSemantics {
+            contentDescription = "歌詞"
+            testTag = "player_lyrics"
+        }
+    } else Modifier.testTag("player_lyrics")
+    Box(modifier.then(lyricsSemantics).clipToBounds().then(fade)) {
         when (state) {
             is LyricsState.Synced -> {
                 val track = now.pkg to now.lyricsQuery
@@ -232,10 +245,10 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                             val alpha = lyricAnimatedValue(targetAlpha, animateAlpha, index)
                             val emphasis = lyricAnimatedValue(if (dotsCurrent) 1f else 0f, animateAlpha, index)
                             val probe = remember { LyricDrawProbe() }
-                            Box(Modifier.testTag("player_lyrics_line_$i").semantics {
+                            Box(if (detailSemantics) Modifier.testTag("player_lyrics_line_$i").semantics {
                                 this[LyricAlphaKey] = targetAlpha
                                 this[LyricDrawProbeKey] = probe
-                            }) {
+                            } else Modifier) {
                                 if (line.text == "♪" || (i == 0 && intro)) {
                                     InterludeDots(dotsCurrent,
                                         if (intro && i == 0) 0 else line.timeMs,
