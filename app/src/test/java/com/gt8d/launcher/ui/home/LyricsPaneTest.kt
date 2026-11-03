@@ -186,4 +186,43 @@ class LyricsPaneTest {
             assertEquals(current.bottom.value - current.top.value, other.bottom.value - other.top.value, 0f)
         }
     }
+
+    private fun alpha(index: Int): Float = rule.onNodeWithTag("player_lyrics_line_$index")
+        .fetchSemanticsNode().config[LyricAlphaKey]
+
+    @Test fun currentLineFadesIn() {
+        now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
+        show()
+        assertEquals(0.45f, alpha(1), 0f)
+        rule.runOnIdle { clock = 2100 }
+        rule.mainClock.advanceTimeBy(200)
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(150)
+        assertTrue(alpha(1) > 0.45f && alpha(1) < 1f)
+        rule.mainClock.advanceTimeBy(300)
+        assertEquals(1f, alpha(1), 0f)
+    }
+
+    @Test fun previousLineFadesOut() {
+        now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
+        show()
+        assertEquals(1f, alpha(0), 0f)
+        rule.runOnIdle { clock = 2100 }
+        rule.mainClock.advanceTimeBy(200)
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(150)
+        assertTrue(alpha(0) > 0.45f && alpha(0) < 1f)
+        rule.mainClock.advanceTimeBy(300)
+        assertEquals(0.45f, alpha(0), 0f)
+    }
+
+    @Test fun jumpSetsAlphaImmediately() {
+        now = now.copy(playing = true, positionMs = 0, positionUpdatedAt = 0)
+        show()
+        rule.runOnIdle { clock = 3500 }
+        rule.mainClock.advanceTimeBy(200)
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(1f, alpha(2), 0f)
+        assertEquals(0.35f, alpha(0), 0f)
+    }
 }
