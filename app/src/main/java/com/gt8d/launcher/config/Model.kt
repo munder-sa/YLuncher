@@ -52,6 +52,7 @@ data class LauncherConfig(
     val panelView: PanelView = PanelView.Apps,
     val dockMode: DockMode = DockMode.Auto,
     val appListPkgs: List<String>? = null,
+    val lyricsEnabled: Boolean = false,
 )
 
 @Serializable

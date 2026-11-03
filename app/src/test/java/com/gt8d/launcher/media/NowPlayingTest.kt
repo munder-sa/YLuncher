@@ -5,6 +5,22 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NowPlayingTest {
+    @Test fun metaTitleNullWhenFilledWithAppLabel() {
+        val now = snapshot(title = null).toNowPlaying()
+        assertNull(now.metaTitle)
+        assertEquals("Music", now.title)
+    }
+
+    @Test fun albumPassedThrough() {
+        val now = snapshot().copy(album = "Dummy album").toNowPlaying()
+        assertEquals("Dummy album", now.album)
+        assertEquals("Song", now.metaTitle)
+        assertNull(snapshot().copy(album = "  ").toNowPlaying().album)
+    }
+
+    @Test fun lyricsQueryNullWithoutArtist() {
+        assertNull(snapshot(artist = null).toNowPlaying().lyricsQuery)
+    }
 
     @Test fun pick_pausedFallback_usesNewestAndKeepsFirstOnTie() {
         val older = snapshot(pkg = "older").copy(paused = true, positionUpdatedAt = 100)

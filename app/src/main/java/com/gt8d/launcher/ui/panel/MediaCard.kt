@@ -40,10 +40,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.R
 import com.gt8d.launcher.media.NowPlaying
+import com.gt8d.launcher.media.lyricsQuery
+import com.gt8d.launcher.media.lyrics.LyricsState
+import com.gt8d.launcher.ui.home.rememberLyricIndex
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.layout.OneLineText
@@ -59,6 +64,8 @@ fun MediaCard(
     onAction: (MediaAction) -> Unit,
     onSeek: (Long) -> Unit,
     onLaunch: (String) -> Unit,
+    lyrics: LyricsState = LyricsState.Off,
+    lyricsEnabled: Boolean = false,
 ) {
     Surface(
         color = Palette.Panel,
@@ -74,6 +81,8 @@ fun MediaCard(
                 onAction = onAction,
                 onSeek = onSeek,
                 onLaunch = onLaunch,
+                lyrics = lyrics,
+                lyricsEnabled = lyricsEnabled,
             )
         }
     }
@@ -156,6 +165,8 @@ private fun ActiveMediaContent(
     onAction: (MediaAction) -> Unit,
     onSeek: (Long) -> Unit,
     onLaunch: (String) -> Unit,
+    lyrics: LyricsState,
+    lyricsEnabled: Boolean,
 ) {
     Column(
         modifier = Modifier
@@ -204,6 +215,26 @@ private fun ActiveMediaContent(
                         tag = "artist",
                         restartKey = restartKey,
                     )
+                }
+                if (lyricsEnabled && now.lyricsQuery != null) {
+                    val line = if (lyrics is LyricsState.Synced) {
+                        val index = rememberLyricIndex(now, lyrics.lines).value
+                        if (index >= 0) lyrics.lines[index].text else "♪"
+                    } else ""
+                    Box(Modifier.fillMaxWidth().testTag("media_lyric_line")
+                        .semantics(mergeDescendants = true) {}) {
+                        // Keep a body-text line even when there is no lyric to draw.
+                        Text("一", Modifier.clearAndSetSemantics {}, color = Color.Transparent,
+                            fontSize = Dims.BodyText, maxLines = 1, softWrap = false)
+                        Text(
+                            text = line,
+                            color = if (line == "♪") Palette.Muted else Color.White,
+                            fontSize = Dims.BodyText,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             if (now.hasFavorite) {

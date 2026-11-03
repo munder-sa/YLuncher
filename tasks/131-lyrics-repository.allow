@@ -1,0 +1,17 @@
+create app/src/main/java/com/gt8d/launcher/media/lyrics/LyricsRepository.kt
+create app/src/main/java/com/gt8d/launcher/ui/home/LyricIndex.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/LyricsRepositoryTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/LyricIndexTest.kt
+write app/src/main/java/com/gt8d/launcher/config/Model.kt
+write app/src/main/java/com/gt8d/launcher/media/NowPlaying.kt
+write app/src/main/java/com/gt8d/launcher/media/MediaWatcher.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/LrclibClient.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/LrclibClientTest.kt
+write app/src/test/java/com/gt8d/launcher/media/NowPlayingTest.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigCodecTest.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigRepositoryTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.*' --tests 'com.gt8d.launcher.config.*' --tests 'com.gt8d.launcher.ui.home.LyricIndexTest'
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.*'

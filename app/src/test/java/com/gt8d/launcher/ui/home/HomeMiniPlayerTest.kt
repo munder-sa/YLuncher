@@ -13,6 +13,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.gt8d.launcher.media.NowPlaying
+import com.gt8d.launcher.media.lyrics.LyricsState
+import com.gt8d.launcher.media.lyrics.LyricLine
+import androidx.compose.runtime.mutableStateOf
 import com.gt8d.launcher.ui.panel.AppInfo
 import com.gt8d.launcher.ui.panel.MediaAction
 import com.gt8d.launcher.ui.theme.LauncherTheme
@@ -35,18 +38,129 @@ class HomeMiniPlayerTest {
     private val idle = AppInfo("idle", "音楽アプリ", null, true)
     private fun host(now: NowPlaying? = song, height: Int = 800, idleApp: AppInfo = idle,
                      installed: Boolean = true, width: Int = 360, scale: Float = 1f,
-                     onAction: (MediaAction) -> Unit = {}, onSeek: (Long) -> Unit = {}, onLaunch: (String) -> Unit = {}) {
+                     onAction: (MediaAction) -> Unit = {}, onSeek: (Long) -> Unit = {}, onLaunch: (String) -> Unit = {},
+                     lyrics: LyricsState = LyricsState.Off, lyricsEnabled: Boolean = false,
+                     onToggleLyrics: () -> Unit = {}) {
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
                 HomeMiniPlayer(now, idleApp, 30000L, { AppInfo(it, "音楽", null, installed) },
-                    onAction, onSeek, onLaunch, Modifier.size(width.dp, height.dp))
+                    onAction, onSeek, onLaunch, Modifier.size(width.dp, height.dp), lyrics, lyricsEnabled, onToggleLyrics)
             }
         } }
         controller.visible()
     }
     @After fun cleanup() { if (::controller.isInitialized) controller.pause().stop().destroy() }
+    private val lyricSong = song.copy(title = "架空の曲", metaTitle = "架空の曲", playing = false, hasFavorite = false)
+    private val synced = LyricsState.Synced(listOf(LyricLine(0, "架空の一行"), LyricLine(1000, "架空の二行")))
+    private fun bounds(tag: String) = rule.onNodeWithTag(tag, true).getUnclippedBoundsInRoot()
+    private fun equalDp(expected: androidx.compose.ui.unit.Dp, actual: androidx.compose.ui.unit.Dp) =
+        assertEquals(expected.value, actual.value, 0.5f)
+    private fun lyricHost(height: Int = 694, favorite: Boolean = false, state: LyricsState = synced,
+                          enabled: Boolean = false, toggle: () -> Unit = {}) =
+        host(lyricSong.copy(hasFavorite = favorite), height = height, width = 409,
+            lyrics = state, lyricsEnabled = enabled, onToggleLyrics = toggle)
+    @Test fun toggleInAppRowWhenTall() {
+        lyricHost()
+        val box = bounds("player_lyrics_toggle_box")
+        val touch = bounds("player_lyrics_toggle")
+        equalDp(48.dp, box.right - box.left); equalDp(48.dp, box.bottom - box.top)
+        equalDp(72.dp, touch.right - touch.left); equalDp(72.dp, touch.bottom - touch.top)
+        equalDp(bounds("player_seek").right, box.right)
+        equalDp((bounds("player_app_row").top + bounds("player_app_row").bottom) / 2, (box.top + box.bottom) / 2)
+    }
+    @Test fun toggleInTitleRowWhenShort() {
+        lyricHost(height = 300)
+        rule.onNodeWithTag("player_app_row").assertDoesNotExist()
+        equalDp(bounds("player_seek").right, bounds("player_lyrics_toggle_box").right)
+        val row = bounds("player_title_row")
+        val box = bounds("player_lyrics_toggle_box")
+        equalDp((row.top + row.bottom) / 2, (box.top + box.bottom) / 2)
+    }
+    @Test fun toggleBesideFavorite() {
+        lyricHost(height = 300, favorite = true)
+        rule.onNodeWithTag("player_app_row").assertDoesNotExist()
+        equalDp(bounds("player_lyrics_toggle_box").right + 8.dp, bounds("player_fav").left)
+        equalDp(bounds("player_seek").right, bounds("player_fav").right)
+        assertTrue(bounds("player_lyrics_toggle").right <= bounds("player_fav").left)
+    }
+    @Test fun tapCallsOnToggle() {
+        var calls = 0
+        lyricHost(toggle = { calls++ })
+        rule.onNodeWithTag("player_lyrics_toggle").performClick()
+        assertEquals(1, calls)
+    }
+    @Test fun onShowsLyricsInsteadOfArt() {
+        lyricHost(enabled = true)
+        rule.onNodeWithTag("player_lyrics").assertIsDisplayed()
+        rule.onNodeWithTag("player_art").assertDoesNotExist()
+    }
+    @Test fun missingFallsBackToArt() {
+        listOf(LyricsState.Missing to "歌詞なし", LyricsState.Offline to "オフライン", LyricsState.Failed to "取得できません")
+            .forEachIndexed { i, (state, reason) ->
+                if (i > 0) controller.pause().stop().destroy()
+                lyricHost(state = state, enabled = true)
+                rule.onNodeWithTag("player_art").assertIsDisplayed()
+                rule.onNodeWithTag("player_lyrics").assertDoesNotExist()
+                rule.onNodeWithText(reason).assertIsDisplayed()
+            }
+    }
+    @Test fun unavailableToggleStillTurnsOff() {
+        var calls = 0
+        lyricHost(state = LyricsState.Missing, enabled = true, toggle = { calls++ })
+        rule.onNodeWithTag("player_lyrics_toggle")
+            .assertContentDescriptionEquals("歌詞なし。押すと歌詞表示をオフ").performClick()
+        assertEquals(1, calls)
+    }
+    @Test fun loadingShowsSearching() {
+        lyricHost(state = LyricsState.Loading, enabled = true)
+        rule.onNodeWithText("歌詞を探しています…").assertIsDisplayed()
+    }
+    @Test fun noMetaTitleHidesToggle() {
+        host(lyricSong.copy(metaTitle = null), width = 409)
+        rule.onNodeWithTag("player_lyrics_toggle").assertDoesNotExist()
+    }
+    @Test fun noArtistHidesToggle() {
+        host(lyricSong.copy(artist = null), width = 409)
+        rule.onNodeWithTag("player_lyrics_toggle").assertDoesNotExist()
+    }
+    @Test fun idleCardHasNoToggle() {
+        host(null, width = 409)
+        rule.onNodeWithTag("player_lyrics_toggle").assertDoesNotExist()
+    }
+    @Test fun lyricsHeightThreshold() {
+        val height = mutableStateOf(694)
+        controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        controller.get().setContent { LauncherTheme {
+            HomeMiniPlayer(lyricSong, idle, 0, { idle }, {}, {}, {}, Modifier.size(409.dp, height.value.dp), synced, true)
+        } }
+        controller.visible()
+        var lastHeight = 0.dp
+        for (h in 694 downTo 200) {
+            rule.runOnIdle { height.value = h }
+            if (rule.onAllNodesWithTag("player_lyrics").fetchSemanticsNodes().isEmpty()) {
+                equalDp(120.dp, lastHeight)
+                rule.onNodeWithTag("player_art").assertExists()
+                return
+            }
+            lastHeight = bounds("player_lyrics").bottom - bounds("player_lyrics").top
+            assertTrue(lastHeight >= 120.dp)
+        }
+        fail("歌詞の高さの境界が見つからない")
+    }
+    @Test fun spacingTierUnchangedByToggle() {
+        lyricHost()
+        val top = bounds("player_title_row").top
+        controller.pause().stop().destroy()
+        lyricHost(enabled = true)
+        equalDp(top, bounds("player_title_row").top)
+    }
+    @Test fun offShowsArtAndToggleOff() {
+        lyricHost()
+        rule.onNodeWithTag("player_art").assertIsDisplayed()
+        rule.onNodeWithTag("player_lyrics_toggle").assertIsOff().assertContentDescriptionEquals("歌詞を表示")
+    }
     @Test fun artTap_launchesPlayerApp() {
         val launches = mutableListOf<String>()
         host(onLaunch = { launches.add(it) })
