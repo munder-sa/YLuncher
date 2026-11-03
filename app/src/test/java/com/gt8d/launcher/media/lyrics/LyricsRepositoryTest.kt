@@ -1,6 +1,7 @@
 package com.gt8d.launcher.media.lyrics
 
 import android.graphics.Bitmap
+import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.media.lyricsQuery
 import kotlinx.coroutines.CompletableDeferred
@@ -182,17 +183,17 @@ class LyricsRepositoryTest {
         assertEquals(listOf(600L, 30_600L), f.times)
     }
 
-    @Test fun retriesThreeTimesAfterFirst() = runTest {
+    @Test fun retryIntervals10s30s60s() = runTest {
         val f = Fixture(this) { FetchResult(LyricsState.Offline) }
-        f.tick(90_600)
-        assertEquals(listOf(600L, 30_600L, 60_600L, 90_600L), f.times)
+        f.tick(100_600)
+        assertEquals(listOf(600L, 10_600L, 40_600L, 100_600L), f.times)
         assertEquals(LyricsState.Offline, f.repo.state.value)
         f.tick(200_000)
         assertEquals(4, f.calls.size)
 
         var count = 0
         val succeeds = Fixture(this) { FetchResult(if (++count == 3) synced else LyricsState.Offline) }
-        succeeds.tick(60_600)
+        succeeds.tick(40_600)
         assertEquals(3, succeeds.calls.size)
         assertEquals(synced, succeeds.repo.state.value)
         succeeds.tick(200_000)
@@ -201,15 +202,15 @@ class LyricsRepositoryTest {
 
     @Test fun retryCountResetsOnTrackChangeAndToggle() = runTest {
         val f = Fixture(this) { FetchResult(LyricsState.Failed) }
-        f.tick(90_600)
+        f.tick(100_600)
         assertEquals(4, f.calls.size)
         f.enabled.value = false
         runCurrent()
         f.enabled.value = true
-        f.tick(90_600)
+        f.tick(100_600)
         assertEquals(8, f.calls.size)
         f.now.value = song("B")
-        f.tick(90_600)
+        f.tick(100_600)
         assertEquals(12, f.calls.size)
         assertEquals(4, f.calls.count { it.title == "B" })
     }
@@ -218,7 +219,29 @@ class LyricsRepositoryTest {
         val f = Fixture(this) { throw IllegalStateException("Dummy failure") }
         f.tick(600)
         assertEquals(LyricsState.Failed, f.repo.state.value)
-        f.tick(30_000)
+        f.tick(10_000)
         assertEquals(2, f.calls.size)
+    }
+
+    @Test fun notCacheableResultIsNotStored() = runTest {
+        val plain = LyricsState.Plain("Dummy")
+        val f = Fixture(this) { FetchResult(plain, cacheable = false) }
+        f.tick(600)
+        assertEquals(plain, f.repo.state.value)
+        assertNull(f.cache.get(song().lyricsQuery!!))
+        f.now.value = song("B")
+        f.tick(600)
+        f.now.value = song()
+        f.tick(600)
+        assertEquals(listOf("A", "B", "A"), f.calls.map { it.title })
+        assertEquals(plain, f.repo.state.value)
+    }
+
+    @Test fun logsTrackAndCache() = runTest {
+        DiagLog.clearForTest()
+        val f = Fixture(this)
+        f.tick(600)
+        assertTrue(DiagLog.dump().any { it.contains("track title=A") })
+        assertTrue(DiagLog.dump().any { it.contains("cache miss") })
     }
 }

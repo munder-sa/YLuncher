@@ -1,6 +1,7 @@
 package com.gt8d.launcher.media.lyrics
 
 import com.gt8d.launcher.media.NowPlaying
+import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.media.lyricsQuery
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -44,7 +45,9 @@ class LyricsRepository(
                         return@collectLatest
                     }
                     val q = key.second
+                    DiagLog.d("Lyrics", "track title=${q.title} artist=${q.artist} album=${q.album} dur=${q.durationSec}")
                     val cached = withContext(io) { cache.get(q) }
+                    DiagLog.d("Lyrics", if (cached != null) "cache hit ${cached.javaClass.simpleName}" else "cache miss")
                     if (cached != null) {
                         mutableState.value = cached
                         return@collectLatest
@@ -65,11 +68,15 @@ class LyricsRepository(
                         mutableState.value = result.state
                         when (result.state) {
                             is LyricsState.Synced, is LyricsState.Plain, LyricsState.Missing -> {
-                                withContext(io) { cache.put(q, result.state) }
+                                if (result.cacheable) withContext(io) { cache.put(q, result.state) }
                                 return@collectLatest
                             }
                             LyricsState.Offline, LyricsState.Failed -> {
-                                if (attempt < 3) delay(30_000)
+                                if (attempt < 3) {
+                                    val wait = maxOf(listOf(10_000L, 30_000L, 60_000L)[attempt], nextAllowedAt - clock())
+                                    DiagLog.d("Lyrics", "retry in $wait attempt=${attempt + 1}")
+                                    delay(wait)
+                                } else DiagLog.d("Lyrics", "retry exhausted")
                             }
                             else -> return@collectLatest
                         }

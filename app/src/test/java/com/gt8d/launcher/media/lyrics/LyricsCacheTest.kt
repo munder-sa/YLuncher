@@ -35,11 +35,11 @@ class LyricsCacheTest {
         assertEquals(3, dir.listFiles()!!.size)
     }
 
-    @Test fun missingExpiresAfter7Days() {
+    @Test fun missingExpiresAfter1Day() {
         val dir = temporaryFolder.newFolder()
         val cache = LyricsCache(dir, { now })
         cache.put(query(), LyricsState.Missing)
-        now += 7 * 24 * 60 * 60 * 1000L - 1
+        now += 24 * 60 * 60 * 1000L - 1
         assertEquals(LyricsState.Missing, cache.get(query()))
         assertEquals(LyricsState.Missing, LyricsCache(dir, { now }).get(query()))
         now++

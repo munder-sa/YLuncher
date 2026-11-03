@@ -1,6 +1,7 @@
 package com.gt8d.launcher.media.lyrics
 
 import java.io.IOException
+import com.gt8d.launcher.diag.DiagLog
 import java.net.URLEncoder
 import org.junit.Assert.*
 import org.junit.Test
@@ -26,7 +27,7 @@ class LrclibClientTest {
         url = u
         headers = h
         response
-    }, "DummyLauncher/1")
+    }, "DummyLauncher/1", sleep = {}, jitter = { 0 })
 
     @Test fun buildsUrl() {
         client.fetch(LyricsQuery("ダミー ソング&1", "サンプル", "A", 210))
@@ -71,7 +72,7 @@ class LrclibClientTest {
 
     @Test fun serverErrorIsFailed() {
         response = HttpResponse(500, "{}", null)
-        assertEquals(FetchResult(LyricsState.Failed), client.fetch(query))
+        assertEquals(FetchResult(LyricsState.Failed, cacheable = false), client.fetch(query))
     }
 
     @Test fun badJsonIsFailed() {
@@ -122,7 +123,7 @@ class LrclibClientTest {
         calls.add(u)
         requestHeaders.add(h)
         if (u.startsWith("https://lrclib.net/api/search?")) search() else get
-    }, "DummyLauncher/1")
+    }, "DummyLauncher/1", sleep = {}, jitter = { 0 })
 
     private fun entry(text: String, duration: String = "302", album: String = "other") =
         """{"syncedLyrics":"[00:01.00]$text","duration":$duration,"albumName":"$album"}"""
@@ -160,9 +161,11 @@ class LrclibClientTest {
         assertEquals(1, calls.size)
     }
 
-    @Test fun searchNotUsedWhenServerError() {
-        assertEquals(FetchResult(LyricsState.Failed), searchClient(HttpResponse(503, "", null)).fetch(searchQuery))
-        assertEquals(1, calls.size)
+    @Test fun searchUsedWhenServerError() {
+        assertEquals(FetchResult(LyricsState.Failed, cacheable = false), searchClient(HttpResponse(503, "", null)).fetch(searchQuery))
+        assertEquals(4, calls.size)
+        assertEquals(3, calls.count { it.contains("/get?") })
+        assertTrue(calls.last().contains("/search?"))
     }
 
     @Test fun searchUrl() {
@@ -206,15 +209,15 @@ class LrclibClientTest {
     }
 
     @Test fun searchFailureFallsBackToGet() {
-        assertEquals(plainResult, searchClient { throw IOException("dummy") }.fetch(searchQuery))
+        assertEquals(plainResult.copy(cacheable = false), searchClient { throw IOException("dummy") }.fetch(searchQuery))
         for (response in listOf(HttpResponse(500, "", null), searchResponse("{}"), searchResponse("{broken"))) {
-            assertEquals(plainResult, searchClient { response }.fetch(searchQuery))
+            assertEquals(plainResult.copy(cacheable = false), searchClient { response }.fetch(searchQuery))
         }
     }
 
     @Test fun searchTooManyRequestsCarriesRetryAfter() {
         for (seconds in listOf(null, 0L, -1L, 30L)) {
-            assertEquals(plainResult.copy(retryAfterSec = if (seconds == 30L) 30L else 60L),
+            assertEquals(plainResult.copy(retryAfterSec = if (seconds == 30L) 30L else 60L, cacheable = false),
                 searchClient { HttpResponse(429, "", seconds) }.fetch(searchQuery))
         }
     }
@@ -224,5 +227,85 @@ class LrclibClientTest {
         assertEquals(synced("a"), searchClient {
             searchResponse("[$invalid,${entry("a", "304")},${entry("b", "304")}]")
         }.fetch(searchQuery))
+    }
+
+    private val waits = mutableListOf<Long>()
+    private fun scripted(vararg responses: HttpResponse) : LrclibClient {
+        var index = 0
+        return LrclibClient(HttpTransport { u, _ -> calls.add(u); responses[index++] }, "dummy", waits::add, { 17 })
+    }
+    private val unavailable = HttpResponse(503, "", null)
+    private val notFound = HttpResponse(404, "", null)
+
+    @Test fun retries503ThenSucceeds() {
+        assertEquals(synced("dummy"), scripted(unavailable, unavailable, searchResponse(entry("dummy"))).fetch(query))
+        assertEquals(3, calls.size)
+        assertEquals(1, calls.distinct().size)
+        assertEquals(listOf(1017L, 2017L), waits)
+    }
+
+    @Test fun retryAfterUsedFor503() {
+        assertEquals(synced("dummy"), scripted(unavailable.copy(retryAfterSec = 3), searchResponse(entry("dummy"))).fetch(query))
+        assertEquals(listOf(3000L), waits)
+    }
+
+    @Test fun getServerErrorTriesSearch() {
+        assertEquals(synced("dummy"), scripted(unavailable, unavailable, unavailable, searchResponse("[${entry("dummy")}]")).fetch(searchQuery))
+        assertEquals(4, calls.size)
+        assertTrue(calls.last().contains("/search?"))
+    }
+
+    @Test fun getServerErrorAndSearchFails() {
+        assertEquals(FetchResult(LyricsState.Failed, cacheable = false),
+            scripted(unavailable, unavailable, unavailable, unavailable, unavailable, unavailable).fetch(query))
+        assertEquals(6, calls.size)
+        assertEquals(2, calls.distinct().size)
+        assertEquals(listOf(1017L, 2017L, 300L, 1017L, 2017L), waits)
+    }
+
+    @Test fun searchFailureAfterNotFoundIsFailedNotCached() {
+        assertEquals(FetchResult(LyricsState.Failed, cacheable = false),
+            searchClient(notFound) { throw IOException("dummy") }.fetch(query))
+        assertEquals(2, calls.size)
+    }
+
+    @Test fun searchFailureAfterPlainKeepsPlainNotCached() {
+        assertEquals(plainResult.copy(cacheable = false), scripted(plainResponse, unavailable, unavailable, unavailable).fetch(query))
+        assertEquals(4, calls.size)
+    }
+
+    @Test fun plainCandidateUsedWhenNoSynced() {
+        assertEquals(FetchResult(LyricsState.Plain("dummy")), scripted(notFound,
+            searchResponse("""[{"plainLyrics":" dummy ","duration":302}]""")).fetch(searchQuery))
+    }
+
+    @Test fun noCandidatesIsMissingCached() {
+        assertEquals(FetchResult(LyricsState.Missing), scripted(notFound, searchResponse("[]")).fetch(query))
+    }
+
+    @Test fun waitsBetweenGetAndSearch() {
+        val client = LrclibClient(HttpTransport { u, _ ->
+            if (u.contains("/search?")) {
+                assertEquals(listOf(300L), waits)
+                searchResponse("[]")
+            } else notFound
+        }, "dummy", waits::add)
+        client.fetch(query)
+        assertEquals(listOf(300L), waits)
+    }
+
+    @Test fun ioExceptionNotRetried() {
+        var count = 0
+        val client = LrclibClient(HttpTransport { _, _ -> count++; throw IOException("dummy") }, "dummy", waits::add)
+        assertEquals(FetchResult(LyricsState.Offline), client.fetch(query))
+        assertEquals(1, count)
+        assertTrue(waits.isEmpty())
+    }
+
+    @Test fun logsRequests() {
+        DiagLog.clearForTest()
+        scripted(notFound, searchResponse("[]")).fetch(query)
+        assertTrue(DiagLog.dump().any { it.contains("get try=1 code=404") })
+        assertTrue(DiagLog.dump().any { it.contains("result Missing cacheable=true") })
     }
 }

@@ -9,6 +9,7 @@ import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.gt8d.launcher.diag.DiagLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +29,7 @@ object MediaWatcher {
     private val controllerCallbacks = mutableMapOf<MediaController, MediaController.Callback>()
     private var selectedController: MediaController? = null
     private var lastActivePkg: String? = null
+    private val lastMetadataTitles = mutableMapOf<String, String?>()
     private var listenerRegistered = false
 
     private val sessionsChangedListener =
@@ -204,6 +206,10 @@ object MediaWatcher {
         val state = controller.playbackState
 
         val title = metadata?.getText(MediaMetadata.METADATA_KEY_TITLE)?.toString()
+        if (!lastMetadataTitles.containsKey(pkg) || lastMetadataTitles[pkg] != title) {
+            lastMetadataTitles[pkg] = title
+            DiagLog.d("Lyrics", "metadata keys pkg=$pkg ${metadata?.keySet()?.sorted()?.joinToString(",").orEmpty()}")
+        }
         val artist = metadata?.getText(MediaMetadata.METADATA_KEY_ARTIST)?.toString()
         val artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)

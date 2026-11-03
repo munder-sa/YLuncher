@@ -5,6 +5,8 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import com.gt8d.launcher.diag.DiagLog
+import kotlin.random.Random
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -47,24 +49,52 @@ class UrlConnectionTransport : HttpTransport {
     }
 }
 
-data class FetchResult(val state: LyricsState, val retryAfterSec: Long? = null)
+data class FetchResult(val state: LyricsState, val retryAfterSec: Long? = null, val cacheable: Boolean = true)
 
-class LrclibClient(private val transport: HttpTransport, private val userAgent: String) {
+class LrclibClient(
+    private val transport: HttpTransport,
+    private val userAgent: String,
+    private val sleep: (Long) -> Unit = { Thread.sleep(it) },
+    private val jitter: () -> Long = { Random.nextLong(0, 301) },
+) {
     private fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     fun fetch(q: LyricsQuery): FetchResult {
+        val result = fetchResult(q)
+        DiagLog.d("Lyrics", "result ${result.state.javaClass.simpleName} cacheable=${result.cacheable}")
+        return result
+    }
+
+    private fun request(kind: String, url: String): HttpResponse {
+        for (attempt in 1..3) {
+            val started = System.nanoTime()
+            val response = try {
+                transport.get(url, mapOf("User-Agent" to userAgent, "Accept" to "application/json"))
+            } catch (e: IOException) {
+                DiagLog.d("Lyrics", "$kind try=$attempt code=${e.javaClass.simpleName} ms=${(System.nanoTime() - started) / 1_000_000} retryAfter=null")
+                throw e
+            }
+            DiagLog.d("Lyrics", "$kind try=$attempt code=${response.code} ms=${(System.nanoTime() - started) / 1_000_000} retryAfter=${response.retryAfterSec}")
+            if (response.code !in setOf(500, 502, 503, 504) || attempt == 3) return response
+            sleep(response.retryAfterSec?.coerceIn(1L, 10L)?.times(1000L) ?: (attempt * 1000L + jitter()))
+        }
+        error("unreachable")
+    }
+
+    private fun fetchResult(q: LyricsQuery): FetchResult {
         val url = buildString {
             append("https://lrclib.net/api/get?track_name=${encode(q.title)}&artist_name=${encode(q.artist)}")
             q.album?.let { append("&album_name=${encode(it)}") }
             q.durationSec?.let { append("&duration=$it") }
         }
         val response = try {
-            transport.get(url, mapOf("User-Agent" to userAgent, "Accept" to "application/json"))
+            request("get", url)
         } catch (_: IOException) {
             return FetchResult(LyricsState.Offline)
         }
         if (response.code == 429) return FetchResult(LyricsState.Failed, response.retryAfterSec?.takeIf { it > 0 } ?: 60L)
         if (response.code == 404 || response.code == 400) return search(q, FetchResult(LyricsState.Missing))
+        if (response.code in 500..599) return search(q, FetchResult(LyricsState.Failed, cacheable = false))
         if (response.tooLarge || response.code != 200) return FetchResult(LyricsState.Failed)
         val json = try {
             Json.parseToJsonElement(response.body) as? JsonObject
@@ -84,38 +114,52 @@ class LrclibClient(private val transport: HttpTransport, private val userAgent: 
     }
 
     private fun search(q: LyricsQuery, fallback: FetchResult): FetchResult {
+        sleep(300)
+        val failed = FetchResult(
+            if (fallback.state is LyricsState.Plain) fallback.state else LyricsState.Failed,
+            cacheable = false,
+        )
+        fun failure(retryAfterSec: Long? = null): FetchResult {
+            DiagLog.d("Lyrics", "search candidates synced=0 plain=0 picked=none diff=null")
+            return failed.copy(retryAfterSec = retryAfterSec)
+        }
         val response = try {
-            transport.get(
+            request("search",
                 "https://lrclib.net/api/search?track_name=${encode(q.title)}&artist_name=${encode(q.artist)}",
-                mapOf("User-Agent" to userAgent, "Accept" to "application/json")
             )
         } catch (_: IOException) {
-            return fallback
+            return failure()
         }
-        if (response.code == 429) return fallback.copy(retryAfterSec = response.retryAfterSec?.takeIf { it > 0 } ?: 60L)
-        if (response.tooLarge || response.code != 200) return fallback
+        if (response.code == 429) return failure(response.retryAfterSec?.takeIf { it > 0 } ?: 60L)
+        if (response.tooLarge || response.code != 200) return failure()
         val entries = try {
             Json.parseToJsonElement(response.body) as? JsonArray
         } catch (_: IllegalArgumentException) {
             null
-        } ?: return fallback
-        data class Candidate(val state: LyricsState.Synced, val sameAlbum: Boolean, val difference: Double)
+        } ?: return failure()
+        data class Candidate(val state: LyricsState, val sameAlbum: Boolean, val difference: Double)
         val candidates = entries.mapNotNull { element ->
             val entry = element as? JsonObject ?: return@mapNotNull null
             if (entry["instrumental"] == JsonPrimitive(true)) return@mapNotNull null
-            val synced = (entry["syncedLyrics"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-                ?: return@mapNotNull null
-            val lines = LrcParser.parse(synced)
-            if (lines.isEmpty()) return@mapNotNull null
+            fun string(name: String) = (entry[name] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            val lines = string("syncedLyrics")?.let { LrcParser.parse(it) }.orEmpty()
+            val plain = string("plainLyrics")?.trim()?.takeIf { it.isNotEmpty() }
+            val state = if (lines.isNotEmpty()) LyricsState.Synced(lines)
+                else plain?.let { LyricsState.Plain(it) } ?: return@mapNotNull null
             val difference = q.durationSec?.let { duration ->
                 val seconds = (entry["duration"] as? JsonPrimitive)?.takeIf { !it.isString }
                     ?.content?.toDoubleOrNull() ?: return@mapNotNull null
                 kotlin.math.abs(seconds - duration).takeIf { it <= 2.0 } ?: return@mapNotNull null
             } ?: 0.0
             val album = (entry["albumName"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-            Candidate(LyricsState.Synced(lines), q.album != null && album?.trim()?.lowercase() == q.album.trim().lowercase(), difference)
+            Candidate(state, q.album != null && album?.trim()?.lowercase() == q.album.trim().lowercase(), difference)
         }
-        val best = candidates.sortedWith(compareByDescending<Candidate> { it.sameAlbum }.thenBy { it.difference }).firstOrNull()
+        val synced = candidates.filter { it.state is LyricsState.Synced }
+        val plain = candidates.filter { it.state is LyricsState.Plain }
+        val eligible = if (synced.isNotEmpty()) synced else if (fallback.state == LyricsState.Missing) plain else emptyList()
+        val best = eligible.sortedWith(compareByDescending<Candidate> { it.sameAlbum }.thenBy { it.difference }).firstOrNull()
+        val picked = when (best?.state) { is LyricsState.Synced -> "synced"; is LyricsState.Plain -> "plain"; else -> "none" }
+        DiagLog.d("Lyrics", "search candidates synced=${synced.size} plain=${plain.size} picked=$picked diff=${best?.difference}")
         return best?.let { FetchResult(it.state) } ?: fallback
     }
 }

@@ -23,7 +23,7 @@ class LyricsCache(private val dir: File, private val clock: () -> Long, private 
                     LyricLine(number(line[0]), string(line[1]))
                 })
                 "plain" -> LyricsState.Plain(string(json["text"]))
-                "missing" -> if (clock() - savedAt >= 7 * 24 * 60 * 60 * 1000L) {
+                "missing" -> if (clock() - savedAt >= 24 * 60 * 60 * 1000L) {
                     file.delete()
                     null
                 } else LyricsState.Missing
