@@ -55,7 +55,8 @@ class ArtworkBackgroundTest {
         holder.update(this, song(art)); runCurrent()
         art.eraseColor(android.graphics.Color.BLUE)
         holder.update(this, song(art)); runCurrent()
-        assertEquals(2, calls)
+        assertEquals(1, calls)
+        assertEquals(red, holder.colors.value)
     }
 
     @Test fun failureIsRetained() = runTest {
@@ -63,7 +64,7 @@ class ArtworkBackgroundTest {
         val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), { calls++; null })
         val now = song(bitmap())
         holder.update(this, now); runCurrent()
-        holder.update(this, now.copy(title = "new")); runCurrent()
+        holder.update(this, now.copy(title = "new", artwork = bitmap())); runCurrent()
         assertNull(holder.colors.value)
         assertEquals(1, calls)
     }
@@ -90,7 +91,7 @@ class ArtworkBackgroundTest {
             pending.add(result)
             withContext(NonCancellable) { result.await() }
         })
-        val a = song(bitmap()); val b = song(bitmap())
+        val a = song(bitmap()); val b = song(bitmap()).copy(metaTitle = "other")
         holder.update(this, a); runCurrent()
         holder.update(this, b); runCurrent()
         holder.update(this, a); runCurrent()
@@ -108,7 +109,7 @@ class ArtworkBackgroundTest {
         holder.update(this, now); runCurrent()
         holder.update(this, now.copy(metaTitle = "next", album = "next")); runCurrent()
         pending.complete(red); runCurrent()
-        assertEquals(1, calls)
+        assertEquals(2, calls)
         assertEquals(red, holder.colorsFor(now.copy(metaTitle = "next", album = "next")))
         assertNull(holder.colorsFor(now))
     }
@@ -123,7 +124,7 @@ class ArtworkBackgroundTest {
     @Test fun newArtworkUsesPanelWhileLoading() = runTest {
         val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), { red })
         holder.update(this, song(bitmap())); runCurrent()
-        holder.update(this, song(bitmap()))
+        holder.update(this, song(bitmap()).copy(metaTitle = "next"))
         assertNull(holder.colors.value)
         runCurrent()
         assertEquals(red, holder.colors.value)
@@ -141,6 +142,60 @@ class ArtworkBackgroundTest {
         pending.complete(red); runCurrent()
         assertTrue(cancelled)
         assertNull(holder.colors.value)
+    }
+
+    @Test fun sameTrackNewBitmapInstanceDoesNotRestart() = runTest {
+        var calls = 0
+        val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), { calls++; red })
+        val now = song(bitmap())
+        holder.update(this, now); runCurrent()
+        assertEquals(red, holder.colorsFor(now))
+        repeat(5) {
+            advanceTimeBy(1000)
+            val updated = now.copy(artwork = bitmap())
+            assertNotSame(now.artwork, updated.artwork)
+            holder.update(this, updated)
+            assertEquals(red, holder.colorsFor(updated))
+            runCurrent()
+            assertEquals(1, calls)
+            assertEquals(red, holder.colorsFor(updated))
+        }
+    }
+
+    @Test fun differentTrackRestartsExtraction() = runTest {
+        var calls = 0
+        val pending = CompletableDeferred<ArtworkColors?>()
+        val blue = ArtworkColors(0xff181838.toInt(), 0xff0c0c1c.toInt())
+        val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), {
+            calls++
+            if (calls == 1) red else pending.await()
+        })
+        val now = song(bitmap())
+        holder.update(this, now); runCurrent()
+        assertEquals(red, holder.colorsFor(now))
+        val next = now.copy(metaTitle = "next")
+        holder.update(this, next)
+        assertNull(holder.colorsFor(next))
+        runCurrent()
+        assertEquals(2, calls)
+        assertNull(holder.colorsFor(next))
+        pending.complete(blue); runCurrent()
+        assertEquals(blue, holder.colorsFor(next))
+        assertNull(holder.colorsFor(now))
+    }
+
+    @Test fun sizeChangeRestartsExtraction() = runTest {
+        var calls = 0
+        val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), { calls++; red })
+        val now = song(bitmap())
+        holder.update(this, now); runCurrent()
+        val next = now.copy(artwork = Bitmap.createBitmap(8, 16, Bitmap.Config.ARGB_8888))
+        holder.update(this, next)
+        assertNull(holder.colorsFor(next))
+        runCurrent()
+        assertEquals(2, calls)
+        assertEquals(red, holder.colorsFor(next))
+        assertNull(holder.colorsFor(now))
     }
 
     @Test fun unreadableBitmapFallsBack() {

@@ -1,6 +1,7 @@
 package com.gt8d.launcher.ui.home
 
 import android.graphics.Bitmap
+import android.os.SystemClock
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -8,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import com.gt8d.launcher.media.NowPlaying
+import com.gt8d.launcher.diag.DiagLog
 import com.gt8d.launcher.ui.theme.ArtworkColors
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.theme.extractArtworkColors
@@ -43,15 +45,11 @@ internal fun sampleArtworkColors(bitmap: Bitmap): ArtworkColors? {
     }
 }
 
-private class ImageKey(val bitmap: Bitmap, val generation: Int) {
-    override fun equals(other: Any?) = other is ImageKey && bitmap === other.bitmap && generation == other.generation
-    override fun hashCode() = 31 * System.identityHashCode(bitmap) + generation
-}
+private data class ImageKey(val track: TrackKey, val width: Int, val height: Int)
 private fun NowPlaying?.imageKey(): ImageKey? = this?.artwork?.let {
-    ImageKey(it, it.generationId)
+    ImageKey(TrackKey(pkg, metaTitle, artist, album), it.width, it.height)
 }
-private data class TrackKey(val pkg: String, val title: String?, val artist: String?, val album: String?, val duration: Long?)
-private fun NowPlaying?.trackKey() = this?.let { TrackKey(it.pkg, it.metaTitle, it.artist, it.album, it.durationMs) }
+private data class TrackKey(val pkg: String, val title: String?, val artist: String?, val album: String?)
 
 /** One current image, including failed results; clients share both pending work and completed colors. */
 internal class ArtworkBackgroundHolder(
@@ -62,12 +60,11 @@ internal class ArtworkBackgroundHolder(
     val colors = MutableStateFlow<ArtworkColors?>(null)
     private val clients = linkedMapOf<Any, NowPlaying?>()
     private var image: ImageKey? = null
-    private var track: TrackKey? = null
     private var generation = 0L
     private var job: Job? = null
     private var completed = false
     private var retained: ArtworkColors? = null
-    private class Request(val image: ImageKey, var track: TrackKey?, var generation: Long)
+    private class Request(var generation: Long)
     private var request: Request? = null
 
     fun update(client: Any, now: NowPlaying?) {
@@ -89,7 +86,7 @@ internal class ArtworkBackgroundHolder(
     }
 
     fun colorsFor(now: NowPlaying?): ArtworkColors? =
-        if (now.imageKey() == image && now.trackKey() == track) colors.value else null
+        if (now.imageKey() == image) colors.value else null
 
     fun imageColorsFor(now: NowPlaying?): ArtworkColors? =
         if (now.imageKey() == image) colors.value else null
@@ -97,7 +94,6 @@ internal class ArtworkBackgroundHolder(
     private fun select(now: NowPlaying?) {
         generation++
         val next = now.imageKey()
-        track = now.trackKey()
         if (next != image) {
             job?.cancel()
             job = null
@@ -113,24 +109,36 @@ internal class ArtworkBackgroundHolder(
             return
         }
         request?.let {
-            it.track = track
             it.generation = generation
             return
         }
-        val target = Request(next, track, generation)
+        val bitmap = now?.artwork ?: return
+        val target = Request(generation)
         request = target
         job = scope.launch {
+            val started = SystemClock.elapsedRealtime()
+            DiagLog.d("Artwork", "extract start key=${next.track.title}/${next.width}x${next.height} config=${bitmap.config}")
+            var failure = "no valid pixels or unreadable bitmap"
             val result = try {
-                withContext(dispatcher) { extract(next.bitmap) }
+                withContext(dispatcher) { extract(bitmap) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: RuntimeException) {
+            } catch (error: RuntimeException) {
+                failure = "${error.javaClass.simpleName}: ${error.message}"
                 null
-            } catch (_: OutOfMemoryError) {
+            } catch (error: OutOfMemoryError) {
+                failure = "${error.javaClass.simpleName}: ${error.message}"
                 null
             }
+            if (result == null) {
+                DiagLog.d("Artwork", "extract failed $failure")
+            } else {
+                val light = "#%06X".format(result.light and 0xffffff)
+                val dark = "#%06X".format(result.dark and 0xffffff)
+                DiagLog.d("Artwork", "extract done $light/$dark ms=${SystemClock.elapsedRealtime() - started}")
+            }
             if (request === target && target.generation == generation && image == next &&
-                next.bitmap.generationId == next.generation && track == target.track && clients.isNotEmpty()) {
+                clients.isNotEmpty()) {
                 retained = result
                 completed = true
                 request = null
