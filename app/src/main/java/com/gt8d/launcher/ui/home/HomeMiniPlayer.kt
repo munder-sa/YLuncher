@@ -41,7 +41,7 @@ import com.gt8d.launcher.ui.theme.Dims
 fun HomeMiniPlayer(
     now: NowPlaying?,
     idleApp: AppInfo?,
-    positionMs: Long,
+    position: () -> Long,
     appInfo: (String) -> AppInfo,
     onAction: (MediaAction) -> Unit,
     onSeek: (Long) -> Unit,
@@ -192,7 +192,7 @@ fun HomeMiniPlayer(
                         }
                     }
                     Spacer(Modifier.height(gaps.beforeSeek))
-                    SeekBar(now.durationMs, positionMs, onSeek, tag = "player_seek", showTimes = showDetails, timesTag = "player_times")
+                    SeekBar(now.durationMs, position, onSeek, tag = "player_seek", showTimes = showDetails, timesTag = "player_times")
                     Spacer(Modifier.height(gaps.beforeControls))
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),

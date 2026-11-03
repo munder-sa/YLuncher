@@ -19,8 +19,8 @@ android {
         applicationId = "com.gt8d.launcher.panel"
         minSdk = 35
         targetSdk = 35
-        versionCode = 25
-        versionName = "1.7.0"
+        versionCode = 30
+        versionName = "1.7.1"
     }
 
     signingConfigs {

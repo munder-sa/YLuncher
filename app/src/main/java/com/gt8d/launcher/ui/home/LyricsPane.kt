@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.semantics
@@ -37,6 +38,7 @@ import com.gt8d.launcher.media.lyrics.LyricLine
 import com.gt8d.launcher.ui.theme.Palette
 import kotlin.math.roundToInt
 import kotlin.math.abs
+import kotlinx.coroutines.delay
 
 private fun lineEnd(lines: List<LyricLine>, index: Int, durationMs: Long?): Long {
     val start = lines[index].timeMs
@@ -67,10 +69,12 @@ internal fun interludeLitDots(startMs: Long, endMs: Long, positionMs: Long): Int
 
 @Composable
 private fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position: State<Long>, emphasis: State<Float>) {
+    val detailSemantics = LocalLyricsDetailSemantics.current
     val retained = remember { object { var lit = 0 } }
-    Box(Modifier.fillMaxWidth().then(if (current) Modifier.testTag("player_lyrics_interlude") else Modifier),
+    Box(Modifier.fillMaxWidth().then(if (detailSemantics && current) Modifier.testTag("player_lyrics_interlude") else Modifier),
         contentAlignment = Alignment.CenterStart) {
-        Text(" ", color = Color.Transparent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(" ", if (detailSemantics) Modifier else Modifier.clearAndSetSemantics {},
+            color = Color.Transparent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Canvas(Modifier.size(52.dp, 12.dp)) {
             val lit = interludeLitDots(startMs, endMs, position.value)
             if (current) retained.lit = lit
@@ -90,13 +94,23 @@ internal fun lyricLineAlpha(distance: Int): Float = when (distance) {
 }
 
 internal val LyricAlphaKey = SemanticsPropertyKey<Float>("LyricAlpha")
+internal class LyricDrawProbe { var alpha = 0f }
+internal val LyricDrawProbeKey = SemanticsPropertyKey<LyricDrawProbe>("LyricDrawProbe")
+internal class LyricsPaneObserver {
+    var compositions = 0
+    var measures = 0
+    var placements = 0
+    var frameUpdates = 0
+}
+internal val LocalLyricsPaneObserver = staticCompositionLocalOf<LyricsPaneObserver?> { null }
+internal val LocalLyricsDetailSemantics = staticCompositionLocalOf { false }
 
 @Composable
 private fun lyricAnimatedValue(target: Float, animate: Boolean, index: Int): State<Float> {
     val value = remember { Animatable(target) }
     LaunchedEffect(target, index) {
         withFrameNanos { }
-        if (animate) value.animateTo(target, tween(300, easing = FastOutSlowInEasing))
+        if (animate) value.animateTo(target, tween(500, easing = FastOutSlowInEasing))
         else value.snapTo(target)
     }
     return if (animate) value.asState() else rememberUpdatedState(target)
@@ -104,16 +118,18 @@ private fun lyricAnimatedValue(target: Float, animate: Boolean, index: Int): Sta
 
 @Composable
 private fun KaraokeLine(text: String, current: Boolean, alpha: State<Float>, hasWords: Boolean, fill: State<Float>,
-                        emphasis: State<Float>) {
+                        emphasis: State<Float>, probe: LyricDrawProbe) {
+    val detailSemantics = LocalLyricsDetailSemantics.current
     val textLayout = remember(text) { object { var result: TextLayoutResult? = null } }
     val retained = remember(text) { object { var fill = 0f } }
     Box(Modifier.fillMaxWidth()) {
-        Text(text, Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha.value }
-            .then(if (current) Modifier.testTag("player_lyrics_current") else Modifier),
-            color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+        Text(text, Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha.value; probe.alpha = this.alpha }
+            .then(if (!detailSemantics) Modifier.clearAndSetSemantics {}
+                else if (current) Modifier.testTag("player_lyrics_current") else Modifier),
+            color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (hasWords && (current || emphasis.value > 0f)) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics {
-            testTag = "player_lyrics_fill"
+        if (hasWords) Text(text, Modifier.fillMaxWidth().clearAndSetSemantics {
+            if (detailSemantics) testTag = "player_lyrics_fill"
         }
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; this.alpha = if (current) 1f else emphasis.value }
             .drawWithContent {
@@ -141,7 +157,7 @@ private fun KaraokeLine(text: String, current: Boolean, alpha: State<Float>, has
                             Size(size.width, size.height - bottom), blendMode = BlendMode.Clear)
                     }
                 }
-            }, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+            }, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis,
             onTextLayout = { textLayout.result = it })
     }
@@ -150,6 +166,9 @@ private fun KaraokeLine(text: String, current: Boolean, alpha: State<Float>, has
 @Composable
 fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifier,
                clock: () -> Long = { SystemClock.elapsedRealtime() }) {
+    val observer = LocalLyricsPaneObserver.current
+    val detailSemantics = LocalLyricsDetailSemantics.current
+    SideEffect { observer?.let { it.compositions++ } }
     val fade = if (state is LyricsState.Synced || state is LyricsState.Plain) {
         Modifier.graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
             drawContent()
@@ -158,26 +177,42 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 (size.height - edge) / size.height to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
         }
     } else Modifier
-    Box(modifier.testTag("player_lyrics").clipToBounds().then(fade)) {
+    val lyricsSemantics = if (state is LyricsState.Synced && !detailSemantics) {
+        Modifier.clearAndSetSemantics {
+            contentDescription = "歌詞"
+            testTag = "player_lyrics"
+        }
+    } else Modifier.testTag("player_lyrics")
+    Box(modifier.then(lyricsSemantics).clipToBounds().then(fade)) {
         when (state) {
             is LyricsState.Synced -> {
                 val track = now.pkg to now.lyricsQuery
                 val index by key(track, state.lines) { rememberLyricIndex(now, state.lines, clock) }
                 val fill = remember(track, state.lines) { mutableFloatStateOf(0f) }
                 val position = remember(now, track, state.lines) { mutableLongStateOf(now.positionAt(clock())) }
-                LaunchedEffect(now, state.lines, index) {
+                val intro by produceState(false, now, state.lines, index) {
+                    do {
+                        value = index < 0 && state.lines.firstOrNull()?.let {
+                            it.timeMs.toDouble() - now.positionAt(clock()) >= 5000
+                        } == true
+                        if (!now.playing || index >= 0) break
+                        delay(200)
+                    } while (true)
+                }
+                val needsFrames = intro || state.lines.getOrNull(index)?.let {
+                    it.words.isNotEmpty() || it.text == "♪"
+                } == true
+                LaunchedEffect(now, state.lines, index, needsFrames) {
                     position.longValue = now.positionAt(clock())
                     fill.floatValue = wordFillPosition(state.lines, index, position.longValue, now.durationMs)
-                    while (now.playing) {
+                    while (now.playing && needsFrames) {
                         withFrameMillis {
+                            observer?.let { it.frameUpdates++ }
                             position.longValue = now.positionAt(clock())
                             fill.floatValue = wordFillPosition(state.lines, index, position.longValue, now.durationMs)
                         }
                     }
                 }
-                val intro = index < 0 && state.lines.firstOrNull()?.let {
-                    it.timeMs.toDouble() - position.longValue >= 5000
-                } == true
                 val startsBeforeFirst = remember(track, state.lines) {
                     state.lines.firstOrNull()?.let { now.positionAt(clock()) < it.timeMs } ?: true
                 }
@@ -198,29 +233,35 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 LaunchedEffect(index, track, state.lines) {
                     withFrameNanos { }
                     val destination = measured.target ?: return@LaunchedEffect
-                    if (measured.animate) offset.animateTo(destination.second, tween(300)) else offset.snapTo(destination.second)
+                    if (measured.animate) offset.animateTo(destination.second, tween(800, easing = FastOutSlowInEasing)) else offset.snapTo(destination.second)
                 }
                 Layout(content = {
                     state.lines.forEachIndexed { i, line ->
                         key(track, state.lines, i) {
                             val current = i == index
                             val dotsCurrent = current || (i == 0 && intro)
-                            val alpha = lyricAnimatedValue(if (current && line.words.isEmpty()) 1f
-                                else lyricLineAlpha(abs(i - index.coerceAtLeast(0))), animateAlpha, index)
+                            val targetAlpha = if (current && line.words.isEmpty()) 1f
+                                else lyricLineAlpha(abs(i - index.coerceAtLeast(0)))
+                            val alpha = lyricAnimatedValue(targetAlpha, animateAlpha, index)
                             val emphasis = lyricAnimatedValue(if (dotsCurrent) 1f else 0f, animateAlpha, index)
-                            Box(Modifier.testTag("player_lyrics_line_$i").semantics { this[LyricAlphaKey] = alpha.value }) {
+                            val probe = remember { LyricDrawProbe() }
+                            Box(if (detailSemantics) Modifier.testTag("player_lyrics_line_$i").semantics {
+                                this[LyricAlphaKey] = targetAlpha
+                                this[LyricDrawProbeKey] = probe
+                            } else Modifier) {
                                 if (line.text == "♪" || (i == 0 && intro)) {
                                     InterludeDots(dotsCurrent,
                                         if (intro && i == 0) 0 else line.timeMs,
                                         if (intro && i == 0) line.timeMs else lineEnd(state.lines, i, now.durationMs), position, emphasis)
                                 } else {
                                     KaraokeLine(line.text, current, alpha,
-                                        line.words.isNotEmpty(), fill, emphasis)
+                                        line.words.isNotEmpty(), fill, emphasis, probe)
                                 }
                             }
                         }
                     }
                 }, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
+                    observer?.let { it.measures++ }
                     val rows = measurables.map { it.measure(Constraints(maxWidth = constraints.maxWidth)) }
                     val gap = 16.dp.roundToPx()
                     val selected = index.coerceAtLeast(0)
@@ -232,10 +273,19 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                     }
                     if (index >= 0) measured.resolved = true
                     measured.target = index to destination
+                    val animate = measured.animate
                     layout(constraints.maxWidth, constraints.maxHeight) {
+                        observer?.let { it.placements++ }
                         // Jumps use the measured destination in this frame, without waiting for an effect.
-                        var y = (if (measured.animate) offset.value else destination).roundToInt()
-                        rows.forEach { row -> row.placeRelative(0, y); y += row.height + gap }
+                        var y = destination.roundToInt()
+                        rows.forEach { row ->
+                            row.placeRelativeWithLayer(0, y) {
+                                // Read on every layer update, including after a snap.
+                                val animatedOffset = offset.value
+                                translationY = if (animate) animatedOffset - destination else 0f
+                            }
+                            y += row.height + gap
+                        }
                     }
                 }
             }

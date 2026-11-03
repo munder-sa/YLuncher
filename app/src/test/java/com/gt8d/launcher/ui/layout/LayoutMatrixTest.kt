@@ -64,7 +64,7 @@ class LayoutMatrixTest(
         WindowCompat.setDecorFitsSystemWindows(controller.get().window, false)
         val state = PanelState(
             if (playing) NowPlaying("music", "曲名", "歌手", null, 180000L, true, true) else null,
-            AppInfo("idle", "Music", null, true), 0L,
+            AppInfo("idle", "Music", null, true), { 0L },
             (1..10).map { AppInfo("p$it", "$it", null, true) }, emptyList(),
             DockStatus(true, true), true, true, view = view,
             placement = if (leftPlacement) com.gt8d.launcher.split.PanelPlacement.Left else null)
@@ -126,7 +126,7 @@ class LayoutMatrixTest(
         val apps = (1..5).map { AppInfo("app$it", "長いアプリケーション名 $it", null, true) }
         var state by mutableStateOf(PanelState(
             if (playing) NowPlaying("music", "長い曲名のテスト", "長いアーティスト名", null, 180000L, true, true) else null,
-            AppInfo("idle", "Apple Music", null, true), 10000L, apps, apps.take(4),
+            AppInfo("idle", "Apple Music", null, true), { 10000L }, apps, apps.take(4),
             DockStatus(true, true), true, true, view = view, sets = Defaults.build(emptySet()).screenSets,
             placement = if (leftPlacement) com.gt8d.launcher.split.PanelPlacement.Left else null,
         ))
@@ -340,7 +340,7 @@ class HomeAppLayoutMatrixTest {
         WindowCompat.setDecorFitsSystemWindows(controller.get().window, false)
         var wide by mutableStateOf(true)
         val apps = (1..4).map { AppInfo("a$it", "App $it", null, true) }
-        val state = PanelState(null, null, 0L, emptyList(), apps, DockStatus(true, null), false, false,
+        val state = PanelState(null, null, { 0L }, emptyList(), apps, DockStatus(true, null), false, false,
             settingsApp = AppInfo("settings", "設定", null, true))
         val actions = PanelActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
         try {
@@ -398,7 +398,7 @@ class HomeAppLayoutMatrixTest {
                     com.gt8d.launcher.config.Slot.Panel)
             })
             val apps = (1..case.apps).map { AppInfo("a$it", "名前$it", null, it != 3) }
-            val state = PanelState(null, AppInfo("idle", "Music", null, true), 0L, apps, emptyList(),
+            val state = PanelState(null, AppInfo("idle", "Music", null, true), { 0L }, apps, emptyList(),
                 DockStatus(true, true), false, case.banner)
             try {
                 controller.get().setContent { LauncherTheme {

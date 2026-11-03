@@ -16,6 +16,32 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AppCatalogTest {
+    @org.robolectric.annotation.Implements(className = "android.app.ApplicationPackageManager")
+    class CountingPackageManager : org.robolectric.shadows.ShadowApplicationPackageManager() {
+        var queries = 0
+        @org.robolectric.annotation.Implementation
+        public override fun getApplicationInfo(pkg: String, flags: Int): android.content.pm.ApplicationInfo {
+            queries++
+            return android.content.pm.ApplicationInfo().apply { packageName = pkg; nonLocalizedLabel = "Label" }
+        }
+    }
+
+    @Config(shadows = [CountingPackageManager::class])
+    @Test fun labelIsCached() {
+        val countingPm = org.robolectric.shadow.api.Shadow.extract<CountingPackageManager>(app.packageManager)
+        val before = countingPm.queries
+        val cached = AppCatalog(app)
+        assertEquals("Label", cached.label("example"))
+        assertEquals("Label", cached.label("example"))
+        assertEquals(before + 1, countingPm.queries)
+        cached.invalidatePackage("example")
+        assertEquals("Label", cached.label("example"))
+        assertEquals(before + 2, countingPm.queries)
+        cached.invalidateAllIcons()
+        assertEquals("Label", cached.label("example"))
+        assertEquals(before + 3, countingPm.queries)
+    }
+
     @Test fun buildAppList_excludesPanelHost() {
         val entries = listOf(
             com.gt8d.launcher.ui.apps.AppListEntry("com.gt8d.launcher", "Home", "本体"),

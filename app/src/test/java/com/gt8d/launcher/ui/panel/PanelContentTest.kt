@@ -52,7 +52,7 @@ import org.robolectric.annotation.TextLayoutMode
 @TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
 class PanelContentTest {
     @Test fun panel_pageSurvivesViewSwitchAndVerticalSwipe() {
-        var state by mutableStateOf(PanelState(null, null, 0L,
+        var state by mutableStateOf(PanelState(null, null, { 0L },
             (1..10).map { AppInfo("p$it", "$it", null, true) }, emptyList(),
             DockStatus(true, null), false, false))
         val launches = mutableListOf<String>()
@@ -84,7 +84,7 @@ class PanelContentTest {
         var opened = 0
         rule.setContent {
             LauncherTheme {
-                PanelContent(PanelState(null, null, 0L, emptyList(), emptyList(),
+                PanelContent(PanelState(null, null, { 0L }, emptyList(), emptyList(),
                     DockStatus(true, null), false, missing.isNotEmpty(), missingPermissions = missing),
                     emptyActions { opened++ })
             }
@@ -117,7 +117,7 @@ class PanelContentTest {
         rule.setContent {
             LauncherTheme {
                 Box(Modifier.size(516.dp, 400.dp)) {
-                    PanelContent(PanelState(null, null, 0L, emptyList(), emptyList(),
+                    PanelContent(PanelState(null, null, { 0L }, emptyList(), emptyList(),
                         DockStatus(true, null), false, false, placement = placement), emptyActions())
                 }
             }
@@ -133,7 +133,7 @@ class PanelContentTest {
     @Test fun placementChange_keepsAppsState() = checkPlacementState(PanelView.Apps)
 
     private fun checkPlacementState(view: PanelView) {
-        var state by mutableStateOf(PanelState(null, null, 0L,
+        var state by mutableStateOf(PanelState(null, null, { 0L },
             (1..5).map { AppInfo("a$it", "App $it", null, true) }, emptyList(),
             DockStatus(true, null), false, true, placement = PanelPlacement.Left,
             sets = (1..20).map { com.gt8d.launcher.config.ScreenSet("s$it",
@@ -169,7 +169,7 @@ class PanelContentTest {
         rule.setContent {
             LauncherTheme {
                 Box(Modifier.size(516.dp, 800.dp)) {
-                    PanelContent(PanelState(null, null, 0L, emptyList(), emptyList(),
+                    PanelContent(PanelState(null, null, { 0L }, emptyList(), emptyList(),
                         DockStatus(true, null), false, false),
                         emptyActions().copy(onSelectView = { selections.add(it) }))
                 }
@@ -199,7 +199,7 @@ class PanelContentTest {
         rule.setContent {
             LauncherTheme {
                 Box(Modifier.size(360.dp, 400.dp)) {
-                    PanelContent(PanelState(null, null, 0L, emptyList(), emptyList(),
+                    PanelContent(PanelState(null, null, { 0L }, emptyList(), emptyList(),
                         DockStatus(true, null), false, true,
                         view = com.gt8d.launcher.config.PanelView.Sets, sets = sets),
                         emptyActions().copy(onOpenSet = { opened.add(it) }, onNewSet = { added++ },
@@ -231,7 +231,7 @@ class PanelContentTest {
         rule.setContent {
             LauncherTheme {
                 PanelContent(
-                    PanelState(now, null, 0L, emptyList(), emptyList(), DockStatus(true, null), false, false),
+                    PanelState(now, null, { 0L }, emptyList(), emptyList(), DockStatus(true, null), false, false),
                     emptyActions(),
                 )
             }
@@ -254,7 +254,7 @@ class PanelContentTest {
                     PanelContent(
                         PanelState(
                             NowPlaying("music", "Song", "Artist", null, 200000L, true, true),
-                            null, 50000L,
+                            null, { 50000L },
                             (1..5).map { AppInfo("panel$it", "Panel $it", null, true) },
                             (1..4).map { AppInfo("dock$it", "Dock $it", null, true) },
                             DockStatus(true, true), true, true,
@@ -355,7 +355,7 @@ class PanelContentTest {
                         state = PanelState(
                             now = null,
                             idleApp = null,
-                            positionMs = 0L,
+                            position = { 0L },
                             panelApps = emptyList(),
                             dockApps = emptyList(),
                             dockStatus = DockStatus(wifiOn = true, bluetoothOn = null),
@@ -417,7 +417,7 @@ class PanelContentTest {
                                 hasFavorite = false,
                             ),
                             idleApp = null,
-                            positionMs = 50_000L,
+                            position = { 50_000L },
                             panelApps = panelApps,
                             dockApps = dockApps,
                             dockStatus = DockStatus(wifiOn = true, bluetoothOn = true),
@@ -466,7 +466,7 @@ class PanelContentTest {
                         state = PanelState(
                             now = null,
                             idleApp = null,
-                            positionMs = 0L,
+                            position = { 0L },
                             panelApps = panelApps,
                             dockApps = emptyList(),
                             dockStatus = DockStatus(wifiOn = true, bluetoothOn = null),

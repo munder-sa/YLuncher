@@ -5,6 +5,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.safety.SafetyGuard
+import com.gt8d.launcher.ui.theme.ScreenSemantics
 import java.io.File
 import java.time.Duration
 import kotlinx.serialization.json.Json
@@ -60,6 +61,7 @@ class LauncherAppTest {
 
     @After
     fun cleanup() {
+        ScreenSemantics.detailed = true
         Thread.setDefaultUncaughtExceptionHandler(originalHandler)
         Handler(Looper.getMainLooper()).removeCallbacksAndMessages(null)
         SafetyGuard.clear(context)

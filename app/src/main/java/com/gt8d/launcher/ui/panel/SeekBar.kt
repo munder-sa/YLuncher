@@ -25,7 +25,7 @@ import java.util.Locale
 @Composable
 fun SeekBar(
     durationMs: Long?,
-    positionMs: Long,
+    position: () -> Long,
     onSeek: (Long) -> Unit,
     tag: String = "progress",
     showTimes: Boolean = true,
@@ -33,7 +33,10 @@ fun SeekBar(
 ) {
     val duration = durationMs ?: return
     if (duration <= 0L) return
-    val clampedPos = positionMs.coerceIn(0L, duration)
+    val automaticPosition by remember(position) {
+        derivedStateOf { position() / 1000L * 1000L }
+    }
+    val clampedPos = automaticPosition.coerceIn(0L, duration)
     var dragPos by remember { mutableStateOf<Float?>(null) }
     var endpoint by remember { mutableStateOf<Long?>(null) }
     var dragged by remember { mutableStateOf(false) }

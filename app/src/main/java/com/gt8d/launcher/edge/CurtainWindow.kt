@@ -5,6 +5,9 @@ import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
 import android.view.WindowManager
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
@@ -20,6 +23,7 @@ import com.gt8d.launcher.curtain.CurtainTarget
 import com.gt8d.launcher.curtain.CurtainView
 import com.gt8d.launcher.curtain.HideReason
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.theme.screenSemantics
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
@@ -79,15 +83,17 @@ class CurtainWindow(
             view.setViewTreeLifecycleOwner(owner)
             view.setViewTreeSavedStateRegistryOwner(owner)
             view.setContent {
-                val currentTarget = targetState.value
-                if (currentTarget != null) {
-                    LauncherTheme {
-                        CurtainContent(
-                            target = currentTarget,
-                            showProgress = showProgressState.value,
-                            iconFor = ::iconFor,
-                            onCancel = onCancel,
-                        )
+                Box(Modifier.fillMaxSize().screenSemantics()) {
+                    val currentTarget = targetState.value
+                    if (currentTarget != null) {
+                        LauncherTheme {
+                            CurtainContent(
+                                target = currentTarget,
+                                showProgress = showProgressState.value,
+                                iconFor = ::iconFor,
+                                onCancel = onCancel,
+                            )
+                        }
                     }
                 }
             }

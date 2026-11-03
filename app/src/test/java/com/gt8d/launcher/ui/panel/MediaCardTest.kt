@@ -54,7 +54,7 @@ class MediaCardTest {
     @Test fun syncedShowsCurrentLine() {
         rule.setContent {
             LauncherTheme {
-                MediaCard(lyricNow(), null, 0L, {}, {}, {},
+                MediaCard(lyricNow(), null, { 0L }, {}, {}, {},
                     lyrics = LyricsState.Synced(lyricLines), lyricsEnabled = true)
             }
         }
@@ -65,7 +65,7 @@ class MediaCardTest {
         var position by mutableStateOf(500L)
         rule.setContent {
             LauncherTheme {
-                MediaCard(lyricNow(position), null, 0L, {}, {}, {},
+                MediaCard(lyricNow(position), null, { 0L }, {}, {}, {},
                     lyrics = LyricsState.Synced(lyricLines + LyricLine(3000L, "♪")),
                     lyricsEnabled = true)
             }
@@ -79,7 +79,7 @@ class MediaCardTest {
         rule.setContent {
             LauncherTheme {
                 Box(Modifier.width(320.dp)) {
-                    MediaCard(lyricNow(), null, 0L, {}, {}, {},
+                    MediaCard(lyricNow(), null, { 0L }, {}, {}, {},
                         lyrics = LyricsState.Synced(listOf(LyricLine(1000L, "架空の長い本文".repeat(30)))),
                         lyricsEnabled = true)
                 }
@@ -96,7 +96,7 @@ class MediaCardTest {
         var lyrics by mutableStateOf<LyricsState>(LyricsState.Synced(lyricLines))
         rule.setContent {
             LauncherTheme {
-                MediaCard(lyricNow(), null, 0L, {}, {}, {}, lyrics = lyrics, lyricsEnabled = true)
+                MediaCard(lyricNow(), null, { 0L }, {}, {}, {}, lyrics = lyrics, lyricsEnabled = true)
             }
         }
         fun height(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.height
@@ -117,14 +117,14 @@ class MediaCardTest {
         rule.setContent {
             LauncherTheme {
                 if (mode == 0) {
-                    MediaCard(lyricNow(), null, 0L, {}, {}, {})
+                    MediaCard(lyricNow(), null, { 0L }, {}, {}, {})
                 } else {
                     val now = when (mode) {
                         2 -> lyricNow().copy(artist = null)
                         3 -> lyricNow().copy(metaTitle = null)
                         else -> lyricNow()
                     }
-                    MediaCard(now, null, 0L, {}, {}, {},
+                    MediaCard(now, null, { 0L }, {}, {}, {},
                         lyrics = LyricsState.Synced(lyricLines), lyricsEnabled = mode != 1)
                 }
             }
@@ -146,7 +146,7 @@ class MediaCardTest {
         rule.setContent {
             LauncherTheme {
                 Box(Modifier.width((innerWidth + 16).dp)) {
-                    MediaCard(null, AppInfo("idle", "音楽アプリ", null, installed), 0L,
+                    MediaCard(null, AppInfo("idle", "音楽アプリ", null, installed), { 0L },
                         {}, {}, { launches.add(it) })
                 }
             }
@@ -175,7 +175,7 @@ class MediaCardTest {
         rule.setContent {
             LauncherTheme {
                 MediaCard(NowPlaying("music", "Song", "Artist", null, 120000L, playing, favorite),
-                    null, 0L, { actions.add(it) }, {}, {})
+                    null, { 0L }, { actions.add(it) }, {}, {})
             }
         }
         fun bounds(tag: String) = rule.onNodeWithTag(tag, useUnmergedTree = true)
@@ -207,7 +207,7 @@ class MediaCardTest {
         val now = NowPlaying("music", "Song", "Artist", null, 120000L, true, false)
         rule.setContent {
             LauncherTheme {
-                MediaCard(now = now, idleApp = null, positionMs = 0L,
+                MediaCard(now = now, idleApp = null, position = { 0L },
                     onAction = {}, onSeek = {}, onLaunch = { launches.add(it) })
             }
         }
@@ -220,7 +220,7 @@ class MediaCardTest {
             LauncherTheme {
                 MediaCard(
                     now = NowPlaying("music", "長い曲名".repeat(30), "Artist", null, 120000L, true, false),
-                    idleApp = null, positionMs = 0L,
+                    idleApp = null, position = { 0L },
                     onAction = {}, onSeek = {}, onLaunch = {},
                 )
             }
@@ -240,7 +240,7 @@ class MediaCardTest {
         rule.setContent {
             slop = androidx.compose.ui.platform.LocalViewConfiguration.current.touchSlop
             LauncherTheme { androidx.compose.foundation.layout.Column {
-                SeekBar(120000L, 30000L, { seeks.add(it) })
+                SeekBar(120000L, { 30000L }, { seeks.add(it) })
             } }
         }
         val progress = rule.onNodeWithTag("progress")
@@ -275,7 +275,7 @@ class MediaCardTest {
             LauncherTheme {
                 MediaCard(
                     now = NowPlaying("music", "Song", "Artist", null, 120000L, true, false),
-                    idleApp = null, positionMs = position,
+                    idleApp = null, position = { position },
                     onAction = {}, onSeek = { seeks.add(it) }, onLaunch = {},
                 )
             }
@@ -298,7 +298,7 @@ class MediaCardTest {
             LauncherTheme {
                 MediaCard(
                     now = NowPlaying("music", "Song", "Artist", null, duration, true, false),
-                    idleApp = null, positionMs = 0L,
+                    idleApp = null, position = { 0L },
                     onAction = {}, onSeek = { seeks.add(it) }, onLaunch = {},
                 )
             }
@@ -347,7 +347,7 @@ class MediaCardTest {
                 MediaCard(
                     now = null,
                     idleApp = idleApp,
-                    positionMs = 0L,
+                    position = { 0L },
                     onAction = {},
                     onSeek = {},
                     onLaunch = { launchedPkg = it },
@@ -379,7 +379,7 @@ class MediaCardTest {
                         hasFavorite = hasFavorite,
                     ),
                     idleApp = null,
-                    positionMs = 30_000L,
+                    position = { 30_000L },
                     onAction = {},
                     onSeek = {},
                     onLaunch = {},
@@ -417,7 +417,7 @@ class MediaCardTest {
                         hasFavorite = false,
                     ),
                     idleApp = null,
-                    positionMs = 10_000L,
+                    position = { 10_000L },
                     onAction = {},
                     onSeek = {},
                     onLaunch = {},
@@ -449,7 +449,7 @@ class MediaCardTest {
                         hasFavorite = false,
                     ),
                     idleApp = null,
-                    positionMs = 0L,
+                    position = { 0L },
                     onAction = { actions.add(it) },
                     onSeek = {},
                     onLaunch = {},

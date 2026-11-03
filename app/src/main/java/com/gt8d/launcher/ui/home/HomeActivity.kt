@@ -38,6 +38,7 @@ import com.gt8d.launcher.ui.gesture.twoFingerSwipe
 import com.gt8d.launcher.ui.panel.PanelScreen
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.theme.screenSemantics
 import com.gt8d.launcher.ui.layout.launcherBackground
 import com.gt8d.launcher.ui.layout.stripSafePadding
 import com.gt8d.launcher.ui.theme.Palette
@@ -62,30 +63,32 @@ class HomeActivity : ComponentActivity() {
         if (createdInSafety) {
             setContent {
                 LauncherTheme {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Palette.Background0),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                    Box(Modifier.fillMaxSize().screenSemantics()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Palette.Background0),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = "安全のため純正ランチャーを使っています",
-                                fontSize = Dims.BodyText,
-                                color = Color.White,
-                            )
-                            // SettingsButton の上下各4dpの余白を含めて高さと間隔を調整する。
-                            SettingsButton("純正ランチャーを開く", "safety_open_stock",
-                                Modifier.width(360.dp).height(80.dp)) {
-                                runCatching { startActivity(stockLauncherIntent()) }
-                            }
-                            SettingsButton("安全モードを解除", "safety_unlock",
-                                Modifier.width(360.dp).height(80.dp)) {
-                                safetyRecover(this@HomeActivity)
-                                recreate()
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = "安全のため純正ランチャーを使っています",
+                                    fontSize = Dims.BodyText,
+                                    color = Color.White,
+                                )
+                                // SettingsButton の上下各4dpの余白を含めて高さと間隔を調整する。
+                                SettingsButton("純正ランチャーを開く", "safety_open_stock",
+                                    Modifier.width(360.dp).height(80.dp)) {
+                                    runCatching { startActivity(stockLauncherIntent()) }
+                                }
+                                SettingsButton("安全モードを解除", "safety_unlock",
+                                    Modifier.width(360.dp).height(80.dp)) {
+                                    safetyRecover(this@HomeActivity)
+                                    recreate()
+                                }
                             }
                         }
                     }
@@ -95,70 +98,72 @@ class HomeActivity : ComponentActivity() {
         }
         setContent {
             LauncherTheme {
-                val latestConfig by AppGraph.configForHome.collectAsState()
-                val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
-                val bootPhase by AppGraph.boot.phase.collectAsState()
-                val secondsLeft by AppGraph.boot.secondsLeft.collectAsState()
+                Box(Modifier.fillMaxSize().screenSemantics()) {
+                    val latestConfig by AppGraph.configForHome.collectAsState()
+                    val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
+                    val bootPhase by AppGraph.boot.phase.collectAsState()
+                    val secondsLeft by AppGraph.boot.secondsLeft.collectAsState()
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .launcherBackground()
-                        .stripSafePadding()
-                        .twoFingerSwipe { action ->
-                            when (action) {
-                                EdgeAction.Next -> AppGraph.runner.next()
-                                EdgeAction.Prev -> AppGraph.runner.prev()
-                                else -> Unit
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .launcherBackground()
+                            .stripSafePadding()
+                            .twoFingerSwipe { action ->
+                                when (action) {
+                                    EdgeAction.Next -> AppGraph.runner.next()
+                                    EdgeAction.Prev -> AppGraph.runner.prev()
+                                    else -> Unit
+                                }
+                            },
+                    ) {
+                        HomeContent { homeWide ->
+                            Box(Modifier.fillMaxSize()) {
+                                PanelScreen(
+                                    inSplit = false,
+                                    homeWide = homeWide,
+                                    homeConfig = config,
+                                    onNewSet = {
+                                        startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
+                                    },
+                                    onEditLists = {
+                                        if (AppGraph.runner.opening.value != null) {
+                                            DiagLog.d("Home", "settings ignored while opening")
+                                        } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_route", "lists"))
+                                    },
+                                    onOpenSettings = {
+                                        if (AppGraph.runner.opening.value != null) {
+                                            DiagLog.d("Home", "settings ignored while opening")
+                                        } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java))
+                                    },
+                                    onOpenPermissionSettings = {
+                                        if (AppGraph.runner.opening.value != null) {
+                                            DiagLog.d("Home", "settings ignored while opening")
+                                        } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_route", "permissions"))
+                                    },
+                                    onLaunchComponent = { component ->
+                                        val succeeded = activityLauncher.startComponent(component, adjacent = false)
+                                        AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
+                                    },
+                                    onLaunchApp = { pkg ->
+                                        val succeeded = activityLauncher.startApp(pkg, adjacent = false)
+                                        AppGraph.warm.recordAppLaunch(pkg, succeeded)
+                                    },
+                                )
                             }
-                        },
-                ) {
-                    HomeContent { homeWide ->
-                        Box(Modifier.fillMaxSize()) {
-                            PanelScreen(
-                                inSplit = false,
-                                homeWide = homeWide,
-                                homeConfig = config,
-                                onNewSet = {
-                                    startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_new_set", true))
-                                },
-                                onEditLists = {
-                                    if (AppGraph.runner.opening.value != null) {
-                                        DiagLog.d("Home", "settings ignored while opening")
-                                    } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_route", "lists"))
-                                },
-                                onOpenSettings = {
-                                    if (AppGraph.runner.opening.value != null) {
-                                        DiagLog.d("Home", "settings ignored while opening")
-                                    } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java))
-                                },
-                                onOpenPermissionSettings = {
-                                    if (AppGraph.runner.opening.value != null) {
-                                        DiagLog.d("Home", "settings ignored while opening")
-                                    } else startActivity(Intent(this@HomeActivity, SettingsActivity::class.java).putExtra("open_route", "permissions"))
-                                },
-                                onLaunchComponent = { component ->
-                                    val succeeded = activityLauncher.startComponent(component, adjacent = false)
-                                    AppGraph.warm.recordAppLaunch(component.packageName, succeeded)
-                                },
-                                onLaunchApp = { pkg ->
-                                    val succeeded = activityLauncher.startApp(pkg, adjacent = false)
-                                    AppGraph.warm.recordAppLaunch(pkg, succeeded)
-                                },
+                        }
+
+                        if (bootPhase == BootPhase.Countdown || bootPhase == BootPhase.Opening) {
+                            BootScreen(
+                                target = AppGraph.runner.targetFor(AppGraph.config.lastSetIndex),
+                                secondsLeft = secondsLeft,
+                                opening = bootPhase == BootPhase.Opening,
+                                onOpenNow = AppGraph.boot::openNow,
+                                onStayHome = AppGraph.boot::stayHome,
+                                modifier = Modifier.align(Alignment.Center),
+                                iconFor = AppGraph.catalog::icon,
                             )
                         }
-                    }
-
-                    if (bootPhase == BootPhase.Countdown || bootPhase == BootPhase.Opening) {
-                        BootScreen(
-                            target = AppGraph.runner.targetFor(AppGraph.config.lastSetIndex),
-                            secondsLeft = secondsLeft,
-                            opening = bootPhase == BootPhase.Opening,
-                            onOpenNow = AppGraph.boot::openNow,
-                            onStayHome = AppGraph.boot::stayHome,
-                            modifier = Modifier.align(Alignment.Center),
-                            iconFor = AppGraph.catalog::icon,
-                        )
                     }
                 }
             }

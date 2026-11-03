@@ -60,7 +60,7 @@ val MediaControlBackground = SemanticsPropertyKey<Color>("MediaControlBackground
 fun MediaCard(
     now: NowPlaying?,
     idleApp: AppInfo?,
-    positionMs: Long,
+    position: () -> Long,
     onAction: (MediaAction) -> Unit,
     onSeek: (Long) -> Unit,
     onLaunch: (String) -> Unit,
@@ -77,7 +77,7 @@ fun MediaCard(
         } else {
             ActiveMediaContent(
                 now = now,
-                positionMs = positionMs,
+                position = position,
                 onAction = onAction,
                 onSeek = onSeek,
                 onLaunch = onLaunch,
@@ -161,7 +161,7 @@ private fun IdleMediaContent(
 @Composable
 private fun ActiveMediaContent(
     now: NowPlaying,
-    positionMs: Long,
+    position: () -> Long,
     onAction: (MediaAction) -> Unit,
     onSeek: (Long) -> Unit,
     onLaunch: (String) -> Unit,
@@ -243,7 +243,7 @@ private fun ActiveMediaContent(
             }
         }
 
-        SeekBar(now.durationMs, positionMs, onSeek)
+        SeekBar(now.durationMs, position, onSeek)
 
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val gap = ((maxWidth - 216.dp) / 2).coerceIn(0.dp, 8.dp)

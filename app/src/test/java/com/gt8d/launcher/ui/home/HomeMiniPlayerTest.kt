@@ -45,7 +45,7 @@ class HomeMiniPlayerTest {
         controller.get().setContent { LauncherTheme {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
-                HomeMiniPlayer(now, idleApp, 30000L, { AppInfo(it, "音楽", null, installed) },
+                HomeMiniPlayer(now, idleApp, { 30000L }, { AppInfo(it, "音楽", null, installed) },
                     onAction, onSeek, onLaunch, Modifier.size(width.dp, height.dp), lyrics, lyricsEnabled, onToggleLyrics)
             }
         } }
@@ -133,7 +133,7 @@ class HomeMiniPlayerTest {
         val height = mutableStateOf(694)
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
-            HomeMiniPlayer(lyricSong, idle, 0, { idle }, {}, {}, {}, Modifier.size(409.dp, height.value.dp), synced, true)
+            HomeMiniPlayer(lyricSong, idle, { 0L }, { idle }, {}, {}, {}, Modifier.size(409.dp, height.value.dp), synced, true)
         } }
         controller.visible()
         var lastHeight = 0.dp

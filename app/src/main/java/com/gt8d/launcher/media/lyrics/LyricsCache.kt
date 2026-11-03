@@ -14,13 +14,20 @@ class LyricsCache(private val dir: File, private val clock: () -> Long, private 
             file = File(dir, q.cacheKey + ".json")
             if (!file.exists()) return null
             val json = Json.parseToJsonElement(file.readText(Charsets.UTF_8)) as JsonObject
-            require(json["v"] == JsonPrimitive(2))
+            require(json["v"] == JsonPrimitive(3))
             val savedAt = number(json["savedAt"])
             when (string(json["kind"])) {
                 "synced" -> LyricsState.Synced((json["lines"] as JsonArray).map { element ->
                     val line = element as JsonArray
-                    require(line.size == 2)
-                    LyricLine(number(line[0]), string(line[1]))
+                    require(line.size == 3)
+                    val words = (line[2] as JsonArray).map { element ->
+                        val word = element as JsonArray
+                        require(word.size == 2)
+                        val charStart = number(word[1])
+                        require(charStart in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong())
+                        LyricWord(number(word[0]), charStart.toInt())
+                    }
+                    LyricLine(number(line[0]), string(line[1]), words)
                 })
                 "plain" -> LyricsState.Plain(string(json["text"]))
                 "missing" -> if (clock() - savedAt >= 24 * 60 * 60 * 1000L) {
@@ -41,12 +48,15 @@ class LyricsCache(private val dir: File, private val clock: () -> Long, private 
     fun put(q: LyricsQuery, state: LyricsState) {
         if (state !is LyricsState.Synced && state !is LyricsState.Plain && state != LyricsState.Missing) return
         try {
-            val fields = mutableMapOf<String, JsonElement>("v" to JsonPrimitive(2), "savedAt" to JsonPrimitive(clock()))
+            val fields = mutableMapOf<String, JsonElement>("v" to JsonPrimitive(3), "savedAt" to JsonPrimitive(clock()))
             when (state) {
                 is LyricsState.Synced -> {
                     fields["kind"] = JsonPrimitive("synced")
                     fields["lines"] = JsonArray(state.lines.map {
-                        JsonArray(listOf(JsonPrimitive(it.timeMs), JsonPrimitive(it.text)))
+                        JsonArray(listOf(JsonPrimitive(it.timeMs), JsonPrimitive(it.text),
+                            JsonArray(it.words.map { word ->
+                                JsonArray(listOf(JsonPrimitive(word.timeMs), JsonPrimitive(word.charStart)))
+                            })))
                     })
                 }
                 is LyricsState.Plain -> {
