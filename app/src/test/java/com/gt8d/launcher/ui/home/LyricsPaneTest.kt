@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.media.lyrics.LyricLine
+import com.gt8d.launcher.media.lyrics.LyricWord
 import com.gt8d.launcher.media.lyrics.LyricsState
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import org.junit.*
@@ -111,23 +112,57 @@ class LyricsPaneTest {
         show()
         rule.onNodeWithTag("player_lyrics").assert(hasClickAction().not())
     }
-    @Test fun fillFractionBasics() {
-        val sample = listOf(LyricLine(1000, "架空の朝"), LyricLine(3000, "架空の空"))
-        assertEquals(0f, fillFraction(sample, 0, 1000, null), 0f)
-        assertEquals(0.5f, fillFraction(sample, 0, 2000, null), 0f)
-        assertEquals(1f, fillFraction(sample, 0, 3000, null), 0f)
-        assertEquals(0f, fillFraction(sample, 0, 500, null), 0f)
-        assertEquals(0f, fillFraction(sample, -1, 500, null), 0f)
+    @Test fun lineLevelHighlightWhenNoWords() {
+        show()
+        rule.onNodeWithTag("player_lyrics_current").assertTextEquals("二").assertIsDisplayed()
+        rule.onNodeWithTag("player_lyrics_fill", useUnmergedTree = true).assertDoesNotExist()
     }
-    @Test fun fillFractionLastLine() {
-        val sample = listOf(LyricLine(3000, "架空の空"))
-        assertEquals(0.5f, fillFraction(sample, 0, 5500, null), 0f)
-        assertEquals(0.5f, fillFraction(sample, 0, 3500, 4000), 0f)
+    @Test fun wordFillWhenWordsPresent() {
+        show(LyricsState.Synced(listOf(LyricLine(1000, "架空の朝", listOf(LyricWord(1000, 0))))))
+        rule.onNodeWithTag("player_lyrics_fill", useUnmergedTree = true).assertExists()
     }
-    @Test fun fillFractionNonPositiveInterval() {
-        val sample = listOf(LyricLine(1000, "架空の朝"), LyricLine(1000, "架空の空"))
-        assertEquals(1f, fillFraction(sample, 0, 1000, null), 0f)
-        assertEquals(1f, fillFraction(sample, 1, 1000, 500), 0f)
+    @Test fun interludeDotsOnEmptyLine() {
+        show(LyricsState.Synced(listOf(LyricLine(1000, "♪"), LyricLine(4000, "架空の朝"))))
+        rule.onNodeWithTag("player_lyrics_interlude").assertIsDisplayed()
+    }
+    @Test fun introDotsBeforeFirstLine() {
+        now = now.copy(positionMs = 1000)
+        show(LyricsState.Synced(listOf(LyricLine(10000, "架空の朝"))))
+        rule.onNodeWithTag("player_lyrics_interlude").assertIsDisplayed()
+        rule.runOnIdle {
+            now = now.copy(positionMs = 6000)
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeBy(32)
+        rule.onNodeWithTag("player_lyrics_interlude").assertDoesNotExist()
+        rule.onNodeWithText("架空の朝").assertIsDisplayed()
+    }
+    @Test fun interludeDotsFillProgress() {
+        assertEquals(0, interludeLitDots(0, 3000, 0))
+        assertEquals(1, interludeLitDots(0, 3000, 1000))
+        assertEquals(2, interludeLitDots(0, 3000, 2000))
+        assertEquals(3, interludeLitDots(0, 3000, 3000))
+        assertEquals(0, interludeLitDots(1000, 3000, 0))
+        assertEquals(3, interludeLitDots(0, 3000, 4000))
+    }
+    @Test fun wordFillInterpolatesCharacters() {
+        val sample = listOf(LyricLine(1000, "架空の朝", listOf(LyricWord(1000, 0), LyricWord(2000, 3))),
+            LyricLine(4000, "架空の空"))
+        assertEquals(0f, wordFillPosition(sample, 0, 500, null), 0f)
+        assertEquals(0f, wordFillPosition(sample, -1, 500, null), 0f)
+        assertEquals(0f, wordFillPosition(sample, 0, 1000, null), 0f)
+        assertEquals(1.5f, wordFillPosition(sample, 0, 1500, null), 0f)
+        assertEquals(3f, wordFillPosition(sample, 0, 2000, null), 0f)
+        assertEquals(3.5f, wordFillPosition(sample, 0, 3000, null), 0f)
+        assertEquals(4f, wordFillPosition(sample, 0, 4000, null), 0f)
+    }
+    @Test fun wordFillLastLineAndNonPositiveInterval() {
+        val sample = listOf(LyricLine(3000, "架空の朝", listOf(LyricWord(3000, 0))))
+        assertEquals(2f, wordFillPosition(sample, 0, 5500, null), 0f)
+        assertEquals(2f, wordFillPosition(sample, 0, 3500, 4000), 0f)
+        assertEquals(4f, wordFillPosition(sample, 0, 3000, 2000), 0f)
+        val duplicate = listOf(sample.single(), LyricLine(3000, "架空の空"))
+        assertEquals(4f, wordFillPosition(duplicate, 0, 3000, null), 0f)
     }
     @Test fun lineAlphaByDistance() {
         assertEquals(0.45f, lyricLineAlpha(1), 0f)
