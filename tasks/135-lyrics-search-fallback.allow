@@ -1,0 +1,5 @@
+write app/src/main/java/com/gt8d/launcher/media/lyrics/LrclibClient.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/LyricsCache.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/LrclibClientTest.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/LyricsCacheTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.*'

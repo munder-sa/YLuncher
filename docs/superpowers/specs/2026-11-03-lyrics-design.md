@@ -1,6 +1,6 @@
 # ミニプレイヤーの歌詞表示 設計書
 
-- 日付: 2026-11-03(r1.1: codex のレビューを反映)
+- 日付: 2026-11-03(r1.1: codex のレビューを反映、r1.2: 実機確認を受けて検索での補完を追加)
 - モック: `design/mocks/lyrics-miniplayer.html`(Task 124〜128)、アイコン案 `design/mocks/lyrics-toggle-icons.html`(Task 125)
 - 対象: ① ホームのミニプレイヤー(`ui/home/HomeMiniPlayer.kt`)、② 分割中のパネルのメディアカード(`ui/panel/MediaCard.kt`)
 
@@ -34,6 +34,8 @@
   - `duration` = 長さの秒(四捨五入)。1〜3600 の範囲外・不明なら付けない。
 - 通信: `HttpURLConnection`(新しいライブラリは入れない)。接続 5 秒・読み取り 5 秒、リダイレクトを追わない、応答は 512KB まで(超えたら Failed)。`User-Agent: YLuncher/<versionName> (https://github.com/munder-sa/YLuncher)`(versionName は `PackageManager` から)。
 - **通信とディスクは IO スレッドで行う**。取り消されたら接続を切る(`disconnect()`)。
+- **検索で補う(r1.2)**: `/api/get` の結果が Plain または Missing(404・400・200 で歌詞なし。instrumental は除く)のときは、続けて `GET /api/search?track_name=…&artist_name=…` を1回だけ呼ぶ。返った配列(最大 20 件)から、`instrumental` が false で `syncedLyrics` を §4 で読んで1行以上あり、長さが分かっていれば `duration` との差が 2 秒以内のものを候補にし、①アルバム名が一致(大小・前後の空白を無視)②長さの差が小さい③配列の順、で1件選んで Synced にする。候補が無い、または検索が失敗(IOException・200 以外・JSON が読めない)したときは、`/api/get` の結果(Plain・Missing)をそのまま使う。検索の 429 は §3.3 の全体の待機に使う。
+  - 実機で、Apple Music の「夜の踊り子 / サカナクション / sakanaction / 302 秒」は `/api/get` が平文だけの記録(303 秒)を返し、検索では 302 秒前後の同期歌詞の記録が 10 件以上あった(2026-11-03)。
 
 ### 3.2 応答の振り分け(上から順に判定)
 | 条件 | 状態 |
@@ -57,6 +59,7 @@
 
 ### 3.4 キャッシュ
 - アプリの内部の `files/lyrics/` に 1 曲 1 ファイル。ファイル名は曲の鍵(`pkg` を除く4項目)を JSON の配列にして SHA-256 の16進。最大 300 件、書いた時刻の古いものから消す。
+- 保存形式に版 `"v":2` を持たせ、版が無い・違うファイルは無いものとして扱う(r1.2 で検索の補完を足したため、r1.1 の Plain・Missing を取り直させる)。
 - 保存するのは Synced・Plain・Missing。**Missing は 7 日で期限切れ**(読むときに判定し、切れていれば無いものとして取り直す)。Offline・Failed は保存しない。
 - 読めない・壊れたファイルは無いものとして扱う(消して取り直す)。書き込みに失敗しても、取れた歌詞は表示する。
 - メモリには今の曲の状態だけを持つ(曲ごとのメモリのキャッシュは持たない)。
