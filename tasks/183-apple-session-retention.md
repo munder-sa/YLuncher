@@ -75,3 +75,9 @@
 ## 報告
 
 変更とAPI、ロック順序/世代/キャンセルの根拠、テスト件数/失敗/エラー/スキップ、実コマンド/XML、決めたことを日本語で報告。AppGraph/UIへの配線と実機は未実施と区別する。
+
+## 実装・司令塔レビュー結果 (2026-11-04)
+
+- `.codex-bak/20261104-162335/`、終了0、許可3ファイルのみ。指定コマンド1回で既存9件+新規10件=19件成功、失敗/エラー/スキップ0。既存テスト変更なし。司令塔は差分・新規コード/テスト全文・XML・実コマンドを照合。再実行なし。allow警告1件は引用符正規化の既知差で実コマンドは指定どおり。
+- 決定: 永続化はinternal AppleMusicPersistence、対象識別はprivate Epoch/Reset。永続Mutex→短時間memory lockの順で、I/O/通信/join中はmemory lockを保持しない。古いwriteの回収を同じgate内で完結。戻り境界キャンセルも現世代だけ回収。期限はLong.MAX_VALUEで飽和/残秒切上げ、時計の負値/例外は0。読込み/接続前削除失敗の接続理由はINVALID+保存側分類。解除失敗はUNCONFIGURED+ERROR/CLEAR。現世代の復元キャンセルは候補を保持しNEEDS_ATTENTION/INVALID、60秒待機。レースはDeferred/ラッチ/手動dispatcher、実スレッド待機は5秒上限。
+- AppGraph/UIの配線、Android Keystoreによる実機復元は後工程。
