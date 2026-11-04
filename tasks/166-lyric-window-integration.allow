@@ -1,0 +1,7 @@
+write app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/LyricMotion.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/LyricWindow.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/LyricsPaneTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/LyricMotionTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/LyricWindowTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.LyricWindowTest' --tests 'com.gt8d.launcher.ui.home.LyricMotionTest' --tests 'com.gt8d.launcher.ui.home.LyricsPaneTest'

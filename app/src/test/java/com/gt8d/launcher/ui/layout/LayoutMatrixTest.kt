@@ -482,6 +482,9 @@ class HomeResizeStateTest {
                 }
             }
             controller.visible()
+            rule.waitUntil(timeoutMillis = 5_000) {
+                rule.onAllNodesWithTag("dock_applist").fetchSemanticsNodes().isNotEmpty()
+            }
             rule.onNodeWithTag("dock_applist").performScrollTo().performClick()
             rule.onNodeWithTag("applist_close").assertIsDisplayed()
             for (next in listOf(516.dp, 1291.dp)) {

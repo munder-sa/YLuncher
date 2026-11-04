@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +30,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.gt8d.launcher.apps.AppCatalog
+import com.gt8d.launcher.apps.AppCatalogState
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
 import com.gt8d.launcher.ui.apps.AppListEntry
 import com.gt8d.launcher.ui.apps.buildAppList
@@ -41,8 +43,60 @@ data class PanelEnvironment(
     val installedPkgs: Set<String>,
     val appListEntries: List<AppListEntry>,
     val revision: Long,
+    val appRevision: Long = revision,
+    val radioRevision: Long = 0,
 ) {
     val needsPermission: Boolean get() = missingPermissions.isNotEmpty()
+}
+
+@Composable
+fun rememberPanelEnvironment(catalog: AppCatalogState): PanelEnvironment {
+    val context = LocalContext.current
+    val owner = LocalLifecycleOwner.current
+    val apps by catalog.snapshot.collectAsState()
+    var radios by remember(context) {
+        mutableStateOf(PanelEnvironment(readDockStatus(context), readMissingPermissions(context),
+            emptySet(), emptyList(), 0))
+    }
+    DisposableEffect(context, owner, catalog) {
+        fun refresh() {
+            val status = readDockStatus(context)
+            radios = radios.copy(dockStatus = status, missingPermissions = readMissingPermissions(context),
+                radioRevision = radios.radioRevision + if (status != radios.dockStatus) 1 else 0)
+        }
+        catalog.resume()
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) { refresh(); catalog.resume() }
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) { refresh() }
+        }
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) = refresh()
+            override fun onLost(network: Network) = refresh()
+        }
+        val registered = runCatching {
+            connectivity?.registerDefaultNetworkCallback(callback, Handler(Looper.getMainLooper()))
+            connectivity != null
+        }.getOrDefault(false)
+        ContextCompat.registerReceiver(context, receiver, IntentFilter().apply {
+            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            addAction(WifiManager.RSSI_CHANGED_ACTION)
+            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+        }, ContextCompat.RECEIVER_EXPORTED)
+        owner.lifecycle.addObserver(observer)
+        onDispose {
+            if (registered) connectivity?.unregisterNetworkCallback(callback)
+            owner.lifecycle.removeObserver(observer)
+            context.unregisterReceiver(receiver)
+        }
+    }
+    val entries = remember(apps.entries, context.packageName) { buildAppList(apps.entries, context.packageName) }
+    return radios.copy(installedPkgs = apps.installed,
+        appListEntries = entries,
+        revision = apps.appRevision, appRevision = apps.appRevision)
 }
 
 internal object WifiReader {

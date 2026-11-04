@@ -52,7 +52,29 @@ internal class PanelTestLifecycle : LifecycleOwner {
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class PanelScreenTest {
+    @Test fun panelScreen_waitsForInitialInfo_andReflectsAsyncCompletion() {
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val source = object : com.gt8d.launcher.apps.AppCatalogSource {
+            override suspend fun entries() = listOf(com.gt8d.launcher.ui.apps.AppListEntry(pkg, "Main", "Loaded"))
+            override suspend fun settings(entries: List<com.gt8d.launcher.ui.apps.AppListEntry>): ComponentName? = null
+            override suspend fun info(p: String, installed: Set<String>): AppInfo {
+                if (p == pkg) release.await()
+                return AppInfo(p, if (p == pkg) "Loaded" else p, null, p in installed)
+            }
+        }
+        AppGraph.appCatalogStateForTest?.close()
+        AppGraph.appCatalogStateForTest = com.gt8d.launcher.apps.AppCatalogState(source,
+            kotlinx.coroutines.test.UnconfinedTestDispatcher())
+        val config = Defaults.build(emptySet()).copy(panelApps = listOf(pkg), appListPkgs = emptyList())
+        rule.setContent { LauncherTheme { PanelScreen(false, homeConfig = config, onLaunchApp = {}) } }
+        rule.onNodeWithTag("missing_$pkg").assertDoesNotExist()
+        rule.onNodeWithTag("icon_$pkg").assertDoesNotExist()
+        rule.runOnIdle { release.complete(Unit) }
+        rule.onNodeWithTag("icon_$pkg").performScrollTo().assertContentDescriptionEquals("Loaded")
+    }
+
     @Test fun positionTickDoesNotRecomposePanel() {
         val field = com.gt8d.launcher.media.MediaWatcher::class.java.getDeclaredField("_nowPlaying")
         field.isAccessible = true
@@ -502,6 +524,12 @@ class PanelScreenTest {
             pm.addOrUpdateActivity(ActivityInfo().apply { name = cn.className; packageName = cn.packageName })
             pm.addIntentFilterForActivity(cn, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
             AppGraph.init(app)
+            AppGraph.appCatalogStateForTest = com.gt8d.launcher.apps.AppCatalogState(app, AppGraph.catalog,
+                kotlinx.coroutines.test.UnconfinedTestDispatcher())
+        }
+        override fun after() {
+            AppGraph.appCatalogStateForTest?.close()
+            AppGraph.appCatalogStateForTest = null
         }
     }
     @get:Rule(order = 1) val rule = createComposeRule()
@@ -522,7 +550,10 @@ class PanelScreenTest {
         val expected = Defaults.build(emptySet()).copy(panelApps = listOf(pkg), appListPkgs = appListPkgs)
         runBlocking { AppGraph.config.update { expected } }
         rule.waitUntil(5000L) { latest.value == expected }
-        if (!wasInstalled) Shadows.shadowOf(app.packageManager).removePackage(pkg)
+        if (!wasInstalled) {
+            Shadows.shadowOf(app.packageManager).removeActivity(ComponentName(pkg, "$pkg.A"))
+            Shadows.shadowOf(app.packageManager).removePackage(pkg)
+        }
         rule.setContent {
             owner = androidx.compose.runtime.remember { PanelTestLifecycle().also { it.resume() } }
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
@@ -531,11 +562,13 @@ class PanelScreenTest {
         }
         rule.waitUntil(5000L) { AppGraph.latestConfig.value?.panelApps == listOf(pkg) }
         rule.waitForIdle()
+        assertNull(AppGraph.appCatalogState.snapshot.value.failure)
     }
     private fun openList() { rule.onNodeWithTag("dock_applist").performScrollTo().performClick() }
     private fun broadcast(action: String) {
         rule.runOnIdle { app.sendBroadcast(Intent(action, Uri.parse("package:$pkg"))) }
         rule.waitForIdle()
+        assertNull(AppGraph.appCatalogState.snapshot.value.failure)
     }
     private fun choose(label: String) {
         rule.onNodeWithTag("applist_all").performClick()
@@ -611,7 +644,10 @@ class PanelScreenTest {
         install(); host()
         rule.onNodeWithTag("icon_$pkg").performScrollTo().performClick()
         assertEquals(listOf(pkg), launches)
-        rule.runOnIdle { Shadows.shadowOf(app.packageManager).removePackage(pkg); launches.clear() }
+        rule.runOnIdle {
+            Shadows.shadowOf(app.packageManager).removeActivity(ComponentName(pkg, "$pkg.A"))
+            Shadows.shadowOf(app.packageManager).removePackage(pkg); launches.clear()
+        }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
         rule.onNodeWithTag("missing_$pkg").performScrollTo().assert(hasContentDescription("$pkg(アプリが見つかりません)")).performClick()
         assertEquals(emptyList<String>(), launches)
@@ -623,7 +659,10 @@ class PanelScreenTest {
         rule.runOnIdle { install() }
         broadcast(Intent.ACTION_PACKAGE_ADDED)
         rule.onNodeWithText("Label A").assertIsDisplayed()
-        rule.runOnIdle { Shadows.shadowOf(app.packageManager).removePackage(pkg) }
+        rule.runOnIdle {
+            Shadows.shadowOf(app.packageManager).removeActivity(ComponentName(pkg, "$pkg.A"))
+            Shadows.shadowOf(app.packageManager).removePackage(pkg)
+        }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
         rule.onNodeWithText("Label A").assertDoesNotExist()
         rule.onNodeWithTag("applist_close").assertIsDisplayed()

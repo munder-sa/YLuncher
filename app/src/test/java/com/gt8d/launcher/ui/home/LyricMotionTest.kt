@@ -11,6 +11,75 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LyricMotionTest {
+    private val geometry = LyricWindowGeometry(300, 240, 1f, 1f, "22sp-bold")
+    private fun window(current: Int, previous: LyricWindowPlan? = null,
+                       displayed: Map<Int, Float> = emptyMap(), generation: Long = (previous?.generation ?: 0) + 1) =
+        planLyricWindow(1, generation, 1000, current, geometry, previous, displayed) { 32 }
+
+    @Test fun crossingViewportWithoutVisibleEndpointsStillAnimates() {
+        assertEquals(setOf(0), visibleMotionRows(listOf(300f), listOf(-100f), listOf(32), 240))
+    }
+
+    @Test fun windowRetargetUsesAbsoluteRowIdentityAndLastLayerCoordinates() {
+        for (time in listOf(25f, 300f)) {
+            val motion = LyricMotion()
+            val a = window(500)
+            motion.prepare(a) {}
+            val b = window(501, a, motion.displayedTops())
+            motion.prepare(b) {}
+            motion.advance(time)
+            val before = motion.windowRows.mapValues { it.value.sample() }
+            val c = window(502, b, motion.displayedTops(), generation = b.generation + time.toLong())
+            motion.prepare(c) {}
+            before.forEach { (i, sample) ->
+                assertEquals(sample.top, motion.windowRows.getValue(i).sample().top, 0.5f)
+                assertEquals(sample.scale, motion.windowRows.getValue(i).sample().scale, 0f)
+            }
+        }
+    }
+
+    @Test fun windowCompletionUsesActualScaledMotionAndOnlyLatestGeneration() = runTest {
+        val motion = LyricMotion()
+        val a = window(500)
+        motion.prepare(a) {}
+        val b = window(501, a)
+        val completed = mutableListOf<Long>()
+        motion.prepare(b) { completed += b.generation }
+        val frames = BroadcastFrameClock()
+        backgroundScope.launch(frames + object : MotionDurationScale { override val scaleFactor = 0f }) { motion.run {} }
+        runCurrent()
+        frames.sendFrame(0L)
+        runCurrent()
+        assertEquals(listOf(b.generation), completed)
+        assertFalse(motion.running)
+        motion.windowRows.values.forEach { assertEquals(it.targetTop, it.sample().top, 0f) }
+    }
+
+    @Test fun retargetCancelsOldWindowCompletion() = runTest {
+        val motion = LyricMotion()
+        val a = window(500)
+        motion.prepare(a) {}
+        val b = window(501, a)
+        val completed = mutableListOf<Long>()
+        motion.prepare(b) { completed += b.generation }
+        val frames = BroadcastFrameClock()
+        backgroundScope.launch(frames) { motion.run {} }
+        runCurrent()
+        frames.sendFrame(0L)
+        runCurrent()
+        frames.sendFrame(300_000_000L)
+        runCurrent()
+        motion.windowRows.values.forEach { it.sample() }
+        val c = window(502, b, motion.displayedTops())
+        motion.prepare(c) { completed += c.generation }
+        runCurrent()
+        frames.sendFrame(300_000_000L)
+        runCurrent()
+        frames.sendFrame(1_200_000_000L)
+        runCurrent()
+        assertEquals(listOf(c.generation), completed)
+        motion.windowRows.values.forEach { assertEquals(it.targetTop, it.sample().top, 0.5f) }
+    }
     @Test fun delayByDistanceIsCapped() {
         assertEquals(listOf(100, 100, 50, 0, 50, 100, 100), (0..6).map { lineDelayMs(it, 3) })
     }

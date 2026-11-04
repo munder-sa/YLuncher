@@ -1,0 +1,12 @@
+HSPLcom/gt8d/launcher/ui/home/**;->**(**)**
+HSPLcom/gt8d/launcher/ui/panel/**;->**(**)**
+HSPLcom/gt8d/launcher/ui/layout/**;->**(**)**
+HSPLcom/gt8d/launcher/ui/theme/**;->**(**)**
+HSPLcom/gt8d/launcher/media/lyrics/**;->**(**)**
+HSPLcom/gt8d/launcher/ui/home/Lyric*;->**(**)**
+HSPLcom/gt8d/launcher/media/**;->**(**)**
+HSPLcom/gt8d/launcher/AppGraph;->**(**)**
+HSPLcom/gt8d/launcher/apps/AppCatalog*;->**(**)**
+HSPLcom/gt8d/launcher/LauncherApp;->**(**)**
+HSPLcom/gt8d/launcher/ui/home/HomeActivity;->**(**)**
+HSPLcom/gt8d/launcher/ui/panel/PanelActivity;->**(**)**

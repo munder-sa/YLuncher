@@ -21,8 +21,8 @@ android {
         applicationId = "com.gt8d.launcher"
         minSdk = 35
         targetSdk = 35
-        versionCode = 37
-        versionName = "2.1.0"
+        versionCode = 39
+        versionName = "2.2.0"
     }
 
     signingConfigs {
@@ -38,7 +38,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = if (keystorePropertiesFile.isFile) {
                 signingConfigs.getByName("release")
             } else {
@@ -85,6 +90,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.activity.compose)
+    implementation(libs.profileinstaller)
     implementation(libs.datastore)
     implementation(libs.kotlinx.serialization.json)
 

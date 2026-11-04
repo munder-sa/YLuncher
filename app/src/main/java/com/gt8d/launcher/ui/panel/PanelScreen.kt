@@ -34,8 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.HiddenApps
 import com.gt8d.launcher.apps.dockAppsFor
-import com.gt8d.launcher.apps.settingsComponent
-import com.gt8d.launcher.config.Defaults
+import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.media.positionAt
 import com.gt8d.launcher.split.AndroidActivityLauncher
@@ -67,7 +66,10 @@ fun PanelScreen(
 ) {
     val context = LocalContext.current
     val latestConfig by AppGraph.latestConfig.collectAsState()
-    val config = homeConfig ?: latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
+    val catalog = AppGraph.appCatalogState
+    val apps by catalog.snapshot.collectAsState()
+    val environment = rememberPanelEnvironment(catalog)
+    val config = homeConfig ?: latestConfig ?: return
     var pending by rememberSaveable { mutableStateOf<PanelView?>(null) }
     val scope = rememberCoroutineScope()
     val viewSaveMutex = remember { Mutex() }
@@ -78,12 +80,23 @@ fun PanelScreen(
     val lyrics by AppGraph.lyrics.state.collectAsState()
     var showAppList by rememberSaveable { mutableStateOf(false) }
     val iconPage = rememberSaveable { mutableIntStateOf(0) }
-    val environment = rememberPanelEnvironment(AppGraph.catalog)
     val frequent by AppGraph.frequentApps.collectAsState()
-    val settings = remember(context, environment.revision) { settingsComponent(context.packageManager) }
-    val settingsApp = remember(settings, environment.revision) {
-        settings?.let { AppInfo(it.packageName, "設定", AppGraph.catalog.icon(it.packageName), true) }
+    val settings = apps.settings
+    val settingsApp = remember(settings, apps.appRevision) {
+        settings?.let { AppInfo(it.packageName, "設定", apps.info(it.packageName).icon, true) }
     }
+    val required = remember(config, now?.pkg, frequent, apps.installed, settings) {
+        (config.homeApps + config.panelApps + config.dockApps + config.idleApp +
+            config.screenSets.flatMap { listOfNotNull((it.left as? Slot.App)?.pkg, (it.right as? Slot.App)?.pkg) } +
+            frequent.orEmpty().map { it.pkg } + listOfNotNull(now?.pkg, settings?.packageName))
+            .filter { it.isNotBlank() }.toSet()
+    }
+    LaunchedEffect(required) { catalog.request(required) }
+    var prepared by remember(catalog) { mutableStateOf(apps.ready && apps.infos.keys.containsAll(required)) }
+    LaunchedEffect(apps.ready, apps.infos.keys, required) {
+        if (apps.ready && apps.infos.keys.containsAll(required)) prepared = true
+    }
+    if (!apps.ready || !prepared) return
 
     val appListGridState = rememberLazyGridState()
     val homeAppRowState = rememberLazyListState()
@@ -96,8 +109,8 @@ fun PanelScreen(
     val launchable = environment.appListEntries.map { it.pkg }.toSet()
     val seed = seedAppList(config, emptySet(), launchable)
     val registered: Set<String> = (config.appListPkgs ?: seed).toSet()
-    LaunchedEffect(homeConfig != null || latestConfig != null, config.appListPkgs) {
-        if ((homeConfig != null || latestConfig != null) && config.appListPkgs == null) {
+    LaunchedEffect(homeConfig != null || latestConfig != null, config.appListPkgs, apps.ready) {
+        if (apps.ready && (homeConfig != null || latestConfig != null) && config.appListPkgs == null) {
             try {
                 val recent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     com.gt8d.launcher.apps.UsageHistory(context)
@@ -118,6 +131,7 @@ fun PanelScreen(
     }
 
     if (showAppList) {
+        LaunchedEffect(apps.entries) { catalog.request(apps.entries.map { it.pkg }.toSet()) }
         AppListScreen(
             registered = registered,
             onToggle = { pkg ->
@@ -132,9 +146,9 @@ fun PanelScreen(
                 }
             },
             gridState = appListGridState,
-            iconRevision = environment.revision.toInt(),
+            iconRevision = environment.appRevision.toInt(),
             entries = environment.appListEntries,
-            iconFor = { pkg -> AppGraph.catalog.icon(pkg) },
+            iconFor = { pkg -> apps.info(pkg).icon },
             onLaunch = { entry ->
                 launchEntry(entry)
                 showAppList = false
@@ -161,18 +175,17 @@ fun PanelScreen(
         }
     }
 
-    val catalog = AppGraph.catalog
     val installedPkgs = environment.installedPkgs
-    val idleApp = remember(config.idleApp, installedPkgs, environment.revision) {
-        catalog.info(config.idleApp, installedPkgs)
+    val idleApp = remember(config.idleApp, installedPkgs, environment.appRevision) {
+        apps.info(config.idleApp)
     }
-    val panelApps = remember(config.panelApps, installedPkgs, environment.revision) {
-        config.panelApps.map { catalog.info(it, installedPkgs) }
+    val panelApps = remember(config.panelApps, installedPkgs, environment.appRevision) {
+        config.panelApps.map { apps.info(it) }
     }
     val dockApps = remember(config.dockMode, config.dockApps, frequent, installedPkgs,
-        settings?.packageName, environment.revision) {
+        settings?.packageName, environment.appRevision) {
         dockAppsFor(config.dockMode, config.dockApps, frequent, installedPkgs,
-        setOfNotNull(settings?.packageName) + HiddenApps.packages).map { catalog.info(it, installedPkgs) }
+        setOfNotNull(settings?.packageName) + HiddenApps.packages).map { apps.info(it) }
     }
 
     val state = PanelState(
@@ -231,13 +244,13 @@ fun PanelScreen(
 
     if (homeWide) {
         val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
-        HomeWideContent(state, actions, config, { catalog.info(it, installedPkgs) }, currentIndex,
+        HomeWideContent(state, actions, config, { apps.info(it) }, currentIndex,
             onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet, homeAppRowState = homeAppRowState)
     } else {
         val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
         PanelContent(iconPage = iconPage, state = state.copy(view = pending ?: config.panelView,
             sets = config.screenSets, currentSetIndex = currentIndex,
-            setAppInfo = { catalog.info(it, installedPkgs) }),
+            setAppInfo = { apps.info(it) }),
             actions = actions.copy(onSelectView = { view ->
                 pending = view
                 scope.launch {

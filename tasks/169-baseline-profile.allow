@@ -1,0 +1,6 @@
+write gradle/libs.versions.toml
+write app/build.gradle.kts
+create app/src/main/baseline-prof.txt
+command /home/munde/tools/gradle-run.sh :app:assembleRelease
+command unzip -l app/build/outputs/apk/release/app-release.apk
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.config.*'
