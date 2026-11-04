@@ -4,6 +4,9 @@
 
 ## 再開時の要点 (2026-11-04 18時台)
 
+- **最新18:43: Task189実装・レビュー・18テスト・beta6 APK準備完了、workerなし**。183316の再委譲はsealed interfaceのテストコンパイル失敗→fixtureをJVM proxyへ変更→18件中1件失敗→1hostの再利用検査を2host検査より前へ移し、全期待値/項目を維持して18件成功(26秒)。既存6件/.codex.conf/SDK/AGP/compiler無変更。release1回1分19秒成功。共通policy/取消/固定例外/TCP競争/HTTP再送防止の実装全文・テスト全文・XML・実コマンド照合済み。次は同署名の両beta6 / 46へ実機更新して初回復元を測る。
+- beta6 app3,340,574bytes(前版から301,736bytes増)、panel2,021,093bytes。双方署名verify成功・従来証明書一致、HTTP notice内蔵。manifestのWebログインActivityとstartup providerは非exported、OkHttp PlatformInitializerが登録された。秘密や歌詞を保存する新機構は追加していない。
+- その間の実機beta5: PSS82,056KiB/RSS220,704KiB/WebViews0の一点測定。厳密な性能基準ではない。Apple本体は再起動後もLemon songリンクで遷移せず、公式iTunes lookupのalbumリンクは「地域で使用できない」、アプリ内Apple/ライブラリ検索も結果が出なかった。Apple実TTML2曲検証は引き続き未完了。端末全体の再起動はまだ行っていない。
 - **Task189の再開条件: OkHttp/テスト依存3本を5.3.2へ統一**。182029の委譲は8ファイル実装→checkDebugAarMetadataで失敗して終了0。5.5.1 Android AARはSDK37必須。テスト実行0件/release未実行。司令塔が公式metadata/AARを読み、5.3系最新5.3.2はSDK35を排除しないことを確認。Okio3.16.4/stdlib2.2.21、compiler2.1.0とのコンパイル互換は次に実検証。SDK/AGP/検査ルールは変更しない。5.3.2公式ソースは/tmp/yluncher-task189-reference-5.3.2、固定依存取得だけCODEX_NOTE例外を維持してCODEX_RESUME=1で再開する。
 - Task189初回181602はwrapperの一般的な外部接続禁止との矛盾で無変更/テスト未実行のまま終了0。ユーザーが今回承認した固定依存のGradle解決だけをCODEX_NOTEで例外明記して再委譲する。wrapper/.codex.conf/forbidden変更なし。公式ソースの読み取り資料は/tmp/yluncher-task189-referenceへ司令塔が取得。
 - **最新: Task 188=`c1e9b63`、両beta5 / 45実機更新成功。IPv6到達性の問題が有力。ユーザーは通信側の対策も今回含めることを承認済み**。Task 189でApple通信だけOkHttp5.5.1のFast Fallbackへ移行する。指示書/allowに範囲8ファイル、既存Transport6件と新テスト、beta6 / 46を具体化。署名/権限/HOME維持、PID31768。初回は公開最初の301まで20,225ms・refresh全体22,721ms、account中に35,007ms TIMEOUT。解析はページ20ms/asset54ms。端末curl IPv4は301/0.728秒とAPI404/0.240秒、IPv6はいずれも6秒のTCP接続TIMEOUT。proxy/private DNS globalはnull、設定は変更していない。

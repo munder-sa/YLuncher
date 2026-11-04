@@ -13,7 +13,7 @@ import com.gt8d.launcher.media.lyrics.AmllIndexUrlConnectionTransport
 import com.gt8d.launcher.media.lyrics.AmllUrlConnectionTransport
 import com.gt8d.launcher.media.lyrics.AppleLyricsCache
 import com.gt8d.launcher.media.lyrics.AppleLyricsClient
-import com.gt8d.launcher.media.lyrics.AppleLyricsUrlConnectionTransport
+import com.gt8d.launcher.media.lyrics.AppleLyricsOkHttpTransport
 import com.gt8d.launcher.media.lyrics.AppleMusicSession
 import com.gt8d.launcher.media.lyrics.AndroidAppleCredentialStore
 import com.gt8d.launcher.media.lyrics.observeAppleMusicRestore
@@ -81,7 +81,7 @@ import kotlinx.coroutines.withContext
 object AppGraph {
     private val lyricsScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val appleMusic: AppleMusicSession by lazy {
-        val transport = AppleLyricsUrlConnectionTransport()
+        val transport = AppleLyricsOkHttpTransport()
         val tokens = AppleWebTokenProvider(transport, diagnosticsEnabled = true)
         val client = AppleLyricsClient(transport, tokens, diagnosticsEnabled = true)
         AppleMusicSession(client::connect, client::fetch, AndroidAppleCredentialStore(app), lyricsScope)

@@ -65,3 +65,15 @@
 - ユーザーの今回の「通信側の対策も今回進める」はOkHttp5追加を含む明示承認。既存codex-runのCODEX_NOTEで、allowのGradle2コマンドがこの固定依存と推移依存を公式repositoryから解決することだけを、一般禁止の例外として明記する。全体ネットワーク解禁/別のインストールへ広げない。wrapper/.codex.conf/forbiddenルール自体は変更しない。
 - 司令塔が公式Maven sources.jarを読み取り資料として `/tmp/yluncher-task189-reference/{okhttp,mockwebserver,tls,okio}` へ展開。実装担当はこの参照資料を読み取りだけで使える。取得物のスクリプト実行は不可。
 - 2回目 `.codex-bak/20261104-182029/` は許可8ファイル実装後、指定テストコマンド1回18秒でcheckDebugAarMetadata失敗。テスト実行0件/release未実行、旧6件/.codex.conf無変更。最新Android AARのSDK37要件が原因。司令塔は依存解決情報・ソース・12件の新テストを読んで、上記互換版へ指示を限定更新した。CODEX_RESUME=1で同じ8ファイルをバックアップ付き更新として再開する。
+
+## 最終実装と司令塔レビュー
+
+- 再委譲 `.codex-bak/20261104-183316/` 終了0。許可8ファイルのみ、SDK/AGP/compiler/既存テスト/.codex.conf無変更。OkHttp3依存5.3.2、推移Okio3.16.4。Android artifactを使用し、JVM強制やmetadata検査回避なし。
+- 指定テストコマンド: 1回目2分11秒はテストfixtureのsealed interfaceコンパイル失敗で実行0件。匿名実装をJVM proxyへ置換して入力Streamの観測を維持。2回目1分19秒は18件中1失敗。HTTP/1.1の異なるhostが各接続を持つことを公式ソースと照合し、1hostの再利用検査を2hostを使う応答検査より前へ移動。比較値/検証項目を変更せず、3回目26秒で旧6+新12=18件成功、失敗/エラー/skip0。
+- 指定releaseコマンド1回1分19秒で成功。司令塔は実コマンド/XML/全文/共通policyの抽出差分と取消構造、no-cookie/no-cache/標準DNS・TLS/非200のProtocolExceptionによるHTTP再送抑止をレビュー。引用符allow警告は既知の正規化差だけ、成功後再実行なし。
+- 決めたこと: IO上のexecute+suspendCancellableCoroutineを維持。AtomicReferenceでCall/Responseを管理し取消はcancel→close、戻り境界でも取消優先。注入はinternal Call.Factory/clock、本番clientはcreateClientへ分離。非200はbody空DTOだけをprivate固定message例外で運ぶ。テストはloopback TLS、合成DNS/SocketのlatchでIPv6の解放前にIPv4接続成功/負けsocket closeを実証。テストfixture2修正の理由は上記。
+- 両metadata 46 / 2.3.0-beta6。apksigner verify終了0・従来同署名SHA256 `44d8c612bd3948e265840f28adff0f820d5893d0ba24d888b041ca16544f7f6d`。
+- app3,340,574bytes / SHA256 `603a0f0ab22a3e810c9a8e38139c9ae53409380c58b9155ae76ab7d542cdaab7`、前版比+301,736bytes。
+- panel2,021,093bytes / SHA256 `a21af7342c4d795b1bf0dad4bd957b1da438256cb1fb01312089f0482531bfde`。
+- APKのHTTP notice11,889bytes、版5.3.2/Okio3.16.4・Apacheライセンスを確認。compiled manifestはWebログインActivity/exported=false、startup provider/exported=false、OkHttp PlatformInitializer追加を確認。
+- この時点では実機はまだbeta5。次に更新し初回復元・端末再起動後の保持を確認する。

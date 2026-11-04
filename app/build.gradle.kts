@@ -21,8 +21,8 @@ android {
         applicationId = "com.gt8d.launcher"
         minSdk = 35
         targetSdk = 35
-        versionCode = 45
-        versionName = "2.3.0-beta5"
+        versionCode = 46
+        versionName = "2.3.0-beta6"
     }
 
     signingConfigs {
@@ -85,6 +85,7 @@ android {
 }
 
 dependencies {
+    implementation("com.squareup.okhttp3:okhttp:5.3.2")
     implementation("androidx.webkit:webkit:1.13.0")
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -97,6 +98,8 @@ dependencies {
 
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.junit)
+    testImplementation("com.squareup.okhttp3:mockwebserver3:5.3.2")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:5.3.2")
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.espresso.core)
