@@ -4,6 +4,7 @@
 
 ## 再開時の要点 (2026-11-04 18時台)
 
+- Task189初回181602はwrapperの一般的な外部接続禁止との矛盾で無変更/テスト未実行のまま終了0。ユーザーが今回承認した固定依存のGradle解決だけをCODEX_NOTEで例外明記して再委譲する。wrapper/.codex.conf/forbidden変更なし。公式ソースの読み取り資料は/tmp/yluncher-task189-referenceへ司令塔が取得。
 - **最新: Task 188=`c1e9b63`、両beta5 / 45実機更新成功。IPv6到達性の問題が有力。ユーザーは通信側の対策も今回含めることを承認済み**。Task 189でApple通信だけOkHttp5.5.1のFast Fallbackへ移行する。指示書/allowに範囲8ファイル、既存Transport6件と新テスト、beta6 / 46を具体化。署名/権限/HOME維持、PID31768。初回は公開最初の301まで20,225ms・refresh全体22,721ms、account中に35,007ms TIMEOUT。解析はページ20ms/asset54ms。端末curl IPv4は301/0.728秒とAPI404/0.240秒、IPv6はいずれも6秒のTCP接続TIMEOUT。proxy/private DNS globalはnull、設定は変更していない。
 - beta5でも保存済みjp/SAVEDへ再確認成功(account10,266ms/全体10,269ms)、再入力/Webログインなし。設定が一時黒画面になったがHOME→設定の開き直しで通常表示、当該PIDのAndroidRuntime:Eなし。原因未特定、恒常的な描画不具合とは断定しない。
 - 担当はこの会話のCodex暫定司令塔。feat-apple-lyrics、Task 188の実装/レビュー完了、workerなし。次は両beta5 / 45を実機へ上書きし、保存情報の初回復元を段階ログで診断する。正式公開/push/main取り込みは未実施。

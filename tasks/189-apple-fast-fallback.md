@@ -54,3 +54,9 @@
 - `/home/munde/tools/gradle-run.sh :app:assembleRelease :panelhost:assembleRelease`
 
 報告は日本語。変更/共通policyの同一性/本番client設定・取消・HTTP再送防止・Fast Fallback検証/正確な実行結果と件数・失敗・skip・版/決めたことを記録。実機で初回復元が直ったかは司令塔が後で検証するので未確認と書く。
+
+## 初回停止と権限の具体化
+
+- 初回 `.codex-bak/20261104-181602/` はwrapperの古い一般的な外部接続禁止と新依存取得の矛盾を報告。無変更/未実行で終了0。
+- ユーザーの今回の「通信側の対策も今回進める」はOkHttp5追加を含む明示承認。既存codex-runのCODEX_NOTEで、allowのGradle2コマンドがこの固定依存と推移依存を公式repositoryから解決することだけを、一般禁止の例外として明記する。全体ネットワーク解禁/別のインストールへ広げない。wrapper/.codex.conf/forbiddenルール自体は変更しない。
+- 司令塔が公式Maven sources.jarを読み取り資料として `/tmp/yluncher-task189-reference/{okhttp,mockwebserver,tls,okio}` へ展開。実装担当はこの参照資料を読み取りだけで使える。取得物のスクリプト実行は不可。
