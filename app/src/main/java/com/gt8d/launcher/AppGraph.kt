@@ -11,6 +11,11 @@ import com.gt8d.launcher.media.lyrics.AmllClient
 import com.gt8d.launcher.media.lyrics.AmllIndexStore
 import com.gt8d.launcher.media.lyrics.AmllIndexUrlConnectionTransport
 import com.gt8d.launcher.media.lyrics.AmllUrlConnectionTransport
+import com.gt8d.launcher.media.lyrics.AppleLyricsCache
+import com.gt8d.launcher.media.lyrics.AppleLyricsClient
+import com.gt8d.launcher.media.lyrics.AppleLyricsUrlConnectionTransport
+import com.gt8d.launcher.media.lyrics.AppleMusicSession
+import com.gt8d.launcher.media.lyrics.AppleWebTokenProvider
 import com.gt8d.launcher.media.lyrics.LyricsRepository
 import com.gt8d.launcher.media.lyrics.LrclibClient
 import com.gt8d.launcher.media.lyrics.UrlConnectionTransport
@@ -72,6 +77,12 @@ import kotlinx.coroutines.withContext
 
 object AppGraph {
     private val lyricsScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val appleMusic: AppleMusicSession by lazy {
+        val transport = AppleLyricsUrlConnectionTransport()
+        val tokens = AppleWebTokenProvider(transport)
+        val client = AppleLyricsClient(transport, tokens)
+        AppleMusicSession(client::connect, client::fetch)
+    }
     val lyrics: LyricsRepository by lazy {
         val versionName = try {
             app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
@@ -92,6 +103,9 @@ object AppGraph {
             io = Dispatchers.IO,
             amllCache = AmllCache(File(app.filesDir, "lyrics/amll"), System::currentTimeMillis),
             fetchAmll = amll::fetch,
+            appleConnection = appleMusic.state,
+            appleCache = AppleLyricsCache(SystemClock::elapsedRealtime),
+            fetchApple = appleMusic::fetch,
         )
     }
     private val _frequentApps = MutableStateFlow<List<FrequentApp>?>(null)

@@ -1,0 +1,6 @@
+write app/src/main/java/com/gt8d/launcher/media/lyrics/LyricsRepository.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AppleLyricsCache.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AppleLyricsCacheTest.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AppleLyricsRepositoryTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsCacheTest' --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsRepositoryTest' --tests 'com.gt8d.launcher.media.lyrics.LyricsRepositoryTest'

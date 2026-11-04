@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.diag.DiagLog
+import com.gt8d.launcher.media.lyrics.AppleMusicSession
 import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.split.SplitMode
 import com.gt8d.launcher.ui.theme.Dims
@@ -84,6 +85,7 @@ fun SettingsHost(
     labelFor: (String) -> String = { AppGraph.catalog.label(it) },
     launchablePackages: () -> List<String> = { AppGraph.catalog.launchables().map { it.pkg } },
     iconFor: ((String) -> ImageBitmap?)? = null,
+    appleMusic: AppleMusicSession? = null,
 ) {
     var nav by remember { mutableStateOf(if (initialRoute == null) SettingsNav() else SettingsNav(listOf(SettingsRoute.Root, initialRoute))) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -100,6 +102,7 @@ fun SettingsHost(
             when (nav.current) {
                 SettingsRoute.Root -> "設定"
                 is SettingsRoute.SetEdit -> "画面セットの編集"
+                SettingsRoute.AppleMusicLyrics -> "Apple Music の歌詞"
                 else -> detailItems.first { it.route == nav.current }.title
             },
             onBack = {
@@ -113,6 +116,11 @@ fun SettingsHost(
                     detailItems.take(5).forEach { item ->
                         SettingsRow(item.title, item.tag, { nav = nav.push(item.route) })
                     }
+                }
+                SettingsSection("音楽") {
+                    SettingsRow("Apple Music の歌詞", "settings_item_apple_music_lyrics", {
+                        nav = nav.push(SettingsRoute.AppleMusicLyrics)
+                    })
                 }
                 SettingsSection("システム") {
                     detailItems.drop(5).filter { it.route != SettingsRoute.AppPairPrep || actions.showAppPairPrep() }.forEach { item ->
@@ -137,6 +145,12 @@ fun SettingsHost(
                     onBack = back, onOpenSet = onOpenSet, labelFor = labelFor,
                     onMissing = { nav = SettingsNav(listOf(SettingsRoute.Root, SettingsRoute.Sets)) },
                     launchablePackages = launchablePackages, iconFor = iconFor ?: catalog::icon)
+            } else if (nav.current == SettingsRoute.AppleMusicLyrics) {
+                if (appleMusic == null) {
+                    Text("接続設定を利用できません", color = Palette.Muted, fontSize = Dims.BodyText)
+                } else {
+                    AppleMusicLyricsScreen(appleMusic)
+                }
             } else if (nav.current == SettingsRoute.Permissions) {
                 AppPermissionsScreen()
             } else if (nav.current == SettingsRoute.AppPairPrep) {

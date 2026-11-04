@@ -71,6 +71,16 @@ class SettingsActivityTest {
         rule.onNodeWithText("リンクの行き先").assertIsDisplayed()
         rule.onNodeWithTag("settings_item_sets").assertDoesNotExist()
     }
+    @Test fun appleMusicRouteOpensConnectionSettings() {
+        controller = Robolectric.buildActivity(SettingsActivity::class.java,
+            Intent(app, SettingsActivity::class.java).putExtra("open_route", "apple_music_lyrics"))
+            .create().start().resume().visible()
+        rule.onNodeWithText("Apple Music の歌詞").assertIsDisplayed()
+        rule.onNodeWithTag("apple_music_token").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("アプリの終了・再起動後は再入力が必要です。")
+            .performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("settings_item_sets").assertDoesNotExist()
+    }
     @Test fun safetyCleared_startsHome_andFinishes() {
         SafetyGuard.recordStart(app); repeat(3) { SafetyGuard.recordCrash(app) }
         assertTrue(SafetyGuard.isFallbackActive(app)); host()

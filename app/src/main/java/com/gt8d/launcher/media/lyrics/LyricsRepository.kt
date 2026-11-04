@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -30,6 +31,11 @@ class LyricsRepository(
     private val io: CoroutineDispatcher,
     private val amllCache: AmllCache,
     private val fetchAmll: suspend (LyricsRequest) -> AmllResult,
+    private val appleConnection: StateFlow<AppleMusicConnection> = MutableStateFlow(AppleMusicConnection()),
+    private val appleCache: AppleLyricsCache = AppleLyricsCache(clock),
+    private val fetchApple: suspend (LyricsRequest, Long) -> AppleLyricsResult = { _, _ ->
+        AppleLyricsResult(LyricsState.Missing, AppleLyricsReason.NOT_APPLICABLE)
+    },
 ) {
     private val mutableState = MutableStateFlow<LyricsState>(LyricsState.Off)
     val state: StateFlow<LyricsState> = mutableState.asStateFlow()
@@ -41,41 +47,99 @@ class LyricsRepository(
             val keys = nowPlaying.map { now ->
                 now?.lyricsRequest?.let { Pair(now.pkg, it) }
             }.distinctUntilChanged()
-            combine(keys, enabled.distinctUntilChanged()) { key, on -> key to on }
-                .collectLatest { (key, on) ->
+            val connections = appleConnection
+                // Runs upstream of collectLatest's cancel-and-join, even for a slow old fetch.
+                .onEach { appleCache.activateGeneration(it.generation) }
+                .map { it.copy(reason = null, retryAfterSec = null) }
+                .distinctUntilChanged()
+            combine(keys, enabled.distinctUntilChanged(), connections) { key, on, connection ->
+                Triple(key, on, connection)
+            }.onEach { (key, on, _) ->
+                if (!on || key == null) mutableState.value = LyricsState.Off
+            }.collectLatest { (key, on, connection) ->
                     if (!on || key == null) {
                         mutableState.value = LyricsState.Off
                         return@collectLatest
                     }
                     val request = key.second
                     val q = request.query
+                    suspend fun checkCurrent() {
+                        currentCoroutineContext().ensureActive()
+                        val current = appleConnection.value
+                        if (current.generation != connection.generation || current.status != connection.status ||
+                            current.storefront != connection.storefront
+                        ) throw CancellationException("Lyrics connection changed")
+                    }
+                    checkCurrent()
                     DiagLog.d("Lyrics", "track title=${q.title} artist=${q.artist} album=${q.album} dur=${q.durationSec}")
+                    val appleKey = if (key.first == "com.apple.android.music") {
+                        AppleLyricsCache.key(request, connection)
+                    } else null
+                    val appleCached = appleKey?.let { appleCache.get(it) }
+                    checkCurrent()
+                    if (appleCached?.isWordSuccess() == true) {
+                        mutableState.value = appleCached.state
+                        logApple(appleCached, cacheHit = true, elapsedMs = 0)
+                        logResult(appleCached.state, "APPLE")
+                        return@collectLatest
+                    }
                     val amllCached = withContext(io) { amllCache.get(request, null) }
+                    checkCurrent()
                     if (amllCached?.state.hasWords()) {
                         mutableState.value = amllCached!!.state
                         logResult(amllCached.state, "AMLL")
-                        return@collectLatest
+                        if (appleKey == null) return@collectLatest
                     }
-                    val cached = withContext(io) { cache.get(q) }
-                    DiagLog.d("Lyrics", if (cached != null) "cache hit ${cached.javaClass.simpleName}" else "cache miss")
-                    mutableState.value = cached ?: LyricsState.Loading
+                    val cached = if (amllCached?.state.hasWords()) null else withContext(io) { cache.get(q) }
+                    checkCurrent()
+                    if (!amllCached?.state.hasWords()) {
+                        DiagLog.d("Lyrics", if (cached != null) "cache hit ${cached.javaClass.simpleName}" else "cache miss")
+                        mutableState.value = cached ?: LyricsState.Loading
+                    }
                     delay(600)
-                    var checkedAmll: AmllResult? = null
+                    checkCurrent()
+                    if (appleKey != null) {
+                        // Recheck expiry after the debounce; this attempt is outside legacy retries.
+                        val suppressed = appleCache.get(appleKey)
+                        checkCurrent()
+                        val startedAt = clock()
+                        val apple = suppressed ?: try {
+                            withContext(io) {
+                                checkCurrent()
+                                fetchApple(request, connection.generation)
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            AppleLyricsResult(LyricsState.Failed, AppleLyricsReason.NETWORK)
+                        }
+                        checkCurrent()
+                        if (suppressed == null) appleCache.put(appleKey, apple)
+                        checkCurrent()
+                        logApple(apple, suppressed != null, (clock() - startedAt).coerceAtLeast(0L))
+                        if (apple.isWordSuccess()) {
+                            checkCurrent()
+                            mutableState.value = apple.state
+                            logResult(apple.state, "APPLE")
+                            return@collectLatest
+                        }
+                    }
+                    var checkedAmll: AmllResult? = amllCached?.takeIf { it.state.hasWords() }
                     repeat(4) { attempt ->
                         val amll = checkedAmll ?: withContext(io) {
-                            currentCoroutineContext().ensureActive()
+                            checkCurrent()
                             amllCache.get(request, null)
-                        } ?: if (clock() < (amllAllowedAt[request] ?: 0L)) {
+                        }.also { checkCurrent() } ?: if (clock() < (amllAllowedAt[request] ?: 0L)) {
                             AmllResult(LyricsState.Failed, AmllReason.WAIT)
                         } else {
                             val result = try {
-                                withContext(io) { fetchAmll(request) }
+                                withContext(io) { checkCurrent(); fetchAmll(request) }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (_: Exception) {
                                 AmllResult(LyricsState.Failed, AmllReason.NETWORK)
                             }
-                            currentCoroutineContext().ensureActive()
+                            checkCurrent()
                             if (result.state == LyricsState.Offline || result.state == LyricsState.Failed) {
                                 val seconds = maxOf(60L, result.retryAfterSec ?: 0L)
                                 val now = clock()
@@ -84,15 +148,16 @@ class LyricsRepository(
                                 } else now + seconds * 1000
                             } else amllAllowedAt.remove(request)
                             if (result.cacheable) withContext(io) {
-                                currentCoroutineContext().ensureActive()
+                                checkCurrent()
                                 amllCache.put(request, null, result)
                             }
+                            checkCurrent()
                             result
                         }
                         if (amll.state != LyricsState.Offline && amll.state != LyricsState.Failed) {
                             checkedAmll = amll
                         }
-                        currentCoroutineContext().ensureActive()
+                        checkCurrent()
                         if (amll.state.hasWords()) {
                             mutableState.value = amll.state
                             logResult(amll.state, "AMLL")
@@ -104,14 +169,15 @@ class LyricsRepository(
                             return@collectLatest
                         }
                         delay((nextAllowedAt - clock()).coerceAtLeast(0L))
+                        checkCurrent()
                         val result = if (cached != null) FetchResult(cached) else try {
-                            withContext(io) { fetch(q) }
+                            withContext(io) { checkCurrent(); fetch(q) }
                         } catch (e: CancellationException) {
                             throw e
                         } catch (_: Exception) {
                             FetchResult(LyricsState.Failed)
                         }
-                        currentCoroutineContext().ensureActive()
+                        checkCurrent()
                         result.retryAfterSec?.let { nextAllowedAt = clock() + it * 1000 }
                         val overall = if (result.state == LyricsState.Missing &&
                             (amll.state == LyricsState.Failed || amll.state == LyricsState.Offline)) {
@@ -120,11 +186,11 @@ class LyricsRepository(
                         if (cached == null && result.cacheable && (result.state is LyricsState.Synced ||
                                 result.state is LyricsState.Plain || result.state == LyricsState.Missing)) {
                             withContext(io) {
-                                currentCoroutineContext().ensureActive()
+                                checkCurrent()
                                 cache.put(q, result.state)
                             }
                         }
-                        currentCoroutineContext().ensureActive()
+                        checkCurrent()
                         mutableState.value = overall
                         logResult(overall, if (overall == amll.state && overall != result.state) "AMLL" else "LRCLIB")
                         when (overall) {
@@ -147,6 +213,16 @@ class LyricsRepository(
 
     private fun LyricsState?.hasWords(): Boolean =
         this is LyricsState.Synced && lines.any { it.words.isNotEmpty() }
+
+    private fun AppleLyricsResult.isWordSuccess(): Boolean = reason == AppleLyricsReason.OK && state.hasWords()
+
+    private fun logApple(result: AppleLyricsResult, cacheHit: Boolean, elapsedMs: Long) {
+        val accepted = result.isWordSuccess()
+        val lines = (result.state as? LyricsState.Synced)?.lines.orEmpty()
+        DiagLog.d("Lyrics", "apple result accepted=$accepted reason=${result.reason.name} " +
+            "cache=${if (cacheHit) "hit" else "miss"} ms=$elapsedMs " +
+            "lines=${if (accepted) lines.size else 0} words=${if (accepted) lines.sumOf { it.words.size } else 0}")
+    }
 
     private fun logResult(state: LyricsState, source: String) {
         DiagLog.d("Lyrics", "amll result ${state.javaClass.simpleName} source=$source")

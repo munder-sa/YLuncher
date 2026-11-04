@@ -1,0 +1,3 @@
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AppleLyricsClient.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AppleLyricsClientTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsClientTest' --tests 'com.gt8d.launcher.media.lyrics.TtmlParserTest'

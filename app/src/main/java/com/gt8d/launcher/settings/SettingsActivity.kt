@@ -24,9 +24,11 @@ class SettingsActivity : ComponentActivity() {
                         "permissions" -> SettingsRoute.Permissions
                         "sets" -> SettingsRoute.Sets
                         "link" -> SettingsRoute.Link
+                        "apple_music_lyrics" -> SettingsRoute.AppleMusicLyrics
                         else -> null
                     },
-                    onOpenSet = { AppGraph.runner.open(it); finish() })
+                    onOpenSet = { AppGraph.runner.open(it); finish() },
+                    appleMusic = AppGraph.appleMusic)
             }
         }
     }

@@ -8,6 +8,7 @@ sealed interface SettingsRoute {
     data object Link : SettingsRoute
     data object Gesture : SettingsRoute
     data object Boot : SettingsRoute
+    data object AppleMusicLyrics : SettingsRoute
     data object Permissions : SettingsRoute
     data object AppPairPrep : SettingsRoute
 }

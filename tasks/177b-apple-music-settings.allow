@@ -1,0 +1,8 @@
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsNav.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsActivity.kt
+write app/src/test/java/com/gt8d/launcher/settings/SettingsActivityTest.kt
+create app/src/main/java/com/gt8d/launcher/settings/AppleMusicLyricsScreen.kt
+create app/src/test/java/com/gt8d/launcher/settings/AppleMusicLyricsScreenTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.settings.AppleMusicLyricsScreenTest' --tests 'com.gt8d.launcher.settings.SettingsScreenTest' --tests 'com.gt8d.launcher.settings.SettingsNavTest' --tests 'com.gt8d.launcher.settings.SettingsActivityTest'

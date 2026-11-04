@@ -2,6 +2,44 @@
 
 最終更新: 2026-11-04 (JST)
 
+## 再開時の要点 (2026-11-04 14:35 JST以降)
+
+- 担当は引き続きこの会話のCodex暫定司令塔。Task 175〜178はレビュー・対象検証完了、Task 179は**実機導入とApple認証接続まで完了**。実歌詞のKotlin解析/表示はこれから。
+- Codex再起動後に旧PID 538894がなく、新しい実行元PID 562362を確認。daemon versionはrunning/appServerVersion 0.165.0を返した。旧forbidden判定は解消し、ADB・Gitブランチ作成に成功した。
+- 再起動後はPATHにWindows ADBがなく、短縮コマンドはcommand not found。既存の `/mnt/c/Users/munde/AppData/Local/Android/Sdk/platform-tools/adb.exe` を所定の承認で使い、`-s 192.168.137.248:5555 get-state` がdeviceを返した。インストールや権限回避で別ADBを用意したわけではない。
+- 実機は本体・中継とも **2.3.0-beta1 / 41**。準備済み2APKのSHA-256が下表と一致することを確認後、本体→中継の `install -r` がともにSuccess。更新時刻は本体14:34:08、中継14:34:18。導入前はともに2.2.1-beta1 / 40、署名表示は前後とも `[2728742d]`。
+- 導入前後で既定HOME=com.gt8d.launcher、通知/Bluetooth権限granted=true、YLuncher通知リスナーを含む全リスナー、carsysoとYLuncherのユーザー補助サービスが一致。権限・端末データの変更なし。
+- 実機UI: HomeActivity起動成功。アプリ一覧の長押しから設定→音楽→Apple Musicの歌詞へ移動し、説明文・未接続・空のマスク入力欄・無効な接続確認/解除ボタンを確認。現在この画面を開いたまま。ユーザーへ実機へのWeb用トークン入力と接続結果だけの回答を依頼済み。秘密値をチャット/コマンド/ログへ送らない。
+- その後ユーザーがトークンを入力し「接続済み（地域: jp）」と回答。司令塔も実機画面で同表示、入力欄が空、解除ボタン有効を確認した。認証付きstorefront取得の実機経路は通ったが、歌詞APIと実TTML採用はまだ未確認。Lemonの公開リンクをApple Musicへ渡すと読み込みが続いたため、Apple Musicだけをforce-stop→MainActivity起動し直して検証中。YLuncherのプロセスは維持し、トークンは再取得/保存していない。
+- Gitは `feat-apple-lyrics` を `perf-artwork-copy` / `2b28074` から作成済み。レビュー済みの実装と検証記録をこのブランチへ保存する。既存未追跡 `.mcp.json` とTask 170のmd/allowは引き続き対象外。push・公開・main取り込みは行っていない。
+- この再開ではビルド・単体テストを再実行していない。起動直後のGT8D取得は空だったが、後のPID 7878指定ログで `[Lyrics] metadata keys pkg=com.apple.android.music` を確認。Apple採用ログはまだなし。端末curlでhttps://music.apple.comへHTTP 301/約0.279秒を確認した。次はLemonと別曲→ホーム/パネルと操作場面の検証。
+- 決めたこと: PATHやシステム設定は変えず既存ADBの絶対パスを使う。今回の未接続UIまでの確認を、認証・歌詞取得・表示の合格と分けて記録する。
+
+## 再起動前の記録 (2026-11-04 14時台)
+
+- 担当は引き続きこの会話の**Codex暫定司令塔**。ユーザーは「ADBコマンドは司令塔に許可します」と明示し、その後Codex側の再起動も依頼した。実装担当への権限継承はない。
+- Apple Music歌詞のTask 175〜178は実装/レビュー/対象検証完了。Task 179は**2.3.0-beta1 / 41のAPK作成・静的検証まで完了**、実機導入/Android実通信/実データのKotlin解析と表示は未確認。現時点で最後に確認された実機は2.2.1-beta1 / 40。
+- 最新Git確認は `perf-artwork-copy` / `2b28074`。Apple実装・文書・版の変更は未コミット。既存未追跡 `.mcp.json` とTask 170文書は対象外として残した。probeスクリプトはTask 175で意図的に変更済み。
+- `codex-run` の全委譲は終了済み。最後は `.codex-bak/20261104-141900/` のTask 179、終了コード0。終了後のps検索ではcodex-run/codex exec/GradleWrapperMain/GradleWorkerMainの実行中プロセスなし。
+- ユーザーのADB明示許可後も `adb.exe -s 192.168.137.248:5555 get-state` は自動承認審査に `codex-run で禁止 (司令塔が行う)` と拒否された。Gitブランチ作成とタグ一覧にも同じ拒否。迂回せず保留している。
+- 制限の読み取り調査: `/home/munde/.local/bin/codex-run` は実装中だけプロジェクト `.codex/rules/codex-run.rules` にadb/adb.exe/git等のforbiddenを作り、EXIT trapで削除する。現在この一時ルールファイルはなく、`/home/munde/.codex/rules/default.rules` にはget-stateのallowがある。`codex execpolicy check --pretty --rules /home/munde/.codex/rules/default.rules -- adb.exe -s 192.168.137.248:5555 get-state` はdecision=allow。起動中環境に旧ルールが保持されている可能性が高いが、内部の保持状態を直接確認したわけではない。
+- [OpenAI公式資料](https://learn.chatgpt.com/docs/agent-configuration/rules)で、rulesは起動時に読み込み、forbiddenがallowより優先、変更反映には再起動する手順を確認。ユーザーが再起動を依頼した。自分を単に終了して復帰不能にせず、利用可能な再起動機構を確認してから行う。
+- 再起動方法の追加確認: `codex app-server --help` → `codex app-server daemon --help` → `codex app-server daemon restart --help` で管理用のrestartコマンドが存在することを確認。`codex app-server daemon version` はstatus=running/backend=pid、管理対象0.166.0・CLI 0.165.0。この会話の実行元PID 538894も管理対象のapp-server --managed-daemonだった。決めたこと: 手動killではなく、ユーザー依頼済みの `codex app-server daemon restart` を所定の権限で実行する。この記録時点では再起動未実行。接続が切れた場合、復帰後にPID/daemon versionとADB get-stateで結果を確認してから成功と報告する。
+- 上記に続けて再起動を実行済み: `codex app-server daemon restart` は承認を得て起動し、対象PID 538894への `shutdown_requested` を出力した。処理session_id=73960、実行プロセスPID 561763。2回の出力取得では追加出力なし・実行中。その後のdaemon versionもrunningのため、**再起動完了と権限反映はまだ未確認**。現在の応答を終えて再接続を待ち、復帰時に確認する。実機への新しい操作は行っていない。
+- 再起動後の次の一手: HANDOFFと実Git状態を照合→**司令塔として**ADB get-state→現行版/権限を読む→用意済みAPKを本体/中継の順にinstall -r→版/権限照合→利用者のマスク入力でApple接続→Lemonと別曲のホーム/パネル表示を確認。再委譲中に司令塔を再起動すると一時ルールを取り込む可能性があるため、まず実機検証を進める。
+
+### 準備済みAPK
+
+| 対象 | パス | bytes | SHA-256 |
+|---|---|---:|---|
+| 本体 | `app/build/outputs/apk/release/app-release.apk` | 2922039 | `c34beae93aff84419360d969bbb5a497b5196e1903bc83f9b6ffa5b2c27d5024` |
+| 中継 | `panelhost/build/outputs/apk/release/panelhost-release.apk` | 2021093 | `568e46b03bbf60b75709542643d041ae3e9d4d83bd2c4a43229c1f7bc6034571` |
+
+- Task 179: `/home/munde/tools/gradle-run.sh :app:assembleRelease :panelhost:assembleRelease` は1回でBUILD SUCCESSFUL、55秒/94タスク。版2ファイルだけ変更、追加テストなし。
+- 司令塔が両output-metadata.jsonとSDK35 aapt2 dump badgingで**両方41 / 2.3.0-beta1、packageはcom.gt8d.launcher / com.gt8d.launcher.panel**を確認。両APKのapksigner verify --print-certsは終了0、以前の版40と同じ証明書SHA-256 `44d8c612bd3948e265840f28adff0f820d5893d0ba24d888b041ca16544f7f6d`。sha256sum/statは上表のとおり。Javaのnative-access/perfdata警告はあったが検証は成功。
+- 関連Androidテストは工程別に計148件成功(6+8+32+9+31+62)、Python構造診断の追加20ケース成功。全テストを実行したわけではない。正式公開・push・タグ作成・main取り込みは未実施。
+- 実機での性能・ヒープ量、取得/解析時間の個別計測、Kotlinパーサーによる実データ採用は未確認。PCプローブの認証値と歌詞本文は記録/保存していない。
+
 ## 現在の担当と合意
 
 - **担当: Codex(暫定司令塔)**。2026-11-04 にユーザーがこの引き継ぎを行っている親セッションを指名し、移行方式を承認した。
@@ -10,11 +48,41 @@
 - 司令塔と実装担当の権限・作業手順・復帰手順は [AGENTS.md](../AGENTS.md)、Claude の入口は [CLAUDE.md](../CLAUDE.md)。
 - 合意済みの作業はレビュー・必要な検証後にコミットして報告する。push・公開は対象についての承認に従う。
 - 2026-11-04 の追加指示: 読み取りのみで状態の変更を伴わないコマンドは一律許可。毎回ユーザーへ相談せず進める。実行環境の権限制限は別途従う。`AGENTS.md` に反映済み。
+- 2026-11-04 の追加指示: インストールを伴わない外部アクセスも許可。作業に必要な閲覧・資料取得・API読み取りを進める。実装担当のallowと実行環境の制限は維持し、インストール・公開等の包括許可とは扱わない。
+- 2026-11-04 の追加指示: 司令塔のADBコマンド実行を明示許可。AGENTS.mdへ反映。今回のベータ実機確認を進める許可はあり、残る阻害要因は実行環境側のforbidden判定。
 
 ## 作業状況と次の一手
 
+- **現在の依頼(2026-11-04追記): Apple Music歌詞取得の実装**。ユーザーが計画に沿った開始を了承。Task 170の結果を基準に、初期ベータはWeb用トークンを手動入力する。[設計](superpowers/specs/2026-11-04-apple-music-lyrics-design.md)・[実装計画](superpowers/plans/2026-11-04-apple-music-lyrics.md)に従い、[Task 175](../tasks/175-apple-lyrics-contract-probe.md)の実装・自己確認・レビューまで完了。現在のWSLでは `python` がなく `python3` があるため、指示書とallowのコマンドを合わせた。
+- Task 175の実通信も完了。`python3 scripts/apple-lyrics-probe.py --interactive --song-id 1537460612 --storefront jp` は終了コード0、認証と3経路とも200。syllable-lyricsのJSON経路は `data[].attributes.ttml`、40行・時刻付きspan277個。トークン/本文は非表示・非保存でプロセス終了。時刻付きdivのある主旋律40行は構造診断では時刻解釈が判定不能となるため、重なりなし/既存Kotlinパーサー採用済みとは扱わない。
+- **175〜178は実装・レビュー・対象テスト成功、[179](../tasks/179-apple-lyrics-beta.md)のベータAPKも準備済み。次は実機検証**。接続設定とRepository統合まで実装済み。初期ベータのトークンとApple歌詞はメモリ保持のみ、優先順位はApple単語→AMLL単語→LRCLIB、永続保存/自動ログインは後続とする。関連Androidテストは工程別に計148件(6+8+32+9+31+62)成功。これは全テスト実行や実機採用を意味しない。
+- Task 176cのログは `.codex-bak/20261104-133637/`。変更は新規client/testの2ファイル。`/home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsClientTest' --tests 'com.gt8d.launcher.media.lyrics.TtmlParserTest'` は初回32件中1失敗。IOのキャンセル直後IOExceptionが結果へ変わる問題を、IO側finallyでもアクティブ確認する実装修正で解消。テスト変更なし、2回目はclient9件+parser23件=32件成功、失敗/エラー/スキップ0。司令塔は全コード/テスト、実コマンド、XMLと修正を照合し、再実行していない。引用符警告は既知の正規化問題のみ。
+- Task 176cの判断: クライアントのMutexでAPI/Bearer要求を直列化し、待ちも全体期限に含める。期限計算BigInteger、制御文字はtrim前拒否、errorsは存在するなら空配列だけ、応答サイズ検証はHTTP分類より先。root確認XmlPullParser、診断ログ追加なし。Android実通信と実歌詞パースは未確認。
+- Task 177aの設計判断: 接続状態と世代だけを公開、秘密値はprivate。各操作の子Jobを登録し、解除/差替えは旧要求を取り消す。同期区間では状態のみ更新し通信を待たない。古い要求の結果とfinallyは新接続へ反映しない。設定画面は177bへ分離する。
+- Task 177a完了。ログ `.codex-bak/20261104-134728/`、新規Session/testの2ファイルのみ。`/home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleMusicSessionTest'` は初回9件中2失敗(コルーチンの例外複製でcauseが付加)。テスト条件は変更せず、固定文言の専用CancellationExceptionとCopyableThrowable.createCopy=nullで複製を抑止し、2回目9件成功・失敗/エラー/スキップ0。司令塔は全コード/テストとXMLを照合、再実行なし。ログと診断の秘密値非混入も偽データで検証。引用符警告は既知の正規化問題。
+- Task 177aの判断: 共通集合で子Jobを管理しCHECKING公開前に登録、再入する状態監視からの解除にも対応。private Credentialsは通常class、専用キャンセル例外は既存coroutinesのExperimental APIへ明示opt-in。実際の接続/UIは未確認。次は[177b 設定画面](../tasks/177b-apple-music-settings.md)。
+- Task 177bの設計判断: 音楽sectionを既存画面/システム間へ追加し既存項目順を維持。SessionはActivityから注入、open_routeの内部経路を追加。入力はrememberのみ、submit/退出で破棄。完了した接続は画面退出で維持し、確認中だけ取り消す。
+- Task 177b完了。ログ `.codex-bak/20261104-135702/`、変更は指示書の7ファイルのみ。指定のAppleMusicLyricsScreenTest/SettingsScreenTest/SettingsNavTest/SettingsActivityTestのコマンドは、1回目31件中5失敗、2回目1失敗、3回目31件成功(9+12+3+7)、失敗/エラー/スキップ0。新規10件、既存21件。ヘッダーへのscroll要求を直し狭幅だけNative/REALISTIC測定へ変更後、説明の要素幅と段落幅の不一致をfillMaxWidthで修正。検証条件は削除/緩和していない。司令塔は差分/新規コードと全テスト/各XMLを照合し再実行なし。引用符警告は既知の正規化問題。
+- Task 177bの判断: 地域は「接続済み（地域: jp）」、OutlinedTextFieldとPassword入力、確認中は入力無効。Jobをremember(session)に保持してDisposableEffectで退出時キャンセル。16dp余白/12dp間隔、説明/操作は幅いっぱい、Primary接続・Secondary解除。失敗文は固定関数、Retry-After秒数表示なし。未注入Sessionのテストを追加。実通信と実機UIは未確認。
+- 177b終了後、許可済みの読み取り `adb.exe -s 192.168.137.248:5555 get-state` も自動承認審査が「codex-runで禁止（司令塔が行う）」で拒否。ユーザーへ理由を報告済み。Gitと同様に迂回しない。実装・APK準備は続け、実機操作は環境側の制限解消後になる。
+- 次は[Task 178 キャッシュ・Repository統合](../tasks/178-apple-lyrics-repository.md)。判断: 成功/負結果/一時抑制を合計8件のメモリLRUに統合し、一時失敗はMissingへ変換しない。キャッシュの世代を単調に進め、古い処理からの保存/巻き戻しを防ぐ。既存取得元の結果選択と再試行は維持し、Appleをそのループで再実行しない。設定のreason/待機秒は観測キーから除く。
+- Task 178完了。ログ `.codex-bak/20261104-140934/`。変更は指示書の5ファイルのみ、既存Repository/parserのテストは変更なし。`/home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsCacheTest' --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsRepositoryTest' --tests 'com.gt8d.launcher.media.lyrics.LyricsRepositoryTest'` を1回実行、6+12+44=62件成功・失敗/エラー/スキップ0。司令塔は全新規コード/テスト・差分・XMLと実コマンドを照合し再実行なし。引用符警告は既知の正規化問題。
+- Task 178の判断: 時計逆行は全件破棄、アクセス順LinkedHashMap、有効世代のみget/put、コピーした歌詞listは変更不可。保持対象外/単体超過は既存エントリを維持。600ms後に抑制期限を再確認。上流でOffを即表示し、暫定AMLL単語を再利用。診断は固定理由/採否/件数/取得解析合計ms、cache hitは0ms。単語表示の描画処理は変更なし。
+- Task 179の判断: 新機能の試験版として2.3.0-beta1 / 41を本体/中継で揃える。現存する版40の2APKをSDK35 apksigner verify --print-certsで確認し両方終了0、証明書SHA-256 `44d8c612bd3948e265840f28adff0f820d5893d0ba24d888b041ca16544f7f6d` が一致。新APKも同じ証明書か比較する。版だけなので単体テストは重ねない。
+- 版履歴の確認で `git tag --list 'v2*'` を含む読み取りも同じ自動承認審査に拒否された。ユーザーへ報告済み。版番号は確認済みの現行gradle/出力メタデータ40 / 2.2.1-beta1と過去のv2.2.0公開記録を基準にした。新しいタグ/リモート一覧を確認済みとは扱わない。
+- Task 175のログは `.codex-bak/20261104-125632/`。codex-run終了コード0・逸脱なし。`python3 scripts/apple-lyrics-probe.py --self-test` は1回で成功、追加20ケース・失敗0。司令塔は既存12assertと認証/通信/CLIの8関数/クラスが同一であることをAST比較で確認し、診断と出力制限をレビューした。詳細と判断はTask 175末尾に記録。実装担当のテストは再実行していない。
+- Task 176aのログは `.codex-bak/20261104-130734/`。HTTPコードとテストの2ファイルのみ新規作成。対象コマンド `/home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsTransportTest'` は初回6件中2件失敗、例外のIO境界の渡し方とキャンセル完了原因の観測を修正し、2回目に6件成功・失敗0・エラー0・スキップ0。司令塔はコード/テスト/結果XMLと実行ログを照合し再実行していない。
+- Task 176aはcodex-run終了コード0、変更ファイルの逸脱なし。quoted --testsの警告1件は既知のshlex正規化の不一致で、イベントの実コマンドはallow通り引用符付き。テスト条件の削除/緩和はなく、キャンセルの同一性はDeferred.awaitが複製する例外ではなくジョブの完了原因で検証した。
+- Task 176aの判断: scheme/hostは指定小文字と厳密一致、ヘッダーはコピーしてASCII token名とLocale.ROOTで検証、identityは大小不問で1回設定。読取バッファ8KiB。Retry-Afterは厳密RFC1123とInstant/Duration。資源はAtomicReferenceで一度ずつ回収。例外はResultとしてIO境界を越し、呼び出し元で固定IOExceptionを投げる。偽通信の待ち合わせ5秒・キャンセルテスト全体30秒。実際のAndroid通信はまだ未確認。
+- Task 176bの初回委譲は `.codex-bak/20261104-131904/`。サーバー再起動で中断し、コードとテストは作成済み・Gradle実行記録と結果XMLはなし。ホスト側ps/lslocksでプロセス/ロック保持者の不在を確認。一時 `.codex/rules/codex-run.rules` を同ログの `stale-rules-after-restart.txt` へ退避し、指示書/allowを既存2ファイルのwriteへ変えて検証から再開する。既に成功したTask 175/176aは再実行しない。
+- Task 176bの再開ログは `.codex-bak/20261104-133219/`。追加修正なし、対象コマンド `/home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleWebTokenProviderTest'` を初めて1回実行し、8件成功・失敗0・エラー0・スキップ0。司令塔はXML、コード、8ケース、実コマンドを照合。同時12要求が1更新になること、返却直前のキャンセルで公開しないこと等を確認。引用符警告は176aと同じ正規化問題で、実コマンドはallow通り。
+- Task 176bの判断: 公開Bearer/結果のtoStringは値を秘匿。JWTのexpは正のLong整数、有効期限判定のみ。HTMLタグ/属性を走査しraw-text/comment内を候補から除く。URLは許可originへ正規化し、既知文字参照を復号して再検証。待機計算はBigIntegerで飽和/切上げ、更新はMutex、結果の保持はIO復帰後のキャンセル確認後。実際のAndroid通信は未確認。
+- `git switch -c feat-apple-lyrics` は自動承認審査で「codex-runで禁止（司令塔が行う）」として拒否された。最新AGENTS.mdで司令塔にGit管理権限はあるが実行環境の制限を迂回しない。ブランチ作成・コミットは未実施、現在は `perf-artwork-copy` の未コミット変更として保持する。
+- ユーザー提示の共有会話 `https://chatgpt.com/s/cx_6aeaa93b798c8191bb6725a0fcf351cb` はWeb取得に失敗。取得できたとは扱わず、ローカルのTask 170とスクリプトを根拠にした。認証値や歌詞本文は記録していない。
+- この計画作成の開始時は `perf-artwork-copy` / `2b28074`、追跡済み変更なし・既存未追跡4ファイル。計画文書とTask 175の作成、HANDOFFの更新のみで、Git更新・ビルド・テスト・実機変更は行わない。文書は未コミット。
+- 計画文書の検証: `git diff --check` は終了コード0。新規4ファイルそれぞれの `git diff --no-index --check /dev/null <path>` は空白エラーなし(新規差分のため終了コード1)。読み取り専用のPython検査でローカル参照16件とTask 175/allowのコマンド一致を確認し、エラー0。アプリ/スクリプトのテスト実行は0件、失敗件数は該当なし。判断の一覧は設計書末尾に記録。
 - 暫定司令塔への運用移行は `980964b` で完了(ローカル、未push)。対象3ファイルのステージ後の `git diff --cached --check` も終了コード0。
-- 現在の依頼は**軽い負荷軽減を、暫定司令塔の運用で試すこと**。Task 173 [ジャケット色抽出のコピー削減](../tasks/173-artwork-sampling-copy.md)は実装・対象テスト・司令塔レビューまで完了。既にARGB_8888の入力は元サイズで複製せず直接縮小し、他のconfigは従来の変換経路を保つ。
+- 先行依頼の**軽い負荷軽減**: Task 173 [ジャケット色抽出のコピー削減](../tasks/173-artwork-sampling-copy.md)は実装・対象テスト・司令塔レビューまで完了。既にARGB_8888の入力は元サイズで複製せず直接縮小し、他のconfigは従来の変換経路を保つ。
 - 作業ブランチは `perf-artwork-copy`。指示書・allow は `af5af7a`、実装は `6a2c20c`。main への取り込み・pushは行っていない。
 - ユーザーが実機へのインストールと確認を依頼し、[Task 174](../tasks/174-artwork-device-beta.md)で**2.2.1-beta1 / 40を本体・中継とも実機へ上書き導入済み**。指示書は `4ca8607`。ビルド・画面・ログ・権限の確認も完了し、詳細は末尾のTask 174の結果に記録した。
 - 実機 `192.168.137.248:5555` の導入前は本体・中継とも2.2.0 / 39。導入後も既定HOMEはYLuncher、通知リスナーと通知・Bluetooth権限は許可済み。ユーザー補助はcarsysoとYLuncherの両方を維持。確認終了時はホーム画面、Apple Music「怪獣」は一時停止、パネルの表示設定は元の「セット」に戻した。

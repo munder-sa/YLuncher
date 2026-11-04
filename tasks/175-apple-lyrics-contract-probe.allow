@@ -1,0 +1,2 @@
+write scripts/apple-lyrics-probe.py
+command python3 scripts/apple-lyrics-probe.py --self-test
