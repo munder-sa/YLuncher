@@ -8,6 +8,7 @@ beta3初回接続とbeta4更新直後の保存値復元でTIMEOUTが発生し、
 
 - app/src/main/java/com/gt8d/launcher/media/lyrics/AppleLyricsClient.kt
 - app/src/main/java/com/gt8d/launcher/media/lyrics/AppleWebTokenProvider.kt
+- app/src/main/java/com/gt8d/launcher/AppGraph.kt
 - app/build.gradle.kts
 - panelhost/build.gradle.kts
 
@@ -21,6 +22,7 @@ beta3初回接続とbeta4更新直後の保存値復元でTIMEOUTが発生し、
 ## 診断の契約
 
 - 新helperをinternalに置き、DiagLogのtag `AppleConnect` へ固定の段階名と経過msだけを出す。必要に応じHTTP code(100〜599)、本文bytesの件数(上限16MiB)、asset番号(1〜8)、列挙型の固定結果理由を追加してよい。任意文字列/URL/ヘッダー/response/exception/toString/トークン/歌詞/アカウント情報をhelperへ渡せるAPIにしない。ログ文の文法は報告する。
+- 既存Clientテストの空ログ契約を維持するため、Client/Providerのconstructor末尾に `diagnosticsEnabled: Boolean = false` を追加し、falseではtrace生成/出力を行わない。AppGraphの既存生成2箇所だけ明示trueへ配線する。他のAppGraph処理は変えない。これは既存テストの期待値変更を必要としない追加機能とする。新helperテストにはtrueの合成Client/Provider接続の段階順/非漏洩も含め、falseの既存17件と有効時の両方を検証する。
 - operationはCONNECT/PUBLIC_REFRESH、段階はenum等の閉じた集合。経過時間はSystem.nanoTime等の単調時間差、テスト用時計/sinkを差し替え可能にする。helper自身のtoStringにも秘密を持たせない。sinkの例外で処理結果/キャンセルを変更しない。待機/IO/追加Job/NonCancellableを診断へ入れない。
 - Client.connectに開始/終了(READYか固定失敗理由)、公開Bearer取得の前後、アカウントAPI要求の前後を記録する。requestMutex待機前の開始と取得後を区別できること。取消時も固定CANCELLEDだけ記録し元の取消契約を保つ。fetchの通常キャッシュ呼出しごとには診断を追加しない。private authenticatedRequestへ任意traceを渡す等でconnectだけに限定してよい。
 - Providerは実refreshの時だけ記録。公開ページ要求の前後、ページ内トークン解析の前後、asset一覧解析の前後、各asset要求/トークン解析の前後、終了/取消を区別。ホスト名やURL文字列自体は出さず番号で区別する。cached getにはログを追加しない。ネットワークと解析の時間を切り分けられること。
@@ -39,3 +41,8 @@ beta3初回接続とbeta4更新直後の保存値復元でTIMEOUTが発生し、
 ## 報告
 
 変更/診断文法、元のタイムアウトと取消契約の維持根拠、正確なコマンド/件数/失敗/エラー/スキップ、両APKの版/存在、決めたこと、実機未確認を日本語で報告する。
+
+## 初回委譲と再開判断
+
+- `.codex-bak/20261104-174719/`は既存ClientTestの空ログassertとの矛盾を報告し、変更/テスト/ビルドなしで終了0。司令塔も該当assertを確認した。
+- 期待値の変更は不要。診断を既定OFFの明示オプションとして追加し、AppGraphの実機用構成でONにする。許可にAppGraphの2生成箇所だけ追加し、既存17テストは無変更を維持。新規テストでON時の診断を確認する。根拠のない仕様緩和やタイムアウト延長は行わない。
