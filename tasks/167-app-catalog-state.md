@@ -16,3 +16,6 @@
 
 ## 追記(codex の質問への回答)
 - `PanelEnvironmentTest.kt`(271 行付近)など、「package のイベントを送らずに、復帰だけで一覧・アイコンが更新される」ことを求める既存テストは、**非表示の間に package のイベント(ADDED/REMOVED/CHANGED など)を送ってから復帰する**形に直してよい。一覧・ラベル・アイコンの検証の中身は保つ。同じ理由で食い違うテストが他にもあれば同様に直してよい(すべて報告する)。
+
+## 追記2(codex の質問への回答)
+- `app/src/main/java/com/gt8d/launcher/settings/ListsScreen.kt`(141 行付近)も、共有の所有者(AppCatalogState)と分けた revision へ**移す**。互換経路は残さない。関連テスト `app/src/test/java/com/gt8d/launcher/settings/ListsScreenTest.kt` も直してよい(検証の中身は保つ。報告する)。テストのコマンドに settings を足した。
