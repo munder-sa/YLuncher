@@ -88,8 +88,8 @@ class AmllClient(
                 else if (match.target.safe) download(match.target, request,
                 if (isrc != null) AmllReason.INDEX_ISRC else AmllReason.INDEX_TEXT)
                 else result(LyricsState.Failed, AmllReason.INVALID)
-            AmllMatch.NotFound -> result(LyricsState.Missing, AmllReason.NOT_FOUND)
-            AmllMatch.Ambiguous -> result(LyricsState.Missing, AmllReason.AMBIGUOUS)
+            AmllMatch.NotFound -> result(LyricsState.Missing, AmllReason.NOT_FOUND, cacheable = true)
+            AmllMatch.Ambiguous -> result(LyricsState.Missing, AmllReason.AMBIGUOUS, cacheable = true)
             AmllMatch.Unavailable -> result(LyricsState.Failed, AmllReason.UNAVAILABLE)
         }
     }
@@ -136,7 +136,7 @@ class AmllClient(
                 DiagLog.d("Lyrics", "amll parse $it")
             }) {
                 is TtmlParseResult.WordSynced -> return result(LyricsState.Synced(parsed.lines), reason, target, true)
-                TtmlParseResult.Unsupported -> return result(LyricsState.Missing, AmllReason.UNSUPPORTED, target)
+                TtmlParseResult.Unsupported -> return result(LyricsState.Missing, AmllReason.UNSUPPORTED, target, true)
                 TtmlParseResult.Invalid -> failure = AmllReason.INVALID
             }
         }

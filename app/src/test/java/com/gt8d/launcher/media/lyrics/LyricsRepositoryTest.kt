@@ -91,7 +91,7 @@ class LyricsRepositoryTest {
         val scope: TestScope,
         on: Boolean = true,
         val amllAnswer: suspend (LyricsRequest) -> AmllResult = {
-            AmllResult(LyricsState.Missing, AmllReason.NOT_FOUND, cacheable = true)
+            AmllResult(LyricsState.Missing, AmllReason.NOT_FOUND, AmllTarget("am-lyrics", "123"))
         },
         val answer: suspend (LyricsQuery) -> FetchResult = { FetchResult(synced) },
     ) {
@@ -461,7 +461,7 @@ class LyricsRepositoryTest {
         assertEquals(2, f.calls.size)
     }
 
-    @Test fun notFoundIsNotCached() = runTest {
+    @Test fun http404IsNotCached() = runTest {
         var downloads = 0
         val client = AmllClient(AmllTransport { _, _ ->
             downloads++
@@ -481,6 +481,45 @@ class LyricsRepositoryTest {
         assertEquals(3, downloads)
         assertEquals(listOf("A", "B", "A"), f.amllCalls.map { it.query.title })
         assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null))
+    }
+
+    @Test fun indexNotFoundIsCached24Hours() = runTest {
+        assertNegativeCached24Hours(AmllMatch.NotFound)
+    }
+
+    @Test fun ambiguousIsCached24Hours() = runTest {
+        assertNegativeCached24Hours(AmllMatch.Ambiguous)
+    }
+
+    @Test fun wordlessTtmlIsCached24Hours() = runTest {
+        assertNegativeCached24Hours(AmllMatch.Unique(AmllTarget("raw-lyrics", "one.ttml")))
+    }
+
+    private fun TestScope.assertNegativeCached24Hours(match: AmllMatch) {
+        for (elapsed in listOf(86_400_000L - 1, 86_400_000L)) {
+            var lookups = 0
+            var downloads = 0
+            val client = AmllClient(AmllTransport { _, _ ->
+                downloads++
+                HttpResponse(200, """<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="1" end="3">A B</p></div></body></tt>""", null)
+            }, "test", AmllIndexLookup { _, _ -> lookups++; match })
+            val f = Fixture(this, amllAnswer = { kotlinx.coroutines.runBlocking { client.fetch(it) } })
+            f.tick(600)
+            val savedAt = testScheduler.currentTime
+            val request = LyricsRequest(song().lyricsQuery!!)
+            assertEquals(LyricsState.Missing, f.amllCache.get(request, null)!!.state)
+            f.now.value = song("B")
+            f.tick(600)
+            f.tick(savedAt + elapsed - 600 - testScheduler.currentTime)
+            f.now.value = song()
+            f.tick(600)
+            assertEquals(savedAt + elapsed, testScheduler.currentTime)
+            val expectedTitles = if (elapsed == 86_400_000L) listOf("A", "B", "A") else listOf("A", "B")
+            assertEquals(expectedTitles, f.amllCalls.map { it.query.title })
+            assertEquals(expectedTitles.size, lookups)
+            assertEquals(if (match is AmllMatch.Unique) expectedTitles.size else 0, downloads)
+            assertEquals(2, f.calls.size)
+        }
     }
 
     @Test fun toggleOffOnRechecksAmll() = runTest {

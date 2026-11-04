@@ -20,6 +20,7 @@ class AmllClientTest {
             val expected = listOf("https://raw.githubusercontent.com/amll-dev/amll-ttml-db/main/raw-lyrics/one.ttml", "https://amll-ttml-db.gbclstudio.cn/raw-lyrics/one.ttml")
             assertEquals(if (code == 404) expected.take(1) else expected, urls)
             assertEquals(if (code == 404) AmllReason.NOT_FOUND else AmllReason.INDEX_TEXT, result.reason)
+            assertEquals(code != 404, result.cacheable)
         }
     }
     private val query = LyricsQuery("架空曲", "架空歌手", null, 10)
@@ -96,16 +97,16 @@ class AmllClientTest {
         val result = client.fetch(request())
         assertEquals(LyricsState.Missing, result.state)
         assertEquals(AmllReason.UNSUPPORTED, result.reason)
-        assertFalse(result.cacheable)
+        assertTrue(result.cacheable)
         val ambiguous = AmllClient(AmllTransport { _, _ -> error("must not fetch") }, "a",
             AmllIndexLookup { _, _ -> AmllMatch.Ambiguous }).fetch(request(null))
         assertEquals(AmllReason.AMBIGUOUS, ambiguous.reason)
         assertEquals(LyricsState.Missing, ambiguous.state)
-        assertFalse(ambiguous.cacheable)
+        assertTrue(ambiguous.cacheable)
         val notFound = AmllClient(AmllTransport { _, _ -> error("must not fetch") }, "a",
             AmllIndexLookup { _, _ -> AmllMatch.NotFound }).fetch(request(null))
         assertEquals(LyricsState.Missing, notFound.state)
-        assertFalse(notFound.cacheable)
+        assertTrue(notFound.cacheable)
     }
 
     @Test fun hostWaitDoesNotAffectLrclib() = runBlocking {

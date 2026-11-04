@@ -19,7 +19,15 @@ class AmllCache(private val dir: File, private val clock: () -> Long) {
                 AmllTarget(string(it[0]), string(it[1])).also { t -> require(t.safe) }
             }
             val state = when (string(json["kind"])) {
-                "missing" -> return null
+                "missing" -> {
+                    require(reason in setOf(AmllReason.NOT_FOUND, AmllReason.AMBIGUOUS, AmllReason.UNSUPPORTED))
+                    // Older HTTP 404 entries used NOT_FOUND with a download target.
+                    require(reason != AmllReason.NOT_FOUND || target == null)
+                    val savedAt = number(json["savedAt"])
+                    val now = clock()
+                    require(now >= savedAt && now - savedAt < 86_400_000L)
+                    LyricsState.Missing
+                }
                 "synced" -> {
                     val lines = (json["lines"] as JsonArray).map { value ->
                         val line = value as JsonArray
@@ -46,7 +54,10 @@ class AmllCache(private val dir: File, private val clock: () -> Long) {
     @Synchronized fun put(request: LyricsRequest, indexGeneration: String?, result: AmllResult) {
         if (!result.cacheable) return
         val state = result.state
-        if (state !is LyricsState.Synced || !validLines(state.lines) || result.target?.safe != true) return
+        val missing = state == LyricsState.Missing &&
+            result.reason in setOf(AmllReason.NOT_FOUND, AmllReason.AMBIGUOUS, AmllReason.UNSUPPORTED) &&
+            (result.reason != AmllReason.NOT_FOUND || result.target == null)
+        if (!missing && (state !is LyricsState.Synced || !validLines(state.lines) || result.target?.safe != true)) return
         var temporary: File? = null
         try {
             val fields = mutableMapOf<String, JsonElement>(
@@ -54,9 +65,9 @@ class AmllCache(private val dir: File, private val clock: () -> Long) {
                 "savedAt" to JsonPrimitive(clock()), "generation" to primitive(indexGeneration),
                 "source" to JsonPrimitive(result.source), "reason" to JsonPrimitive(result.reason.name),
                 "target" to (result.target?.let { JsonArray(listOf(JsonPrimitive(it.folder), JsonPrimitive(it.id))) } ?: JsonNull),
-                "kind" to JsonPrimitive("synced"),
+                "kind" to JsonPrimitive(if (missing) "missing" else "synced"),
             )
-            fields["lines"] = JsonArray(state.lines.map { line ->
+            if (state is LyricsState.Synced) fields["lines"] = JsonArray(state.lines.map { line ->
                 JsonArray(listOf(JsonPrimitive(line.timeMs), JsonPrimitive(line.text), JsonArray(line.words.map {
                     JsonArray(listOf(JsonPrimitive(it.timeMs), JsonPrimitive(it.charStart)))
                 })))

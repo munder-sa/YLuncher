@@ -26,30 +26,43 @@ class AmllCacheTest {
         assertFalse(body.contains("<tt"))
     }
 
-    @Test fun negativeIsNeverSaved() {
+    @Test fun negativeExpiresAt24Hours() {
         val dir = temporaryFolder.newFolder()
         val cache = AmllCache(dir, { now })
         for (reason in listOf(AmllReason.NOT_FOUND, AmllReason.AMBIGUOUS, AmllReason.UNSUPPORTED)) {
             cache.put(request(), "g1", missing.copy(reason = reason))
-            assertNull(cache.get(request(), "g1"))
+            assertEquals(missing.copy(reason = reason), cache.get(request(), "g1"))
         }
-        assertEquals(0, dir.listFiles()!!.size)
+        assertEquals(1, dir.listFiles()!!.size)
         now += 86400000L - 1
-        assertNull(cache.get(request(), "g1"))
-        assertNull(AmllCache(dir, { now }).get(request(), "g1"))
+        assertEquals(missing.copy(reason = AmllReason.UNSUPPORTED), cache.get(request(), "g1"))
+        assertEquals(missing.copy(reason = AmllReason.UNSUPPORTED), AmllCache(dir, { now }).get(request(), "g1"))
         now++
         assertNull(cache.get(request(), "g1"))
         assertNull(AmllCache(dir, { now }).get(request(), "g1"))
     }
 
-    @Test fun legacyNegativeIsIgnoredRegardlessOfGenerationOrIdentity() {
+    @Test fun identityInvalidatesNegativeButGenerationDoesNot() {
         val dir = temporaryFolder.newFolder()
         val cache = AmllCache(dir, { now })
         File(dir, AmllCache.key(request()) + ".json").writeText(
             """{"v":1,"key":"${AmllCache.key(request())}","savedAt":1000,"generation":"g1","source":"AMLL TTML DB","reason":"NOT_FOUND","target":null,"kind":"missing"}""")
-        assertNull(cache.get(request(), "g2"))
+        assertEquals(missing, cache.get(request(), "g2"))
         assertNull(cache.get(request(id = "456"), "g1"))
-        assertNull(cache.get(request(), "g1"))
+        assertEquals(missing, cache.get(request(), "g1"))
+    }
+
+    @Test fun http404IsNeverSavedAndLegacyHttp404IsIgnored() {
+        val dir = temporaryFolder.newFolder()
+        val cache = AmllCache(dir, { now })
+        val target = AmllTarget("raw-lyrics", "one.ttml")
+        cache.put(request(), null, missing.copy(target = target, cacheable = false))
+        assertEquals(0, dir.listFiles()!!.size)
+        cache.put(request(), null, missing.copy(target = target))
+        assertEquals(0, dir.listFiles()!!.size)
+        File(dir, AmllCache.key(request()) + ".json").writeText(
+            """{"v":1,"key":"${AmllCache.key(request())}","savedAt":1000,"generation":null,"source":"AMLL TTML DB","reason":"NOT_FOUND","target":["raw-lyrics","one.ttml"],"kind":"missing"}""")
+        assertNull(cache.get(request(), null))
     }
 
     @Test fun noNegativeOnNetworkOrMalformedData() {
