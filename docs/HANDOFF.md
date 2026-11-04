@@ -9,14 +9,16 @@
 - この記録を読むだけで別の Codex が司令塔になるわけではない。新しいセッションを司令塔にする場合は、ユーザーが直接指名し、既存の担当との同時作業を避ける。
 - 司令塔と実装担当の権限・作業手順・復帰手順は [AGENTS.md](../AGENTS.md)、Claude の入口は [CLAUDE.md](../CLAUDE.md)。
 - 合意済みの作業はレビュー・必要な検証後にコミットして報告する。push・公開は対象についての承認に従う。
+- 2026-11-04 の追加指示: 読み取りのみで状態の変更を伴わないコマンドは一律許可。毎回ユーザーへ相談せず進める。実行環境の権限制限は別途従う。`AGENTS.md` に反映済み。
 
 ## 作業状況と次の一手
 
 - 暫定司令塔への運用移行は `980964b` で完了(ローカル、未push)。対象3ファイルのステージ後の `git diff --cached --check` も終了コード0。
 - 現在の依頼は**軽い負荷軽減を、暫定司令塔の運用で試すこと**。Task 173 [ジャケット色抽出のコピー削減](../tasks/173-artwork-sampling-copy.md)は実装・対象テスト・司令塔レビューまで完了。既にARGB_8888の入力は元サイズで複製せず直接縮小し、他のconfigは従来の変換経路を保つ。
 - 作業ブランチは `perf-artwork-copy`。指示書・allow は `af5af7a`、実装は `6a2c20c`。main への取り込み・pushは行っていない。
-- ユーザーが実機へのインストールと確認を依頼したため、[Task 174](../tasks/174-artwork-device-beta.md)で2.2.1-beta1 / 40を準備中。版だけを実装担当に変更・ビルドさせ、導入と画面・ログ・権限の確認は司令塔が行う。
-- 実機 `192.168.137.248:5555` は接続済み。導入前は本体・中継とも2.2.0 / 39。既定HOMEはYLuncher、通知リスナーと通知・Bluetooth権限は許可済み。ユーザー補助はcarsysoとYLuncher。音楽の有効セッションはなく、Apple TVの停止中セッションだけだった。
+- ユーザーが実機へのインストールと確認を依頼し、[Task 174](../tasks/174-artwork-device-beta.md)で**2.2.1-beta1 / 40を本体・中継とも実機へ上書き導入済み**。指示書は `4ca8607`。ビルド・画面・ログ・権限の確認も完了し、詳細は末尾のTask 174の結果に記録した。
+- 実機 `192.168.137.248:5555` の導入前は本体・中継とも2.2.0 / 39。導入後も既定HOMEはYLuncher、通知リスナーと通知・Bluetooth権限は許可済み。ユーザー補助はcarsysoとYLuncherの両方を維持。確認終了時はホーム画面、Apple Music「怪獣」は一時停止、パネルの表示設定は元の「セット」に戻した。
+- 初回セット1起動で「開くのに時間がかかっています」が表示されたが、YouTubeとパネルの分割は成立した。画像処理の確認に加えてこの観察を記録した。分割の全場面テストや、待ち通知の原因切り分けは行っていない。
 - 今回の変更だけで描画速度が何ms改善したとは報告しない。
 - 着手前の `ps -eo pid,ppid,etime,args` の検索では、codex-run / codex exec / Gradle の実行中プロセスは見つからなかった。追跡済みファイルの未コミット変更はなく、既存の未追跡4ファイルはそのまま。
 
@@ -53,7 +55,7 @@
 - AMLL 索引の世代に応じた負キャッシュ無効化は延期中。
 - Gradle は `/home/munde/tools/gradle-run.sh`。対象テストは `:app:testDebugUnitTest --tests '…'` の形で指示書・allow に完全なコマンドを書く。Gradle は同時2本まで。同じテストを実装担当と司令塔で重ねて流さない。
 - 実機確認用は `<次の正式版>-betaN`、確認後に正式版。app と panelhost の版・署名を揃え、本体→中継の順に導入する。
-- Claude の記録では実機接続に Windows の `adb.exe` を使っていた。再起動後はワイヤレスデバッグの再有効化が必要。現在の接続とこのセッションからの実行可否は未確認。
+- 実機接続は Windows の `adb.exe -s 192.168.137.248:5555` で確認済み。通常サンドボックスではWSLのソケットエラーが出たため、承認された権限で実行している。再起動後はワイヤレスデバッグの再有効化が必要。
 - 再インストール後は通知アクセスを確認する。ユーザー補助の既存サービス(carsyso と YLuncher)を失わないよう、変更前の状態を確認する。
 - このセッションの `.git`・`.codex` は読み取り制限の対象。役割の記載だけで実行権限が広がるわけではない。Git 更新や `codex-run` の実行時は必要な権限を確認する。
 
@@ -100,3 +102,33 @@ Claude への復帰時は、実行中の処理と未コミット変更を整理�
 - 固定パターンはARGB値 `FFFF4000・80FF4F00・C020B060・FF3050D0・7FFF00FF・00000000` を `(x / 7 + y / 5) % 6` で配置。
 - immutable画像は赤一色をコピーして作り、既存の期待色 `red` と2回照合した。
 - テスト専用の `patternedBitmap`・`readPixels`・`previousSampling` を追加。元画像の全画素は呼び出し前の読み出し値と比較し、生成物を finally で後始末する。参照コピーの失敗は requireNotNull でテストを失敗させる。
+
+## Task 174 の結果(2026-11-04)
+
+- `codex-run tasks/174-artwork-device-beta.md`: 終了コード0、逸脱なし。ログは `.codex-bak/20261104-121656/`。実装担当の変更はapp/panelhostの `build.gradle.kts` の版名・版コードだけ。司令塔は差分と両APKの `output-metadata.json` を照合した。
+- ビルドコマンド `/home/munde/tools/gradle-run.sh :app:assembleRelease :panelhost:assembleRelease`: BUILD SUCCESSFUL(1分3秒)。版だけの変更なので単体テスト再実行なし。Task 173の27件成功を継承し、今回の実行件数には数えない。
+- 以下を本体→中継の順に実行し、どちらも `Success`。パッケージの読み取りでも両方40 / 2.2.1-beta1を確認した。
+
+```sh
+adb.exe -s 192.168.137.248:5555 install -r 'F:\YLuncher\app\build\outputs\apk\release\app-release.apk'
+adb.exe -s 192.168.137.248:5555 install -r 'F:\YLuncher\panelhost\build\outputs\apk\release\panelhost-release.apk'
+```
+
+- 権限の前後: `shell dumpsys package com.gt8d.launcher` / `com.gt8d.launcher.panel`、`shell settings get secure enabled_accessibility_services` / `enabled_notification_listeners`、`shell cmd role get-role-holders android.app.role.HOME` を導入前後に照合。版以外は署名の表示・通知/Bluetooth権限・ユーザー補助の2サービス・通知リスナーの一覧・既定HOMEを維持していた。権限の再設定は不要だった。
+- `adb.exe -s 192.168.137.248:5555 shell cmd package compile -r bg-dexopt com.gt8d.launcher`: `Success`。`dumpsys package` のDexopt stateは `status=speed-profile` / `reason=cmdline`。
+- ホームのセット3件・アプリ列が導入前後で維持されたことを画面で確認。Apple Musicを開いて「怪獣」を再生し、導入前後でホームの背景を比較。ベータでは同じ曲に戻したときの色を確認し、セット1(YouTube | パネル)のメディアカードでも同じジャケットと背景を確認した。
+- 色抽出ログ: `adb.exe -s 192.168.137.248:5555 logcat -d -s 'GT8D:D' '*:S'` を取得し、Artworkの行を確認。旧版「怪獣」も新版「怪獣」も `300x300 config=ARGB_8888`、抽出色は **#2C3338 / #161A1C** で一致。
+- 記録上の抽出時間は旧版「怪獣」23ms、新版初回の「怪獣(Cornelius Remix)」135ms、その後の「怪獣」1ms。曲・初回/後続・プロファイル適用時点の条件が揃っていないため、速度改善の比較結果とは扱わない。300×300のARGB画像で省く元サイズコピーは画素360,000bytes相当の計算であり、実測メモリ使用量ではない。
+- ホーム→パネル→ホームでもプロセスIDは26699のまま。取得したそのプロセスの `AndroidRuntime:E` / `libc:F` / `DEBUG:F` ログは出力なし。確認範囲で色抽出の失敗ログもなかった。
+- 初回セット1起動で待ち通知あり。12:28:37にStockWarmupのtimeout、12:28:41にcurtain Safety / timeout not counted: progressというログ。最終的に画面上の分割は成立し、パネルのメディアカードを確認できた。今回の変更は分割経路に触れておらず、通知原因は今回切り分けていない。
+- 画面の一時保存: `/tmp/yluncher-174-before.png`(再生前ホーム)、`/tmp/yluncher-174-baseline-art.png`(旧版の背景)、`/tmp/yluncher-174-after.png`(新版で同じ曲の背景)、`/tmp/yluncher-174-panel.png`(新版のメディアカード)。画面は目視確認のみでピクセル差分比較は行っていない。
+- 確認終了時はパネル設定を「セット」に戻し、YLuncherホームへ戻った。Apple Musicは「怪獣」の先頭で一時停止。音量・認証情報・端末の再起動・アプリデータ消去は操作していない。
+- mainへの取り込み、タグ、push、正式リリースは行っていない。実機で触った操作感のユーザー確認や、正式版への昇格は次の判断事項。
+
+### 決めたこと
+
+- 小規模修正の実機確認用に2.2.1-beta1 / 40を採用し、両モジュールを揃えた。
+- 元の署名・release設定で本体→中継を `install -r` し、設定を消さずに更新した。
+- 既存ライブラリの「怪獣」で色を比較し、既存セット1でパネルも確認した。パネル表示は一時的にアプリへ切り替え、確認後にセットへ戻した。
+- 前の版と同様にbg-dexoptでプロファイルを適用した。起動状態が異なる抽出時間を改善率として扱わない。
+- UIの証跡は `/tmp/yluncher-174-*.png` に置き、認証情報や歌詞本文を報告文には転記しない。
