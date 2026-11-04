@@ -22,3 +22,7 @@
 
 ## 報告
 - 選んだ版と理由、APK に `assets/dexopt/baseline.prof`(と `baseline.profm`)があるか、ビルドの結果、決めたこと(RULES.md 1)。
+
+## 追記(codex の質問への回答)
+- profileinstaller は手元のキャッシュにある **1.3.1** を使う。許可されたコマンド(`--offline` なし)のままでよい。Gradle は依存をローカルのキャッシュから解決する(codex-run の NETWORK=1 は Gradle のデーモンのためのもので、許可されている)。もしキャッシュに無くて取得に失敗したら、そのエラーを報告して止まる。
+- 参考: 今の(profileinstaller 無しの)リリース版の APK にも、ライブラリ同梱の `assets/dexopt/baseline.prof`(7484 バイト)と `baseline.profm` が既に入っている。手書きの `baseline-prof.txt` を足したあと、このファイルが大きくなる(アプリの規則が入る)ことを確かめる。
