@@ -544,6 +544,65 @@ class AppleMusicLyricsScreenTest {
         assertNoSecrets()
     }
 
+    @Test fun cancelDisconnectKeepsExactManualTokenForNextConnect() {
+        DiagLog.clearForTest()
+        ShadowLog.clear()
+        val f = persistent()
+        val stored = saved()
+        f.store.value = stored
+        host(session = f.session, webData = f.webData, onLogin = {})
+        awaitPersistence {
+            f.session.state.value.status == AppleMusicStatus.CONNECTED &&
+                f.session.retention.value.status == AppleMusicRetentionStatus.SAVED
+        }
+        assertEquals(1, f.calls)
+        assertEquals(1, f.store.reads)
+        input(SECOND_TOKEN)
+        val connectionBeforeDialog = f.session.state.value
+        val retentionBeforeDialog = f.session.retention.value
+        val webStateBeforeDialog = f.webData.state.value
+        val maskedInputBeforeDialog = rule.onNodeWithTag("apple_music_token").fetchSemanticsNode()
+            .config[SemanticsProperties.EditableText]
+        assertEquals(SECOND_TOKEN.length, maskedInputBeforeDialog.length)
+        assertNotEquals(AnnotatedString(SECOND_TOKEN), maskedInputBeforeDialog)
+        assertNoSecrets()
+        click("apple_music_disconnect")
+        rule.onNodeWithTag("apple_music_clear_web").assertIsOn()
+        assertNoSecrets()
+        rule.onNodeWithTag("apple_music_disconnect_cancel").performClick()
+        rule.onNodeWithTag("apple_music_disconnect_confirm").assertDoesNotExist()
+        assertEquals(connectionBeforeDialog, f.session.state.value)
+        assertEquals(retentionBeforeDialog, f.session.retention.value)
+        assertSame(stored, f.store.value)
+        assertEquals(1, f.calls)
+        assertEquals(1, f.store.reads)
+        assertEquals(0, f.store.clears)
+        assertEquals(0, f.backend.checks)
+        assertEquals(0, f.backend.calls)
+        assertEquals(webStateBeforeDialog, f.webData.state.value)
+        rule.onNodeWithTag("apple_music_token").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, maskedInputBeforeDialog))
+        assertNoSecrets()
+
+        // Do not replace the input: persistence must receive exactly what survived cancellation.
+        click("apple_music_connect")
+        emptyInput()
+        awaitPersistence {
+            f.calls == 2 && f.session.state.value.status == AppleMusicStatus.CONNECTED &&
+                f.session.retention.value.status == AppleMusicRetentionStatus.SAVED
+        }
+        rule.onNodeWithTag("apple_music_status").assertTextEquals("接続済み（地域: jp）")
+        rule.onNodeWithTag("apple_music_retention").assertTextEquals("この端末に保存済み")
+        assertEquals(SECOND_TOKEN, f.store.value?.token)
+        assertEquals(AppleCredentialSource.MANUAL, f.store.value?.source)
+        assertEquals(2, f.calls)
+        assertEquals(0, f.backend.checks)
+        assertEquals(0, f.backend.calls)
+        emptyInput()
+        rule.onNodeWithTag("apple_music_connect").assertIsNotEnabled()
+        assertNoSecrets()
+    }
+
     @Test fun confirmedDeletionContinuesAfterLeavingAndKeepsBothPendingStates() {
         val f = persistent()
         f.store.value = saved()

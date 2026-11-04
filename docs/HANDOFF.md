@@ -4,6 +4,8 @@
 
 ## 再開時の要点 (2026-11-04 17時台・トークン保持の実装)
 
+- **Task 186の追加検証とbeta3 APK準備まで完了**。Task 185の統合は `d52cd05`。`.codex-bak/20261104-171515/`終了0、許可3ファイルだけ変更。変更したUIクラス17件が1回成功・失敗/エラー/スキップ0、両release buildも1回成功/R8とlintVitalを含む。全差分/実コマンド/XMLを照合し再実行なし。次は署名照合済みのbeta3 / 43を実機へ導入する。テスト/版の変更と記録は直後のローカルコミットに含める。
+- APKは本体3,022,454 bytes、中継2,021,093 bytes。旧版と同署名。SHA-256とrelease内backup XML/非exported Activity/assetsの確認はTask 186末尾。実機の最後の読み取りはbeta2 / 42、前面Brave、Apple MusicはYour Life / DYGL / Thirstを一時停止、YLuncher PID4467。認証画面・私有データは取得していない。
 - 担当はこの会話のCodex暫定司令塔、ブランチfeat-apple-lyrics。ユーザーの設計了承「ok」を受け実装を進めている。Task 182=`d2473e5`、183=`3284de5`、184の取り込み=`c7f7be9`。Task 184の元worktreeは `/tmp/yluncher-apple-token-web` / feat-apple-token-web / `29836f4`、作業完了・清潔。
 - **Task 185実装/レビュー完了**。`.codex-bak/20261104-164552/`終了0、許可17ファイルのみ。テストコンパイル失敗→55件中4失敗→55件成功(4/16/15/8/12)、失敗/エラー/スキップ0。初回ハンドラ生成、空popupの戻る、狭幅ラベル、RobolectricのMain looper待ちを修正。既存9件の検証条件を維持。変更/コマンド/結果XMLを司令塔が照合、成功後の再実行なし。
 - 保存のAppGraph配線、利用時復元、非exported組み込み画面、前面だけのCookie確認、保存/解除表示、完了callback付きWebViewデータ削除、backup除外、WebKit1.13.0と由来文書を実装。通常ホームではWebViewを初期化しない。実機認証/Keystore/削除API対応/release-R8は未確認。
