@@ -26,24 +26,30 @@ class AmllCacheTest {
         assertFalse(body.contains("<tt"))
     }
 
-    @Test fun negativeExpiresAt24Hours() {
+    @Test fun negativeIsNeverSaved() {
         val dir = temporaryFolder.newFolder()
         val cache = AmllCache(dir, { now })
-        cache.put(request(), "g1", missing)
+        for (reason in listOf(AmllReason.NOT_FOUND, AmllReason.AMBIGUOUS, AmllReason.UNSUPPORTED)) {
+            cache.put(request(), "g1", missing.copy(reason = reason))
+            assertNull(cache.get(request(), "g1"))
+        }
+        assertEquals(0, dir.listFiles()!!.size)
         now += 86400000L - 1
-        assertEquals(missing, cache.get(request(), "g1"))
-        assertEquals(missing, AmllCache(dir, { now }).get(request(), "g1"))
+        assertNull(cache.get(request(), "g1"))
+        assertNull(AmllCache(dir, { now }).get(request(), "g1"))
         now++
         assertNull(cache.get(request(), "g1"))
         assertNull(AmllCache(dir, { now }).get(request(), "g1"))
     }
 
-    @Test fun generationOrIdentityInvalidatesNegative() {
-        val cache = AmllCache(temporaryFolder.newFolder(), { now })
-        cache.put(request(), "g1", missing)
+    @Test fun legacyNegativeIsIgnoredRegardlessOfGenerationOrIdentity() {
+        val dir = temporaryFolder.newFolder()
+        val cache = AmllCache(dir, { now })
+        File(dir, AmllCache.key(request()) + ".json").writeText(
+            """{"v":1,"key":"${AmllCache.key(request())}","savedAt":1000,"generation":"g1","source":"AMLL TTML DB","reason":"NOT_FOUND","target":null,"kind":"missing"}""")
         assertNull(cache.get(request(), "g2"))
         assertNull(cache.get(request(id = "456"), "g1"))
-        assertEquals(missing, cache.get(request(), "g1"))
+        assertNull(cache.get(request(), "g1"))
     }
 
     @Test fun noNegativeOnNetworkOrMalformedData() {
@@ -60,9 +66,9 @@ class AmllCacheTest {
     @Test fun prunesOldestAt300And32MiB() {
         val dir = temporaryFolder.newFolder()
         val cache = AmllCache(dir, { now })
-        for (i in 1..301) { now++; cache.put(request("$i"), null, missing) }
+        for (i in 1..301) { now++; cache.put(request("$i"), null, success()) }
         assertNull(cache.get(request("1"), null))
-        for (i in 2..301) assertEquals(missing, cache.get(request("$i"), null))
+        for (i in 2..301) assertEquals(success(), cache.get(request("$i"), null))
         assertEquals(300, dir.listFiles()!!.size)
 
         val largeDir = temporaryFolder.newFolder()
@@ -124,7 +130,7 @@ class AmllCacheTest {
         val file = File(dir, request().query.cacheKey + ".json")
         val before = file.readBytes()
         val cache = AmllCache(File(dir, "amll"), { now })
-        for (i in 1..301) { now++; cache.put(request("$i"), null, missing) }
+        for (i in 1..301) { now++; cache.put(request("$i"), null, success()) }
         assertArrayEquals(before, file.readBytes())
         assertEquals(LyricsState.Plain("架空"), legacy.get(request().query))
     }

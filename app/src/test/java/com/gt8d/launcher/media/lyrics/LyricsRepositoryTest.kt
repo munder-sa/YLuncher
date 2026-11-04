@@ -231,7 +231,7 @@ class LyricsRepositoryTest {
         val f = Fixture(this)
         f.tick(600)
         assertEquals(synced, f.repo.state.value)
-        assertEquals(LyricsState.Missing, f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null)!!.state)
+        assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null))
         assertEquals(synced, f.cache.get(song().lyricsQuery!!))
         val reverse = Fixture(this, amllAnswer = { wordResult() })
         reverse.cache.put(song().lyricsQuery!!, LyricsState.Missing)
@@ -461,6 +461,82 @@ class LyricsRepositoryTest {
         assertEquals(2, f.calls.size)
     }
 
+    @Test fun notFoundIsNotCached() = runTest {
+        var downloads = 0
+        val client = AmllClient(AmllTransport { _, _ ->
+            downloads++
+            HttpResponse(404, "", null)
+        }, "test")
+        val f = Fixture(this, amllAnswer = {
+            kotlinx.coroutines.runBlocking {
+                client.fetch(it.copy(identity = LyricsIdentity("123")))
+            }
+        })
+        f.tick(600)
+        assertEquals(1, downloads)
+        f.now.value = song("B")
+        f.tick(600)
+        f.now.value = song()
+        f.tick(600)
+        assertEquals(3, downloads)
+        assertEquals(listOf("A", "B", "A"), f.amllCalls.map { it.query.title })
+        assertNull(f.amllCache.get(LyricsRequest(song().lyricsQuery!!), null))
+    }
+
+    @Test fun toggleOffOnRechecksAmll() = runTest {
+        val f = Fixture(this)
+        f.tick(600)
+        assertEquals(1, f.amllCalls.size)
+        f.enabled.value = false
+        runCurrent()
+        assertEquals(LyricsState.Off, f.repo.state.value)
+        f.enabled.value = true
+        f.tick(599)
+        assertEquals(1, f.amllCalls.size)
+        f.tick(1)
+        assertEquals(2, f.amllCalls.size)
+        assertEquals(1, f.calls.size)
+    }
+
+    @Test fun lrclibCacheStaysWhileAmllRechecks() = runTest {
+        for (legacy in listOf(synced, LyricsState.Plain("架空"), LyricsState.Missing)) {
+            val f = Fixture(this)
+            f.cache.put(song().lyricsQuery!!, legacy)
+            f.cache.put(song("B").lyricsQuery!!, legacy)
+            f.tick(600)
+            f.now.value = song("B")
+            f.tick(600)
+            f.now.value = song()
+            runCurrent()
+            assertEquals(legacy, f.repo.state.value)
+            f.tick(600)
+            assertEquals(legacy, f.repo.state.value)
+            assertEquals(listOf("A", "B", "A"), f.amllCalls.map { it.query.title })
+            assertTrue(f.calls.isEmpty())
+            assertEquals(legacy, f.cache.get(song().lyricsQuery!!))
+        }
+    }
+
+    @Test fun definitiveAmllMissIsNotRepeatedDuringLrclibRetries() = runTest {
+        val f = Fixture(this) { FetchResult(LyricsState.Offline) }
+        f.tick(100_600)
+        assertEquals(4, f.calls.size)
+        assertEquals(1, f.amllCalls.size)
+    }
+
+    @Test fun sameTrackDoesNotRecheckAmll() = runTest {
+        val f = Fixture(this) { FetchResult(LyricsState.Offline) }
+        f.tick(600)
+        f.now.value = song().copy(positionMs = 5000)
+        f.tick(1000)
+        f.now.value = f.now.value!!.copy(playing = false)
+        f.tick(1000)
+        f.now.value = f.now.value!!.copy(artwork = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
+        f.tick(98_000)
+        assertEquals(4, f.calls.size)
+        assertEquals(1, f.amllCalls.size)
+    }
+
     @Test fun positionOrPlayStateChangeDoesNotRefetch() = runTest {
         val f = Fixture(this)
         f.tick(600)
@@ -471,6 +547,7 @@ class LyricsRepositoryTest {
         f.now.value = f.now.value!!.copy(artwork = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
         f.tick(1000)
         assertEquals(1, f.calls.size)
+        assertEquals(1, f.amllCalls.size)
     }
 
     @Test fun globalBackoffAcrossTracks() = runTest {

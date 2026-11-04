@@ -13,19 +13,13 @@ class AmllCache(private val dir: File, private val clock: () -> Long) {
             val json = Json.parseToJsonElement(file.readText()) as JsonObject
             require(json["v"] == JsonPrimitive(1))
             require(string(json["key"]) == key(request))
-            val savedAt = number(json["savedAt"])
             val reason = AmllReason.valueOf(string(json["reason"]))
             val target = (json["target"] as? JsonArray)?.let {
                 require(it.size == 2)
                 AmllTarget(string(it[0]), string(it[1])).also { t -> require(t.safe) }
             }
             val state = when (string(json["kind"])) {
-                "missing" -> {
-                    require(reason in NEGATIVE_REASONS)
-                    if (clock() < savedAt || clock() - savedAt >= DAY ||
-                        json["generation"] != primitive(indexGeneration)) return null
-                    LyricsState.Missing
-                }
+                "missing" -> return null
                 "synced" -> {
                     val lines = (json["lines"] as JsonArray).map { value ->
                         val line = value as JsonArray
@@ -52,9 +46,7 @@ class AmllCache(private val dir: File, private val clock: () -> Long) {
     @Synchronized fun put(request: LyricsRequest, indexGeneration: String?, result: AmllResult) {
         if (!result.cacheable) return
         val state = result.state
-        if (state == LyricsState.Missing && result.reason !in NEGATIVE_REASONS) return
-        if (state is LyricsState.Synced && (!validLines(state.lines) || result.target?.safe != true)) return
-        if (state != LyricsState.Missing && state !is LyricsState.Synced) return
+        if (state !is LyricsState.Synced || !validLines(state.lines) || result.target?.safe != true) return
         var temporary: File? = null
         try {
             val fields = mutableMapOf<String, JsonElement>(
@@ -62,9 +54,9 @@ class AmllCache(private val dir: File, private val clock: () -> Long) {
                 "savedAt" to JsonPrimitive(clock()), "generation" to primitive(indexGeneration),
                 "source" to JsonPrimitive(result.source), "reason" to JsonPrimitive(result.reason.name),
                 "target" to (result.target?.let { JsonArray(listOf(JsonPrimitive(it.folder), JsonPrimitive(it.id))) } ?: JsonNull),
-                "kind" to JsonPrimitive(if (state is LyricsState.Synced) "synced" else "missing"),
+                "kind" to JsonPrimitive("synced"),
             )
-            if (state is LyricsState.Synced) fields["lines"] = JsonArray(state.lines.map { line ->
+            fields["lines"] = JsonArray(state.lines.map { line ->
                 JsonArray(listOf(JsonPrimitive(line.timeMs), JsonPrimitive(line.text), JsonArray(line.words.map {
                     JsonArray(listOf(JsonPrimitive(it.timeMs), JsonPrimitive(it.charStart)))
                 })))
@@ -96,10 +88,8 @@ class AmllCache(private val dir: File, private val clock: () -> Long) {
     }
 
     companion object {
-        private const val DAY = 24 * 60 * 60 * 1000L
         private const val ENTRY_LIMIT = 1024 * 1024
         private const val TOTAL_LIMIT = 32 * 1024 * 1024L
-        private val NEGATIVE_REASONS = setOf(AmllReason.NOT_FOUND, AmllReason.AMBIGUOUS, AmllReason.UNSUPPORTED)
 
         internal fun key(request: LyricsRequest): String {
             val json = JsonArray(listOf(JsonPrimitive(request.query.cacheKey),

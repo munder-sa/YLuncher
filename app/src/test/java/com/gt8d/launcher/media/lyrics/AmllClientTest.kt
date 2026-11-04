@@ -96,11 +96,16 @@ class AmllClientTest {
         val result = client.fetch(request())
         assertEquals(LyricsState.Missing, result.state)
         assertEquals(AmllReason.UNSUPPORTED, result.reason)
-        assertTrue(result.cacheable)
+        assertFalse(result.cacheable)
         val ambiguous = AmllClient(AmllTransport { _, _ -> error("must not fetch") }, "a",
             AmllIndexLookup { _, _ -> AmllMatch.Ambiguous }).fetch(request(null))
         assertEquals(AmllReason.AMBIGUOUS, ambiguous.reason)
         assertEquals(LyricsState.Missing, ambiguous.state)
+        assertFalse(ambiguous.cacheable)
+        val notFound = AmllClient(AmllTransport { _, _ -> error("must not fetch") }, "a",
+            AmllIndexLookup { _, _ -> AmllMatch.NotFound }).fetch(request(null))
+        assertEquals(LyricsState.Missing, notFound.state)
+        assertFalse(notFound.cacheable)
     }
 
     @Test fun hostWaitDoesNotAffectLrclib() = runBlocking {
@@ -148,7 +153,7 @@ class AmllClientTest {
     @Test fun notFoundStopsMirrorsAndUnavailableIndexIsNotNegative() = runBlocking {
         var calls = 0
         val client = AmllClient(AmllTransport { _, _ -> calls++; HttpResponse(404, "", null) }, "a")
-        assertTrue(client.fetch(request()).cacheable)
+        assertFalse(client.fetch(request()).cacheable)
         assertEquals(1, calls)
         val unavailable = client.fetch(request(null))
         assertEquals(AmllReason.UNAVAILABLE, unavailable.reason)

@@ -88,8 +88,8 @@ class AmllClient(
                 else if (match.target.safe) download(match.target, request,
                 if (isrc != null) AmllReason.INDEX_ISRC else AmllReason.INDEX_TEXT)
                 else result(LyricsState.Failed, AmllReason.INVALID)
-            AmllMatch.NotFound -> result(LyricsState.Missing, AmllReason.NOT_FOUND, cacheable = true)
-            AmllMatch.Ambiguous -> result(LyricsState.Missing, AmllReason.AMBIGUOUS, cacheable = true)
+            AmllMatch.NotFound -> result(LyricsState.Missing, AmllReason.NOT_FOUND)
+            AmllMatch.Ambiguous -> result(LyricsState.Missing, AmllReason.AMBIGUOUS)
             AmllMatch.Unavailable -> result(LyricsState.Failed, AmllReason.UNAVAILABLE)
         }
     }
@@ -111,7 +111,7 @@ class AmllClient(
             }
             DiagLog.d("Lyrics", "amll code=${response.code} ms=${(System.nanoTime() - started) / 1_000_000}")
             kotlin.coroutines.coroutineContext.ensureActive()
-            if (response.code == 404) return result(LyricsState.Missing, AmllReason.NOT_FOUND, target, true)
+            if (response.code == 404) return result(LyricsState.Missing, AmllReason.NOT_FOUND, target)
             if (response.code == 429 || response.code == 503) {
                 val seconds = response.retryAfterSec?.takeIf { it > 0 } ?: 60L
                 synchronized(hostWait) { hostWait[host] = deadline(seconds) }
@@ -136,7 +136,7 @@ class AmllClient(
                 DiagLog.d("Lyrics", "amll parse $it")
             }) {
                 is TtmlParseResult.WordSynced -> return result(LyricsState.Synced(parsed.lines), reason, target, true)
-                TtmlParseResult.Unsupported -> return result(LyricsState.Missing, AmllReason.UNSUPPORTED, target, true)
+                TtmlParseResult.Unsupported -> return result(LyricsState.Missing, AmllReason.UNSUPPORTED, target)
                 TtmlParseResult.Invalid -> failure = AmllReason.INVALID
             }
         }
@@ -146,7 +146,7 @@ class AmllClient(
             failure, target, wait = until)
     }
 
-    /** Reject error documents and truncated XML before Unsupported can become a negative entry. */
+    /** Reject error documents and truncated XML before treating the song as unsupported. */
     private suspend fun isCompleteTtml(xml: String): Boolean {
         if (xml.contains("<!DOCTYPE", ignoreCase = true)) return false
         return try {

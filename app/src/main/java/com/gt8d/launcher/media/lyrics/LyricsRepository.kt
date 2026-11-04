@@ -60,8 +60,9 @@ class LyricsRepository(
                     DiagLog.d("Lyrics", if (cached != null) "cache hit ${cached.javaClass.simpleName}" else "cache miss")
                     mutableState.value = cached ?: LyricsState.Loading
                     delay(600)
+                    var checkedAmll: AmllResult? = null
                     repeat(4) { attempt ->
-                        val amll = withContext(io) {
+                        val amll = checkedAmll ?: withContext(io) {
                             currentCoroutineContext().ensureActive()
                             amllCache.get(request, null)
                         } ?: if (clock() < (amllAllowedAt[request] ?: 0L)) {
@@ -87,6 +88,9 @@ class LyricsRepository(
                                 amllCache.put(request, null, result)
                             }
                             result
+                        }
+                        if (amll.state != LyricsState.Offline && amll.state != LyricsState.Failed) {
+                            checkedAmll = amll
                         }
                         currentCoroutineContext().ensureActive()
                         if (amll.state.hasWords()) {
