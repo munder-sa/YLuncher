@@ -13,4 +13,4 @@ write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
 command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.apps.*' --tests 'com.gt8d.launcher.ui.panel.*' --tests 'com.gt8d.launcher.ui.home.HomeActivityTest' --tests 'com.gt8d.launcher.ui.home.HomeActivityUiTest' --tests 'com.gt8d.launcher.settings.*'
 command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.config.AppGraphConfigTest'
 write app/src/main/java/com/gt8d/launcher/settings/ListsScreen.kt
-write app/src/test/java/com/gt8d/launcher/settings/ListsScreenTest.kt
+create app/src/test/java/com/gt8d/launcher/settings/ListsScreenTest.kt
