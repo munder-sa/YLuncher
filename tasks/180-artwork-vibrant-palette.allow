@@ -1,0 +1,8 @@
+write app/src/main/java/com/gt8d/launcher/ui/theme/ArtworkColors.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/ArtworkBackground.kt
+write app/src/test/java/com/gt8d/launcher/ui/theme/ArtworkColorsTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/theme/LyricsVisualStyleTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/ArtworkBackgroundTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeMiniPlayerTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/MediaCardTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.theme.ArtworkColorsTest' --tests 'com.gt8d.launcher.ui.theme.LyricsVisualStyleTest' --tests 'com.gt8d.launcher.ui.home.ArtworkBackgroundTest' --tests 'com.gt8d.launcher.ui.home.HomeMiniPlayerTest' --tests 'com.gt8d.launcher.ui.panel.MediaCardTest'

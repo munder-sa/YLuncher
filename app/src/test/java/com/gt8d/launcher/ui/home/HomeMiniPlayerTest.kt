@@ -20,6 +20,8 @@ import androidx.compose.runtime.mutableStateOf
 import com.gt8d.launcher.ui.panel.AppInfo
 import com.gt8d.launcher.ui.panel.MediaAction
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.theme.ArtworkColors
+import com.gt8d.launcher.ui.theme.ArtworkColorReference
 import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
@@ -63,9 +65,39 @@ class HomeMiniPlayerTest {
         image.readPixels(pixels)
         val padding = androidx.compose.ui.graphics.Color(pixels[4 * image.width + image.width / 2])
         assertTrue(padding.red > padding.green * 1.5f)
-        assertTrue(padding.red <= 56f / 255)
+        assertTrue(padding.red > 56f / 255)
+        ArtworkColorReference.assertReadable(pixels[4 * image.width + image.width / 2])
         val corner = androidx.compose.ui.graphics.Color(pixels[0])
         assertNotEquals(padding, corner)
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun threeArtworkColorsCoverWholeCard() {
+        // Equal-area RGB stripes select blue, green, red by the specified bucket tie order.
+        val art = android.graphics.Bitmap.createBitmap(30, 12, android.graphics.Bitmap.Config.ARGB_8888)
+        for (x in 0 until 30) for (y in 0 until 12) {
+            art.setPixel(x, y, listOf(android.graphics.Color.RED, android.graphics.Color.GREEN,
+                android.graphics.Color.BLUE)[x / 10])
+        }
+        host(song.copy(title = "Three colors", metaTitle = "Three colors", artwork = art, playing = false))
+        rule.waitUntil(5000) {
+            val image = playerImage()
+            val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+            val c = androidx.compose.ui.graphics.Color(pixels[4 * image.width + image.width / 2])
+            c.blue > c.red * 2f
+        }
+        val image = playerImage()
+        val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+        val expected = ArtworkColors(
+            ArtworkColorReference.brightest(0xFF0F0F99.toInt()),
+            ArtworkColorReference.brightest(0xFF990F0F.toInt()),
+            ArtworkColorReference.brightest(0xFF0F990F.toInt()),
+        )
+        for ((x, y) in listOf(image.width / 2 to 4, 4 to image.height / 2,
+                image.width - 5 to image.height / 2, image.width / 2 to image.height - 5)) {
+            ArtworkColorReference.assertGradientPixel(expected, pixels[y * image.width + x],
+                x, y, image.width, image.height)
+        }
     }
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)

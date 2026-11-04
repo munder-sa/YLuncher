@@ -33,6 +33,8 @@ import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.media.lyrics.LyricLine
 import com.gt8d.launcher.media.lyrics.LyricsState
 import com.gt8d.launcher.ui.theme.LauncherTheme
+import com.gt8d.launcher.ui.theme.ArtworkColors
+import com.gt8d.launcher.ui.theme.ArtworkColorReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -71,7 +73,41 @@ class MediaCardTest {
             val image = cardImage()
             val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
             val c = Color(pixels[2 * image.width + image.width / 2])
-            c.red > c.green * 1.5f && c.red <= 56f / 255
+            c.red > c.green * 1.5f && c.red > 56f / 255
+        }
+        val image = cardImage()
+        val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+        ArtworkColorReference.assertReadable(pixels[2 * image.width + image.width / 2])
+    }
+
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun threeArtworkColorsCoverWholeCard() {
+        val art = android.graphics.Bitmap.createBitmap(30, 12, android.graphics.Bitmap.Config.ARGB_8888)
+        for (x in 0 until 30) for (y in 0 until 12) {
+            art.setPixel(x, y, listOf(android.graphics.Color.RED, android.graphics.Color.GREEN,
+                android.graphics.Color.BLUE)[x / 10])
+        }
+        rule.setContent { LauncherTheme {
+            backgroundView = androidx.compose.ui.platform.LocalView.current
+            MediaCard(lyricNow().copy(artwork = art, metaTitle = "Three colors"), null, { 0L }, {}, {}, {})
+        } }
+        rule.waitUntil(5000) {
+            val image = cardImage()
+            val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+            val c = Color(pixels[image.height / 2 * image.width + 2])
+            c.blue > c.red * 2f
+        }
+        val image = cardImage()
+        val pixels = IntArray(image.width * image.height); image.readPixels(pixels)
+        val expected = ArtworkColors(
+            ArtworkColorReference.brightest(0xFF0F0F99.toInt()),
+            ArtworkColorReference.brightest(0xFF990F0F.toInt()),
+            ArtworkColorReference.brightest(0xFF0F990F.toInt()),
+        )
+        for ((x, y) in listOf(image.width / 2 to 2, 2 to image.height / 2,
+                image.width - 3 to image.height / 2, image.width / 2 to image.height - 3)) {
+            ArtworkColorReference.assertGradientPixel(expected, pixels[y * image.width + x],
+                x, y, image.width, image.height)
         }
     }
 

@@ -17,10 +17,23 @@ class LyricsVisualStyleTest {
         return result
     }
     private fun backgrounds(): List<Int> {
-        val colors = listOf(0xFF0000FF.toInt(), 0xFF00FF00.toInt(), 0xFFFF0000.toInt(),
+        val singles = listOf(0xFF0000FF.toInt(), 0xFF00FF00.toInt(), 0xFFFF0000.toInt(),
             0xFF00FFFF.toInt(), 0xFFFF00FF.toInt(), 0xFFFFFF00.toInt()).map(::darkenArtworkColor)
-        return colors.flatMap { c -> listOf(0f,0.25f,0.5f,0.75f,1f).map { mix(c.light,c.dark,it) } } +
-            listOf(Palette.Panel.toArgb(),0xFF383838.toInt())
+        // High/low saturation, filter boundaries, unequal area and opposing hues.
+        val pixels = listOf(
+            intArrayOf(0xFFFF0000.toInt(), 0xFF0000FF.toInt()),
+            intArrayOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt()),
+            intArrayOf(0xFF00FFFF.toInt(), 0xFFFF00FF.toInt(), 0xFFFFFF00.toInt()),
+            intArrayOf(0xFF80A080.toInt(), 0xFFA08080.toInt(), 0xFF8080A0.toInt()),
+            intArrayOf(0xFF200000.toInt(), 0xFF002000.toInt(), 0xFF000020.toInt()),
+            intArrayOf(0xFFFFE0E0.toInt(), 0xFFE0FFE0.toInt(), 0xFFE0E0FF.toInt()),
+            intArrayOf(0xFF64644C.toInt(), 0xFF644C64.toInt(), 0xFF4C6464.toInt()),
+            intArrayOf(0xFFF08C00.toInt(), 0xFF00F08C.toInt(), 0xFF8C00F0.toInt()),
+            IntArray(100) { if (it < 80) 0xFF80A080.toInt() else 0xFFFF0000.toInt() },
+        )
+        val colors = singles + pixels.map { requireNotNull(extractArtworkColors(it)) }
+        return (colors.flatMap(ArtworkColorReference::interpolations) +
+            listOf(Palette.Panel.toArgb(),0xFF383838.toInt())).distinct()
     }
     // Independent reference calculation includes rounded 8-bit compositing.
     private fun referenceRatio(fg: Int, bg: Int): Double {
@@ -40,8 +53,13 @@ class LyricsVisualStyleTest {
                 compositeSrgb(white,LyricsVisualStyle.WordBaseAlpha,bg)).forEach { fg ->
                 val ratio = contrastRatio(fg,bg)
                 assertEquals(referenceRatio(fg,bg),ratio,1e-12)
-                assertTrue("ratio=$ratio",ratio >= 4.5)
+                assertTrue("background=${Integer.toHexString(bg)} ratio=$ratio",ratio >= 4.5)
                 minimum = minOf(minimum,ratio)
+            }
+            for (alpha in listOf(LyricsVisualStyle.NextAlpha, LyricsVisualStyle.WordBaseAlpha)) {
+                val reference = mix(bg, white, alpha)
+                assertEquals(reference, compositeSrgb(white, alpha, bg))
+                assertTrue(referenceRatio(reference, bg) >= 4.5)
             }
         }
         println("Primary minimum contrast: $minimum")
@@ -58,19 +76,31 @@ class LyricsVisualStyleTest {
     }
 
     @Test fun fadeNeverBelowNextContrast() {
+        var minimum = Double.POSITIVE_INFINITY
+        var layeredMinimum = Double.POSITIVE_INFINITY
         backgrounds().forEach { bg ->
             val base = contrastRatio(compositeSrgb(white,LyricsVisualStyle.NextAlpha,bg),bg)
             for (ms in 0..LyricsVisualStyle.FadeMs) {
                 val alpha = LyricsVisualStyle.NextAlpha + (1f-LyricsVisualStyle.NextAlpha)*ms/LyricsVisualStyle.FadeMs
                 val ratio = contrastRatio(compositeSrgb(white,alpha,bg),bg)
+                assertEquals(mix(bg, white, alpha), compositeSrgb(white, alpha, bg))
+                assertEquals(referenceRatio(mix(bg, white, alpha), bg), ratio, 1e-12)
                 assertTrue(ratio >= base)
                 assertTrue(ratio >= 4.5)
+                minimum = minOf(minimum, ratio)
                 // Filled words drawn over the unfilled base must also remain readable.
                 val layered = compositeSrgb(white,ms.toFloat()/LyricsVisualStyle.FadeMs,
                     compositeSrgb(white,LyricsVisualStyle.WordBaseAlpha,bg))
-                assertTrue(contrastRatio(layered,bg) >= base)
+                val referenceLayered = mix(mix(bg, white, LyricsVisualStyle.WordBaseAlpha), white,
+                    ms.toFloat() / LyricsVisualStyle.FadeMs)
+                assertEquals(referenceLayered, layered)
+                val layeredRatio = referenceRatio(referenceLayered,bg)
+                assertTrue(layeredRatio >= base)
+                assertTrue(layeredRatio >= 4.5)
+                layeredMinimum = minOf(layeredMinimum, layeredRatio)
             }
         }
+        println("Fade minimum contrast: $minimum; layered white minimum contrast: $layeredMinimum")
     }
 
     @Test fun distantAndEdgeFadeRatiosAreReportedSeparately() {

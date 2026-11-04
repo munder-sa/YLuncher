@@ -139,8 +139,9 @@ internal class ArtworkBackgroundHolder(
                 DiagLog.d("Artwork", "extract failed $failure")
             } else {
                 val light = "#%06X".format(result.light and 0xffffff)
+                val accent = "#%06X".format(result.accent and 0xffffff)
                 val dark = "#%06X".format(result.dark and 0xffffff)
-                DiagLog.d("Artwork", "extract done $light/$dark ms=${SystemClock.elapsedRealtime() - started}")
+                DiagLog.d("Artwork", "extract done $light/$accent/$dark ms=${SystemClock.elapsedRealtime() - started}")
             }
             if (request === target && target.generation == generation && image == next &&
                 clients.isNotEmpty()) {
@@ -172,7 +173,8 @@ fun rememberArtworkBackground(now: NowPlaying?): State<ArtworkColors?> {
 
 fun Modifier.artworkBackground(colors: ArtworkColors?): Modifier = drawWithCache {
     val brush = colors?.let {
-        Brush.linearGradient(listOf(Color(it.light), Color(it.dark)), Offset.Zero, Offset(size.width, size.height))
+        Brush.linearGradient(0f to Color(it.light), 0.5f to Color(it.accent), 1f to Color(it.dark),
+            start = Offset.Zero, end = Offset(size.width, size.height))
     }
     onDrawBehind {
         if (brush == null) drawRect(Palette.Panel) else drawRect(brush)

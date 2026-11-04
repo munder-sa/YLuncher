@@ -3,6 +3,7 @@ package com.gt8d.launcher.ui.home
 import android.graphics.Bitmap
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.ArtworkColors
+import com.gt8d.launcher.ui.theme.ArtworkColorReference
 import com.gt8d.launcher.ui.theme.extractArtworkColors
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
@@ -17,7 +18,10 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 class ArtworkBackgroundTest {
-    private val red = ArtworkColors(0xff381818.toInt(), 0xff1c0c0c.toInt())
+    private val redStart = ArtworkColorReference.brightest(0xff990f0f.toInt())
+    private val red = ArtworkColors(redStart,
+        ArtworkColorReference.mix(0xff000000.toInt(), redStart, 0.6),
+        ArtworkColorReference.mix(0xff000000.toInt(), redStart, 0.8))
     private fun bitmap() = Bitmap.createBitmap(16, 8, Bitmap.Config.ARGB_8888).apply {
         eraseColor(android.graphics.Color.RED)
     }
@@ -35,6 +39,7 @@ class ArtworkBackgroundTest {
             try {
                 assertEquals(Bitmap.Config.ARGB_8888, art.config)
                 val originalPixels = readPixels(art)
+                assertArgbSamplingPixelsMatchCopy(art)
                 val expected = previousSampling(art)
                 assertNotNull(expected)
 
@@ -63,6 +68,7 @@ class ArtworkBackgroundTest {
                 assertEquals(Bitmap.Config.ARGB_8888, art.config)
                 assertFalse(art.isMutable)
                 val originalPixels = readPixels(art)
+                assertArgbSamplingPixelsMatchCopy(art)
                 repeat(2) {
                     assertEquals(red, sampleArtworkColors(art))
                     assertFalse(art.isRecycled)
@@ -304,6 +310,21 @@ class ArtworkBackgroundTest {
         IntArray(bitmap.width * bitmap.height).also {
             bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         }
+
+    private fun assertArgbSamplingPixelsMatchCopy(bitmap: Bitmap) {
+        val copy = requireNotNull(bitmap.copy(Bitmap.Config.ARGB_8888, false))
+        val (width, height) = artworkSampleSize(bitmap.width, bitmap.height)
+        val directSample = Bitmap.createScaledBitmap(bitmap, width, height, false)
+        val copiedSample = Bitmap.createScaledBitmap(copy, width, height, false)
+        try {
+            // Compare the extraction inputs, so a color-selection coincidence cannot hide a change.
+            assertArrayEquals(readPixels(copiedSample), readPixels(directSample))
+        } finally {
+            if (directSample !== bitmap) directSample.recycle()
+            if (copiedSample !== copy) copiedSample.recycle()
+            copy.recycle()
+        }
+    }
 
     private fun previousSampling(bitmap: Bitmap): ArtworkColors? {
         val copy = requireNotNull(bitmap.copy(Bitmap.Config.ARGB_8888, false))
