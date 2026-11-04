@@ -4,6 +4,9 @@
 
 ## 再開時の要点 (2026-11-04 18時台)
 
+- **再起動前の最新状態**: beta6で「Webログイン情報も削除」をOFFにして接続解除→未接続/保存表示なし→force-stop/HOMEの新PID16172でも同状態、接続診断なしを確認。既存Webログインを開き固定接続ボタンを押すと、再入力なしでREADY1,941ms・ネイティブ設定jp/SAVEDへ復帰。Web画面/秘密値は取得していない。次に合意済みのGT8D全体再起動を行う。直前ADB service.adb.tcp.port=5555/persist.adb.tcp.port空、sys.boot_completed1、uptime8,434秒(解除検証前)。再接続できなければ利用者の実機操作が必要になる可能性がある。
+- 新プロセス直後の設定黒画面はbeta6でも再発。HOME→設定一覧を開き直すと復帰、AndroidRuntime:Eなし。原因未特定の別検証項目として残す。
+- **最新: Task189=`3e93af7`、両beta6 / 46へ実機更新成功。初回復元READY 2,628ms、jp/SAVEDを画面確認**。新PID12215、再入力/Webログインなし。最初の301は1,075ms、公開refresh2,084ms、account200まで2,625ms。beta5の初回35,007ms TIMEOUTから改善。1回測定であり全条件の保証ではない。署名/HOME/通知/Bluetooth/5通知listener/carsyso補助設定を維持。Your LifeのApple取得は335ms/UNSUPPORTED→LRCLIBで、Apple単語歌詞成功とは扱わない。次にGT8D全体再起動後の保存復元を確認する。
 - **最新18:43: Task189実装・レビュー・18テスト・beta6 APK準備完了、workerなし**。183316の再委譲はsealed interfaceのテストコンパイル失敗→fixtureをJVM proxyへ変更→18件中1件失敗→1hostの再利用検査を2host検査より前へ移し、全期待値/項目を維持して18件成功(26秒)。既存6件/.codex.conf/SDK/AGP/compiler無変更。release1回1分19秒成功。共通policy/取消/固定例外/TCP競争/HTTP再送防止の実装全文・テスト全文・XML・実コマンド照合済み。次は同署名の両beta6 / 46へ実機更新して初回復元を測る。
 - beta6 app3,340,574bytes(前版から301,736bytes増)、panel2,021,093bytes。双方署名verify成功・従来証明書一致、HTTP notice内蔵。manifestのWebログインActivityとstartup providerは非exported、OkHttp PlatformInitializerが登録された。秘密や歌詞を保存する新機構は追加していない。
 - その間の実機beta5: PSS82,056KiB/RSS220,704KiB/WebViews0の一点測定。厳密な性能基準ではない。Apple本体は再起動後もLemon songリンクで遷移せず、公式iTunes lookupのalbumリンクは「地域で使用できない」、アプリ内Apple/ライブラリ検索も結果が出なかった。Apple実TTML2曲検証は引き続き未完了。端末全体の再起動はまだ行っていない。

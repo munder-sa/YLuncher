@@ -77,3 +77,11 @@
 - panel2,021,093bytes / SHA256 `a21af7342c4d795b1bf0dad4bd957b1da438256cb1fb01312089f0482531bfde`。
 - APKのHTTP notice11,889bytes、版5.3.2/Okio3.16.4・Apacheライセンスを確認。compiled manifestはWebログインActivity/exported=false、startup provider/exported=false、OkHttp PlatformInitializer追加を確認。
 - この時点では実機はまだbeta5。次に更新し初回復元・端末再起動後の保持を確認する。
+
+## beta6実機・初回復元
+
+- 実装コミット3e93af7。本体/中継install -rともSuccess、両46/beta6。PID31768→12215、署名表示2728742dとHOME/通知/Bluetooth/5通知listener/carsyso補助設定維持。
+- 保存済み情報を初回から復元成功、再入力/Webログインなし。最初の公開301は1,075ms、200/2,455,875bytesまで1,453ms、公開refresh READY2,084ms、account200/2,625ms、接続全体READY2,628ms。ネイティブ画面でjp/SAVED・入力空を確認。
+- beta5初回35,007ms TIMEOUTと比べ改善したが単発の計測で、全回線条件の性能保証ではない。Your LifeはApple API335ms/UNSUPPORTED→LRCLIB。実Apple単語歌詞の2曲採用はまだ未完了。
+- 解除検証: 確認画面の初期ONを確認後、Webログイン削除だけOFFへ切替→接続解除。未接続/保存表示なし、force-stop/HOME後の新PID16172でも維持、AppleConnect開始ログなし。既存Webログイン画面の固定接続ボタンを押すとREADY1,941ms(公開refresh1,462ms/account2001,938ms)、Settingsでjp/SAVED・入力空を確認。Webログイン再入力なし。Cookie全文/ユーザーtokenを読み取っていない。認証済みWebデータ削除ONのケースは未確認。
+- 新プロセス直後にSettingsが黒画面になったが、HOME→設定一覧の開き直しで表示。AndroidRuntime:Eなし。beta5でもあった現象で原因未特定。
