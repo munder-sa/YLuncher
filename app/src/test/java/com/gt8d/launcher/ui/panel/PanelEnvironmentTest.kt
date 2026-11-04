@@ -46,10 +46,26 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class PanelEnvironmentTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val pkg = "example.environment"
     private val catalog by lazy { AppCatalog(app) }
+    private val catalogRegistered = mutableListOf<BroadcastReceiver>()
+    private val catalogUnregistered = mutableListOf<BroadcastReceiver>()
+    private val shared by lazy { com.gt8d.launcher.apps.AppCatalogState(object : ContextWrapper(app) {
+        override fun getApplicationContext(): Context = this
+        override fun registerReceiver(receiver: BroadcastReceiver?, filter: IntentFilter, permission: String?, scheduler: Handler?, flags: Int): Intent? {
+            if (receiver != null) catalogRegistered.add(receiver)
+            return super.registerReceiver(receiver, filter, permission, scheduler, flags)
+        }
+        override fun unregisterReceiver(receiver: BroadcastReceiver) {
+            catalogUnregistered.add(receiver)
+            super.unregisterReceiver(receiver)
+        }
+    }, catalog,
+        kotlinx.coroutines.test.UnconfinedTestDispatcher()) }
+    @org.junit.After fun closeCatalog() { shared.close() }
     private lateinit var owner: PanelTestLifecycle
     private lateinit var result: PanelEnvironment
     private val visible = mutableStateOf(true)
@@ -86,7 +102,7 @@ class PanelEnvironmentTest {
             if (visible.value) {
                 owner = androidx.compose.runtime.remember { PanelTestLifecycle().also { it.resume() } }
                 CompositionLocalProvider(LocalContext provides context, LocalLifecycleOwner provides owner) {
-                    result = rememberPanelEnvironment(catalog)
+                    result = rememberPanelEnvironment(shared)
                 }
             }
         }
@@ -156,10 +172,15 @@ class PanelEnvironmentTest {
     @Test fun environment_radioBroadcast_refreshesWithoutMediaChange() {
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         radios(false, false); host()
-        val before = result.revision
+        val before = result.radioRevision
+        val appsBefore = result.appRevision
         rule.runOnIdle { radios(true, false) }
         broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
-        rule.runOnIdle { assertEquals(DockStatus(true, false, WifiIndicator.Disconnected), result.dockStatus); assertEquals(before + 1, result.revision) }
+        rule.runOnIdle {
+            assertEquals(DockStatus(true, false, WifiIndicator.Disconnected), result.dockStatus)
+            assertEquals(before + 1, result.radioRevision)
+            assertEquals(appsBefore, result.appRevision)
+        }
         rule.runOnIdle { radios(true, true) }
         broadcast(BluetoothAdapter.ACTION_STATE_CHANGED)
         rule.runOnIdle { assertEquals(true, result.dockStatus.bluetoothOn) }
@@ -175,9 +196,13 @@ class PanelEnvironmentTest {
             }
         }
         try {
+            radios(false, false)
             host()
-            assertEquals(2, registered.size)
+            assertEquals(1, registered.size)
             assertTrue(unregistered.isEmpty())
+            assertEquals(2, catalogRegistered.size)
+            assertTrue(catalogUnregistered.isEmpty())
+            rule.runOnIdle { radios(true, false) }
             broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
             val oldState = states.single()
             val oldEnvironment = oldState.value
@@ -186,6 +211,7 @@ class PanelEnvironmentTest {
             rule.runOnIdle { visible.value = false }
             rule.waitForIdle()
             assertEquals(registered, unregistered)
+            assertTrue(catalogUnregistered.isEmpty())
             assertEquals(0, oldOwner.registry.observerCount)
             val before = reads
             broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
@@ -195,17 +221,28 @@ class PanelEnvironmentTest {
             assertEquals(oldEnvironment, oldState.value)
             rule.runOnIdle { visible.value = true }
             rule.waitForIdle()
-            assertEquals(4, registered.size)
-            assertEquals(2, unregistered.size)
+            assertEquals(2, registered.size)
+            assertEquals(1, unregistered.size)
             assertEquals(1, owner.registry.observerCount)
-            val revision = result.revision
+            val revision = result.radioRevision
+            rule.runOnIdle { radios(false, false) }
             broadcast(WifiManager.WIFI_STATE_CHANGED_ACTION)
-            rule.runOnIdle { assertEquals(revision + 1, result.revision) }
+            rule.runOnIdle { assertEquals(revision + 1, result.radioRevision) }
             assertEquals(oldEnvironment, oldState.value)
             rule.runOnIdle { visible.value = false }
             rule.waitForIdle()
             assertEquals(registered, unregistered)
             assertEquals(0, owner.registry.observerCount)
+            val oldRevision = shared.snapshot.value.appRevision
+            rule.runOnIdle { install("Hidden") }
+            broadcast(Intent.ACTION_PACKAGE_ADDED, true)
+            assertTrue(shared.snapshot.value.appRevision > oldRevision)
+            shared.close()
+            assertEquals(catalogRegistered.toSet(), catalogUnregistered.toSet())
+            assertEquals(1, catalogUnregistered.size)
+            val closed = shared.snapshot.value
+            broadcast(Intent.ACTION_PACKAGE_CHANGED, true)
+            assertEquals(closed, shared.snapshot.value)
         } finally {
             observer.dispose()
         }
@@ -261,7 +298,10 @@ class PanelEnvironmentTest {
         rule.runOnIdle { install("First") }
         broadcast(Intent.ACTION_PACKAGE_ADDED, true)
         rule.runOnIdle { assertTrue(pkg in result.installedPkgs); assertEquals("First", result.appListEntries.single { it.pkg == pkg }.label) }
-        rule.runOnIdle { Shadows.shadowOf(app.packageManager).removePackage(pkg) }
+        rule.runOnIdle {
+            Shadows.shadowOf(app.packageManager).removeActivity(ComponentName(pkg, "$pkg.Main"))
+            Shadows.shadowOf(app.packageManager).removePackage(pkg)
+        }
         broadcast(Intent.ACTION_PACKAGE_REMOVED, true)
         rule.runOnIdle { assertFalse(pkg in result.installedPkgs); assertFalse(result.appListEntries.any { it.pkg == pkg }) }
         rule.runOnIdle { install("Changed") }
@@ -272,19 +312,24 @@ class PanelEnvironmentTest {
         install("Before")
         Shadows.shadowOf(app.packageManager).setApplicationIcon(pkg, ColorDrawable(Color.RED))
         host()
-        assertEquals(Color.RED, catalog.icon(pkg)!!.asAndroidBitmap().getPixel(48, 48))
+        shared.request(setOf(pkg))
+        assertEquals(Color.RED, shared.snapshot.value.info(pkg).icon!!.asAndroidBitmap().getPixel(48, 48))
         rule.runOnIdle {
             owner.stop()
+            Shadows.shadowOf(app.packageManager).removeActivity(ComponentName(pkg, "$pkg.Main"))
             Shadows.shadowOf(app.packageManager).removePackage(pkg)
             install("After")
             installOther()
             Shadows.shadowOf(app.packageManager).setApplicationIcon(pkg, ColorDrawable(Color.GREEN))
-            owner.resume()
+            app.sendBroadcast(Intent(Intent.ACTION_PACKAGE_CHANGED, Uri.parse("package:$pkg")))
+            app.sendBroadcast(Intent(Intent.ACTION_PACKAGE_ADDED, Uri.parse("package:example.other")))
         }
+        rule.waitForIdle()
+        rule.runOnIdle { owner.resume() }
         rule.runOnIdle {
             assertTrue("example.other" in result.installedPkgs)
             assertEquals("After", result.appListEntries.single { it.pkg == pkg }.label)
-            assertEquals(Color.GREEN, catalog.icon(pkg)!!.asAndroidBitmap().getPixel(48, 48))
+            assertEquals(Color.GREEN, shared.snapshot.value.info(pkg).icon!!.asAndroidBitmap().getPixel(48, 48))
         }
     }
     private fun installOther() {

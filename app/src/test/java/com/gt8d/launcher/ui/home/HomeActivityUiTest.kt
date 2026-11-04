@@ -34,6 +34,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HomeActivityUiTest {
     @get:Rule val rule = createEmptyComposeRule()
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
@@ -54,6 +55,8 @@ class HomeActivityUiTest {
     @Before fun prepare() {
         RuntimeEnvironment.setQualifiers("w1280dp-h1000dp")
         AppGraph.init(app)
+        AppGraph.appCatalogStateForTest = com.gt8d.launcher.apps.AppCatalogState(app, AppGraph.catalog,
+            kotlinx.coroutines.test.UnconfinedTestDispatcher())
         assertFalse(app.packageManager.getInstalledPackages(0).any { it.packageName == pkg })
         savedFlow = AppGraph.configFlowForHomeTest
         savedHandled = AppGraph.bootHandled
@@ -88,7 +91,10 @@ class HomeActivityUiTest {
             }
             it.pause().stop().destroy()
         }
+        shadowOf(app.packageManager).removeActivity(component)
         shadowOf(app.packageManager).removePackage(pkg)
+        AppGraph.appCatalogStateForTest?.close()
+        AppGraph.appCatalogStateForTest = null
         AppGraph.catalog.invalidatePackage(pkg)
         AppGraph.configFlowForHomeTest = savedFlow
         AppGraph.bootHandled = savedHandled
@@ -116,6 +122,7 @@ class HomeActivityUiTest {
     private fun broadcast(action: String) {
         rule.runOnIdle { app.sendBroadcast(Intent(action, Uri.parse("package:$pkg"))) }
         rule.waitForIdle()
+        assertNull(AppGraph.appCatalogState.snapshot.value.failure)
     }
     private fun assertOpen() {
         val runner = AppGraph.runner
@@ -214,7 +221,10 @@ class HomeActivityUiTest {
         val config = flow.value
         val media = MediaWatcher.nowPlaying.value
         rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
-        rule.runOnIdle { shadowOf(app.packageManager).removePackage(pkg) }
+        rule.runOnIdle {
+            shadowOf(app.packageManager).removeActivity(component)
+            shadowOf(app.packageManager).removePackage(pkg)
+        }
         broadcast(Intent.ACTION_PACKAGE_REMOVED)
         rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  $pkg | パネル"))
@@ -241,7 +251,12 @@ class HomeActivityUiTest {
         val config = flow.value
         val media = MediaWatcher.nowPlaying.value
         rule.onNodeWithContentDescription("$pkg(アプリが見つかりません)", useUnmergedTree = true).assertExists()
-        rule.runOnIdle { controller!!.pause(); install(); controller!!.resume() }
+        rule.runOnIdle {
+            controller!!.pause(); install()
+            app.sendBroadcast(Intent(Intent.ACTION_PACKAGE_ADDED, Uri.parse("package:$pkg")))
+        }
+        rule.waitForIdle()
+        rule.runOnIdle { controller!!.resume() }
         rule.onNodeWithContentDescription("Home App", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("home_set_home-test").assert(hasContentDescription("1  Home App | パネル"))
         assertSame(activity, controller!!.get())

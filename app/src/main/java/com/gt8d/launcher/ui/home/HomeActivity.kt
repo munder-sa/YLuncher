@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.stockLauncherIntent
 import com.gt8d.launcher.boot.BootPhase
-import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.safety.SafetyGuard
@@ -100,7 +99,9 @@ class HomeActivity : ComponentActivity() {
             LauncherTheme {
                 Box(Modifier.fillMaxSize().screenSemantics()) {
                     val latestConfig by AppGraph.configForHome.collectAsState()
-                    val config = latestConfig ?: remember { Defaults.build(AppGraph.catalog.installed()) }
+                    val catalog = AppGraph.appCatalogState
+                    val apps by catalog.snapshot.collectAsState()
+                    val config = latestConfig
                     val bootPhase by AppGraph.boot.phase.collectAsState()
                     val secondsLeft by AppGraph.boot.secondsLeft.collectAsState()
 
@@ -161,7 +162,7 @@ class HomeActivity : ComponentActivity() {
                                 onOpenNow = AppGraph.boot::openNow,
                                 onStayHome = AppGraph.boot::stayHome,
                                 modifier = Modifier.align(Alignment.Center),
-                                iconFor = AppGraph.catalog::icon,
+                                iconFor = { apps.info(it).icon },
                             )
                         }
                     }
