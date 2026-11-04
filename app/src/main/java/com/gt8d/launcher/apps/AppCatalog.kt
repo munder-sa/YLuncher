@@ -9,7 +9,33 @@ import com.gt8d.launcher.ui.apps.AppListEntry
 import com.gt8d.launcher.ui.panel.AppInfo
 import java.util.concurrent.ConcurrentHashMap
 
-class AppCatalog(private val context: Context) {
+class AppCatalog(context: Context) {
+    private val context = context.applicationContext
+    // 共有所有者では例外を空一覧に変えず、最後の成功と未取得を区別する。
+    internal fun readEntries(): List<AppListEntry> {
+        val pm = context.packageManager
+        return pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+            .mapNotNull { resolved ->
+                val activity = resolved.activityInfo ?: return@mapNotNull null
+                val pkg = activity.packageName ?: return@mapNotNull null
+                val cls = activity.name ?: return@mapNotNull null
+                AppListEntry(pkg, cls, resolved.loadLabel(pm)?.toString() ?: pkg)
+            }
+    }
+
+    internal fun readInfo(pkg: String, installed: Set<String>): AppInfo {
+        val pm = context.packageManager
+        val label = try {
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString().ifBlank { pkg }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (_: Exception) { pkg }
+        val image = try {
+            pm.getApplicationIcon(pkg).toBitmap(96, 96).asImageBitmap()
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (_: Exception) { null }
+        return AppInfo(pkg, label, image, pkg in installed)
+    }
+
     private val labelCache = ConcurrentHashMap<String, String>()
     private val iconCache = ConcurrentHashMap<String, ImageBitmap>()
 

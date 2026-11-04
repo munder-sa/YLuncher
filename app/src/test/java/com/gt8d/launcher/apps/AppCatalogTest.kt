@@ -80,4 +80,15 @@ class AppCatalogTest {
         assertEquals(Color.GREEN, color(catalog.icon("a")))
         assertEquals(Color.YELLOW, color(catalog.icon("b")))
     }
+
+    @Test fun sharedReadInfo_usesFresh96pxImageWithoutChangingCompatibilityCache() {
+        prepare()
+        val info = catalog.readInfo("a", setOf("a"))
+        assertEquals(96, info.icon!!.width)
+        assertEquals(96, info.icon.height)
+        assertEquals(Color.GREEN, color(info.icon))
+        org.junit.Assert.assertTrue(info.installed)
+        org.junit.Assert.assertFalse(catalog.readInfo("b", emptySet()).installed)
+        assertEquals(Color.RED, color(catalog.icon("a")))
+    }
 }

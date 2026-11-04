@@ -16,6 +16,7 @@ import com.gt8d.launcher.media.lyrics.LrclibClient
 import com.gt8d.launcher.media.lyrics.UrlConnectionTransport
 import com.gt8d.launcher.notice.NoticeOverlay
 import com.gt8d.launcher.apps.AppCatalog
+import com.gt8d.launcher.apps.AppCatalogState
 import com.gt8d.launcher.apps.FrequentApp
 import com.gt8d.launcher.apps.UsageHistory
 import com.gt8d.launcher.apps.rankFrequent
@@ -163,6 +164,15 @@ object AppGraph {
     val catalog: AppCatalog by lazy {
         AppCatalog(app)
     }
+
+    internal var appCatalogStateForTest: AppCatalogState? = null
+    private var sharedAppCatalogState: AppCatalogState? = null
+    val appCatalogState: AppCatalogState
+        @Synchronized get() = appCatalogStateForTest ?: sharedAppCatalogState
+            ?: AppCatalogState(app.applicationContext, AppCatalog(app)).also {
+                sharedAppCatalogState = it
+                it.start()
+            }
 
     val config: ConfigRepository by lazy {
         ConfigRepository(
@@ -335,6 +345,10 @@ object AppGraph {
 
     @Synchronized
     fun init(app: Application) {
+        if (::app.isInitialized && this.app !== app) {
+            sharedAppCatalogState?.close()
+            sharedAppCatalogState = null
+        }
         this.app = app
         refreshFrequentApps()
         EdgeStripService.listener = { action ->
