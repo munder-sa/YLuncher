@@ -82,8 +82,8 @@ object AppGraph {
     private val lyricsScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val appleMusic: AppleMusicSession by lazy {
         val transport = AppleLyricsUrlConnectionTransport()
-        val tokens = AppleWebTokenProvider(transport)
-        val client = AppleLyricsClient(transport, tokens)
+        val tokens = AppleWebTokenProvider(transport, diagnosticsEnabled = true)
+        val client = AppleLyricsClient(transport, tokens, diagnosticsEnabled = true)
         AppleMusicSession(client::connect, client::fetch, AndroidAppleCredentialStore(app), lyricsScope)
     }
     val appleMusicWebData: AppleMusicWebData by lazy { AppleMusicWebData(lyricsScope) }

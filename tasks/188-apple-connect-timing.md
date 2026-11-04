@@ -46,3 +46,14 @@ beta3初回接続とbeta4更新直後の保存値復元でTIMEOUTが発生し、
 
 - `.codex-bak/20261104-174719/`は既存ClientTestの空ログassertとの矛盾を報告し、変更/テスト/ビルドなしで終了0。司令塔も該当assertを確認した。
 - 期待値の変更は不要。診断を既定OFFの明示オプションとして追加し、AppGraphの実機用構成でONにする。許可にAppGraphの2生成箇所だけ追加し、既存17テストは無変更を維持。新規テストでON時の診断を確認する。根拠のない仕様緩和やタイムアウト延長は行わない。
+
+## 実装・司令塔レビュー結果
+
+- 再委譲 `.codex-bak/20261104-175111/` 終了0。許可7ファイルのみ。既存テスト/.codex.conf変更なし。全文/差分/実コマンド/結果XMLを照合。引用符のallow警告は正規化差だけ。
+- 指定テストコマンド1回、1分22秒で成功。Trace 12 / Client 9 / Provider 8の計29件、失敗/エラー/スキップ0。指定releaseコマンド1回49秒で成功。司令塔で再実行していない。
+- 決めたこと: 固定enumのSTART/ENDと各前後段階、System.nanoTime差分ms、redirect毎に同asset番号を記録。本文bytesは公開要求の既存計算を利用、accountはcodeだけ。code/asset範囲外は省略、bytesは0..16MiB。取消は元の例外を再送出、診断sink/時計の例外のみ吸収。合成値による非漏洩、待機/期限/取消/復帰境界も検証。
+- ログ文法: `op=<CONNECT|PUBLIC_REFRESH> stage=<固定enum> elapsedMs=<非負整数>[ code=<100..599>][ bytes=<0..16777216>][ asset=<1..8>][ reason=<固定enum>]`。tagはAppleConnect。fetchの通常呼出しは無出力。
+- 両metadata 45 / 2.3.0-beta5。apksigner verify終了0、既存同署名SHA256 `44d8c612bd3948e265840f28adff0f820d5893d0ba24d888b041ca16544f7f6d`。
+- app: 3,038,838 bytes / SHA256 `1564331fc037f5d687ce678f34ae296136e0438546e59a4d2cc5c7a8dc5b26a9`。
+- panelhost: 2,021,089 bytes / SHA256 `a99551a690dd1fd1843fd8bf17078e40cce87f2d499e09576eabd2f22a135fee`。
+- 実機更新前: ユーザーがSIM OFFへ戻したと回答。beta4をforce-stop→HOMEで再作成(PID24341)してもSAVED→TIMEOUT。SIMだけでは説明できない。次にbeta5で段階時間を調べる。

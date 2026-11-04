@@ -1,5 +1,6 @@
 package com.gt8d.launcher.media.lyrics
 
+import com.gt8d.launcher.media.lyrics.AppleConnectionTrace.Stage
 import java.math.BigInteger
 import java.net.URI
 import java.nio.ByteBuffer
@@ -42,6 +43,7 @@ class AppleWebTokenProvider(
     private val transport: AppleLyricsTransport,
     private val clock: () -> Long = System::currentTimeMillis,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val diagnosticsEnabled: Boolean = false,
 ) {
     private val mutex = Mutex()
     private var cached: AppleWebToken? = null
@@ -59,21 +61,31 @@ class AppleWebTokenProvider(
                 return@withLock AppleWebTokenResult.Unavailable(AppleWebTokenFailure.WAIT, remainingSeconds(it, now))
             }
             // Keep publication outside withContext: a cancelled return dispatch must not cache a result.
-            val result = withContext(io) {
-                withTimeoutOrNull(30_000L) { refresh() }
-                    ?: AppleWebTokenResult.Unavailable(AppleWebTokenFailure.TIMEOUT)
-            }
-            currentCoroutineContext().ensureActive()
-            when (result) {
-                is AppleWebTokenResult.Ready -> {
-                    cached = result.token
-                    retryAtMillis = null
+            val trace = if (diagnosticsEnabled) AppleConnectionTrace(AppleConnectionTrace.Operation.PUBLIC_REFRESH) else null
+            try {
+                val result = withContext(io) {
+                    withTimeoutOrNull(30_000L) { refresh(trace) }
+                        ?: AppleWebTokenResult.Unavailable(AppleWebTokenFailure.TIMEOUT)
                 }
-                is AppleWebTokenResult.Unavailable -> {
-                    retryAtMillis = retryDeadline(clock(), maxOf(60L, result.retryAfterSec ?: 0L))
+                currentCoroutineContext().ensureActive()
+                when (result) {
+                    is AppleWebTokenResult.Ready -> {
+                        cached = result.token
+                        retryAtMillis = null
+                    }
+                    is AppleWebTokenResult.Unavailable -> {
+                        retryAtMillis = retryDeadline(clock(), maxOf(60L, result.retryAfterSec ?: 0L))
+                    }
                 }
+                when (result) {
+                    is AppleWebTokenResult.Ready -> trace?.finish(AppleConnectionTrace.Reason.READY)
+                    is AppleWebTokenResult.Unavailable -> trace?.finish(result.reason)
+                }
+                result
+            } catch (e: CancellationException) {
+                trace?.finish(AppleConnectionTrace.Reason.CANCELLED)
+                throw e
             }
-            result
         }
     }
 
@@ -84,19 +96,28 @@ class AppleWebTokenProvider(
         }
     }
 
-    private suspend fun refresh(): AppleWebTokenResult = try {
+    private suspend fun refresh(trace: AppleConnectionTrace?): AppleWebTokenResult = try {
         val budget = DownloadBudget()
-        val page = readFollowingRedirects(URI("$WEB_ROOT/us/browse"), budget)
+        val page = readFollowingRedirects(URI("$WEB_ROOT/us/browse"), budget, trace)
         if (page.code != 200) throw RefreshFailure(AppleWebTokenFailure.HTTP)
+        trace?.mark(Stage.PAGE_TOKEN_PARSE_START)
         val pageToken = findToken(page.body)
+        trace?.mark(Stage.PAGE_TOKEN_PARSE_END)
         if (pageToken != null) {
             AppleWebTokenResult.Ready(pageToken)
         } else {
             var token: AppleWebToken? = null
-            for (url in findAssets(page.body)) {
+            trace?.mark(Stage.ASSET_LIST_PARSE_START)
+            val assets = findAssets(page.body)
+            trace?.mark(Stage.ASSET_LIST_PARSE_END)
+            for ((index, url) in assets.withIndex()) {
                 currentCoroutineContext().ensureActive()
-                val response = readFollowingRedirects(url, budget)
-                if (response.code == 200) token = findToken(response.body)
+                val response = readFollowingRedirects(url, budget, trace, index + 1)
+                if (response.code == 200) {
+                    trace?.mark(Stage.ASSET_TOKEN_PARSE_START, asset = index + 1)
+                    token = findToken(response.body)
+                    trace?.mark(Stage.ASSET_TOKEN_PARSE_END, asset = index + 1)
+                }
                 if (token != null) break
             }
             token?.let { AppleWebTokenResult.Ready(it) }
@@ -110,13 +131,19 @@ class AppleWebTokenProvider(
         AppleWebTokenResult.Unavailable(AppleWebTokenFailure.TOKEN_NOT_FOUND)
     }
 
-    private suspend fun readFollowingRedirects(initial: URI, budget: DownloadBudget): AppleLyricsHttpResponse {
+    private suspend fun readFollowingRedirects(
+        initial: URI,
+        budget: DownloadBudget,
+        trace: AppleConnectionTrace?,
+        asset: Int? = null,
+    ): AppleLyricsHttpResponse {
         var url = initial
         var redirects = 0
         while (true) {
             currentCoroutineContext().ensureActive()
             val limit = minOf(MAX_RESPONSE_BYTES, budget.remaining)
             if (limit <= 0) throw RefreshFailure(AppleWebTokenFailure.TOO_LARGE)
+            trace?.mark(if (asset == null) Stage.PAGE_REQUEST_START else Stage.ASSET_REQUEST_START, asset = asset)
             val response = try {
                 transport.get(url.toASCIIString(), mapOf("User-Agent" to APPLE_WEB_USER_AGENT), limit)
             } catch (e: CancellationException) {
@@ -126,6 +153,10 @@ class AppleWebTokenProvider(
             }
             currentCoroutineContext().ensureActive()
             val bytes = response.body.toByteArray(Charsets.UTF_8).size
+            trace?.mark(
+                if (asset == null) Stage.PAGE_REQUEST_END else Stage.ASSET_REQUEST_END,
+                httpCode = response.code, bodyBytes = bytes, asset = asset,
+            )
             if (response.tooLarge || bytes > limit) throw RefreshFailure(AppleWebTokenFailure.TOO_LARGE)
             budget.remaining -= bytes
             if (response.code == 429 || response.code == 503) {

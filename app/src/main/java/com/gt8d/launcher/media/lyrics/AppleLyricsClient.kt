@@ -1,6 +1,7 @@
 package com.gt8d.launcher.media.lyrics
 
 import android.util.Xml
+import com.gt8d.launcher.media.lyrics.AppleConnectionTrace.Stage
 import java.io.IOException
 import java.io.StringReader
 import java.math.BigInteger
@@ -48,27 +49,41 @@ class AppleLyricsClient(
     private val tokens: AppleWebTokenProvider,
     private val clock: () -> Long = System::currentTimeMillis,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val diagnosticsEnabled: Boolean = false,
 ) {
     // Serialize provider/API access so a queued caller observes cooldown before either request.
     // Time spent waiting for this mutex is included in each caller's overall timeout.
     private val requestMutex = Mutex()
     private var retryAtMillis: Long? = null
 
-    suspend fun connect(userToken: String): AppleConnectResult = bounded(
-        35_000L, { AppleConnectResult.Unavailable(it) },
-    ) {
-        val cleanToken = cleanToken(userToken)
-            ?: return@bounded AppleConnectResult.Unavailable(AppleLyricsReason.INVALID)
-        when (val result = authenticatedRequest("$API_ROOT/v1/me/storefront", cleanToken)) {
-            is ApiResult.Unavailable -> AppleConnectResult.Unavailable(result.reason, result.retryAfterSec)
-            is ApiResult.Response -> {
-                if (result.value.code != 200) return@bounded AppleConnectResult.Unavailable(AppleLyricsReason.HTTP)
-                val json = parseObject(result.value.body)
-                val data = json?.get("data") as? JsonArray
-                val id = (data?.singleOrNull() as? JsonObject)?.get("id").stringValue()
-                if (id != null && STOREFRONT.matches(id)) AppleConnectResult.Ready(id)
-                else AppleConnectResult.Unavailable(AppleLyricsReason.INVALID)
+    suspend fun connect(userToken: String): AppleConnectResult {
+        val trace = if (diagnosticsEnabled) AppleConnectionTrace(AppleConnectionTrace.Operation.CONNECT) else null
+        try {
+            val outcome = bounded(
+                35_000L, { AppleConnectResult.Unavailable(it) },
+            ) {
+                val cleanToken = cleanToken(userToken)
+                    ?: return@bounded AppleConnectResult.Unavailable(AppleLyricsReason.INVALID)
+                when (val result = authenticatedRequest("$API_ROOT/v1/me/storefront", cleanToken, trace)) {
+                    is ApiResult.Unavailable -> AppleConnectResult.Unavailable(result.reason, result.retryAfterSec)
+                    is ApiResult.Response -> {
+                        if (result.value.code != 200) return@bounded AppleConnectResult.Unavailable(AppleLyricsReason.HTTP)
+                        val json = parseObject(result.value.body)
+                        val data = json?.get("data") as? JsonArray
+                        val id = (data?.singleOrNull() as? JsonObject)?.get("id").stringValue()
+                        if (id != null && STOREFRONT.matches(id)) AppleConnectResult.Ready(id)
+                        else AppleConnectResult.Unavailable(AppleLyricsReason.INVALID)
+                    }
+                }
             }
+            when (outcome) {
+                is AppleConnectResult.Ready -> trace?.finish(AppleConnectionTrace.Reason.READY)
+                is AppleConnectResult.Unavailable -> trace?.finish(outcome.reason)
+            }
+            return outcome
+        } catch (e: CancellationException) {
+            trace?.finish(AppleConnectionTrace.Reason.CANCELLED)
+            throw e
         }
     }
 
@@ -92,60 +107,72 @@ class AppleLyricsClient(
         }
     }
 
-    private suspend fun authenticatedRequest(url: String, userToken: String): ApiResult = requestMutex.withLock {
-        currentCoroutineContext().ensureActive()
-        val now = clock()
-        retryAtMillis?.takeIf { it > now }?.let {
-            return@withLock ApiResult.Unavailable(AppleLyricsReason.WAIT, remainingSeconds(it, now))
-        }
-        repeat(2) { attempt ->
-            val tokenResult = tokens.get()
+    private suspend fun authenticatedRequest(
+        url: String,
+        userToken: String,
+        trace: AppleConnectionTrace? = null,
+    ): ApiResult {
+        trace?.mark(Stage.REQUEST_MUTEX_WAIT)
+        return requestMutex.withLock {
+            trace?.mark(Stage.REQUEST_MUTEX_ACQUIRED)
             currentCoroutineContext().ensureActive()
-            val token = when (tokenResult) {
-                is AppleWebTokenResult.Ready -> tokenResult.token
-                is AppleWebTokenResult.Unavailable -> return@withLock ApiResult.Unavailable(
-                    when (tokenResult.reason) {
-                        AppleWebTokenFailure.NETWORK -> AppleLyricsReason.NETWORK
-                        AppleWebTokenFailure.TIMEOUT -> AppleLyricsReason.TIMEOUT
-                        AppleWebTokenFailure.WAIT -> AppleLyricsReason.WAIT
-                        else -> AppleLyricsReason.TOKEN_UNAVAILABLE
-                    },
-                    if (tokenResult.reason == AppleWebTokenFailure.WAIT) tokenResult.retryAfterSec else null,
+            val now = clock()
+            retryAtMillis?.takeIf { it > now }?.let {
+                return@withLock ApiResult.Unavailable(AppleLyricsReason.WAIT, remainingSeconds(it, now))
+            }
+            repeat(2) { attempt ->
+                trace?.mark(Stage.PUBLIC_BEARER_START)
+                val tokenResult = tokens.get()
+                trace?.mark(Stage.PUBLIC_BEARER_END)
+                currentCoroutineContext().ensureActive()
+                val token = when (tokenResult) {
+                    is AppleWebTokenResult.Ready -> tokenResult.token
+                    is AppleWebTokenResult.Unavailable -> return@withLock ApiResult.Unavailable(
+                        when (tokenResult.reason) {
+                            AppleWebTokenFailure.NETWORK -> AppleLyricsReason.NETWORK
+                            AppleWebTokenFailure.TIMEOUT -> AppleLyricsReason.TIMEOUT
+                            AppleWebTokenFailure.WAIT -> AppleLyricsReason.WAIT
+                            else -> AppleLyricsReason.TOKEN_UNAVAILABLE
+                        },
+                        if (tokenResult.reason == AppleWebTokenFailure.WAIT) tokenResult.retryAfterSec else null,
+                    )
+                }
+                trace?.mark(Stage.ACCOUNT_REQUEST_START)
+                val response = transport.get(
+                    url,
+                    mapOf(
+                        "Authorization" to "Bearer ${token.value}",
+                        "media-user-token" to userToken,
+                        "Origin" to "https://music.apple.com",
+                        "Referer" to "https://music.apple.com/",
+                        "Accept" to "application/json",
+                        "User-Agent" to APPLE_WEB_USER_AGENT,
+                    ),
+                    MAX_RESPONSE_BYTES,
                 )
-            }
-            val response = transport.get(
-                url,
-                mapOf(
-                    "Authorization" to "Bearer ${token.value}",
-                    "media-user-token" to userToken,
-                    "Origin" to "https://music.apple.com",
-                    "Referer" to "https://music.apple.com/",
-                    "Accept" to "application/json",
-                    "User-Agent" to APPLE_WEB_USER_AGENT,
-                ),
-                MAX_RESPONSE_BYTES,
-            )
-            currentCoroutineContext().ensureActive()
-            val tooLarge = response.tooLarge || response.body.toByteArray(Charsets.UTF_8).size > MAX_RESPONSE_BYTES
-            currentCoroutineContext().ensureActive()
-            if (tooLarge) return@withLock ApiResult.Unavailable(AppleLyricsReason.INVALID)
-            when (response.code) {
-                401, 403 -> {
-                    if (attempt == 1) return@withLock ApiResult.Unavailable(AppleLyricsReason.AUTH_REQUIRED)
-                    tokens.invalidate(token)
-                    currentCoroutineContext().ensureActive()
+                trace?.mark(Stage.ACCOUNT_REQUEST_END, httpCode = response.code)
+                currentCoroutineContext().ensureActive()
+                val tooLarge = response.tooLarge || response.body.toByteArray(Charsets.UTF_8).size > MAX_RESPONSE_BYTES
+                currentCoroutineContext().ensureActive()
+                if (tooLarge) return@withLock ApiResult.Unavailable(AppleLyricsReason.INVALID)
+                when (response.code) {
+                    401, 403 -> {
+                        if (attempt == 1) return@withLock ApiResult.Unavailable(AppleLyricsReason.AUTH_REQUIRED)
+                        tokens.invalidate(token)
+                        currentCoroutineContext().ensureActive()
+                    }
+                    429, 503 -> {
+                        val receivedAt = clock()
+                        val deadline = retryDeadline(receivedAt, maxOf(60L, response.retryAfterSec ?: 0L))
+                        currentCoroutineContext().ensureActive()
+                        retryAtMillis = deadline
+                        return@withLock ApiResult.Unavailable(AppleLyricsReason.WAIT, remainingSeconds(deadline, receivedAt))
+                    }
+                    else -> return@withLock ApiResult.Response(response)
                 }
-                429, 503 -> {
-                    val receivedAt = clock()
-                    val deadline = retryDeadline(receivedAt, maxOf(60L, response.retryAfterSec ?: 0L))
-                    currentCoroutineContext().ensureActive()
-                    retryAtMillis = deadline
-                    return@withLock ApiResult.Unavailable(AppleLyricsReason.WAIT, remainingSeconds(deadline, receivedAt))
-                }
-                else -> return@withLock ApiResult.Response(response)
             }
+            ApiResult.Unavailable(AppleLyricsReason.AUTH_REQUIRED)
         }
-        ApiResult.Unavailable(AppleLyricsReason.AUTH_REQUIRED)
     }
 
     private suspend fun parseLyrics(body: String, durationSec: Long?): AppleLyricsResult {
