@@ -85,3 +85,4 @@
 - beta5初回35,007ms TIMEOUTと比べ改善したが単発の計測で、全回線条件の性能保証ではない。Your LifeはApple API335ms/UNSUPPORTED→LRCLIB。実Apple単語歌詞の2曲採用はまだ未完了。
 - 解除検証: 確認画面の初期ONを確認後、Webログイン削除だけOFFへ切替→接続解除。未接続/保存表示なし、force-stop/HOME後の新PID16172でも維持、AppleConnect開始ログなし。既存Webログイン画面の固定接続ボタンを押すとREADY1,941ms(公開refresh1,462ms/account2001,938ms)、Settingsでjp/SAVED・入力空を確認。Webログイン再入力なし。Cookie全文/ユーザーtokenを読み取っていない。認証済みWebデータ削除ONのケースは未確認。
 - 新プロセス直後にSettingsが黒画面になったが、HOME→設定一覧の開き直しで表示。AndroidRuntime:Eなし。beta5でもあった現象で原因未特定。
+- 全体再起動の確認は保留: 18:52頃に保存済み状態から `adb.exe -s 192.168.137.248:5555 reboot`、終了0。直後と18:57頃の `timeout 12s .../adb.exe connect 192.168.137.248:5555` は接続拒否10061、後続 `adb.exe devices -l` は端末なし。再起動完了・復元成功と扱わず、利用者へワイヤレスデバッグの再有効化を依頼した。再起動前のservice.adb.tcp.port=5555/persist.adb.tcp.port空と、既存導入文書の再起動ごとの有効化手順を確認済み。新たなアプリ変更/テスト再実行はない。
