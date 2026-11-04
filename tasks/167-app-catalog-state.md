@@ -19,3 +19,8 @@
 
 ## 追記2(codex の質問への回答)
 - `app/src/main/java/com/gt8d/launcher/settings/ListsScreen.kt`(141 行付近)も、共有の所有者(AppCatalogState)と分けた revision へ**移す**。互換経路は残さない。関連テストは無いので、必要なら `app/src/test/java/com/gt8d/launcher/settings/ListsScreenTest.kt` を新しく作ってよい(検証の中身は保つ。報告する)。テストのコマンドに settings を足した。
+
+## 追記3(codex の質問への回答。追記2 を取り消す)
+- **設定画面(`app/src/main/java/com/gt8d/launcher/settings/` の中。`ListsScreen.kt`・`SettingsScreen.kt` など)は今回の対象外**。移さず、今の取り方のまま残す。そのため `AppCatalog` の今の公開の呼び方(同期の取得・キャッシュ)は互換のために残す(ホーム・パネルの表示経路だけを新しい共有の所有者へ移す)。設定画面は開く回数が少なく、今回の目的(ホーム・パネルの引っかかりを減らす)に効かないため。
+- `settings/` のファイルとテストは変えない。設定画面のテストが今どおり通ることを、下のコマンド(settings を含む)で確かめる。
+- これ以外にも許可外のファイルに移行の対象が見つかったら、**表示経路(ホーム・パネル)に関わらないものは対象外**として先へ進み、報告に書く(止まらない)。表示経路に関わるものだけ止まって報告する。
