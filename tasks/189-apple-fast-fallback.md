@@ -4,6 +4,10 @@
 
 ## 承認と根拠
 
+**再開時の確定変更: 依存3本を5.3.2へ変更する。下の当初5.5.1記述よりこの追記を優先する。** 5.5.1 Android AARはminCompileSdk37が必要で、初回検証はcheckDebugAarMetadataで失敗。司令塔が公式AARを読み、5.4.0は36、5.3.2はminCompileSdk1/AGP1.0.0と確認した。5.3系の最新は5.3.2。OkHttp/MockWebServer/TLSを全て5.3.2、Okio推移依存は3.16.4、stdlib2.2.21。既存compiler2.1.0での互換性は指定テストのコンパイルで確かめ、不整合をforce/skipで隠さない。SDK/AGP/compilerの変更やAndroidにJVM artifactを強制することは不可。
+
+公式の5.3.2ソース資料は `/tmp/yluncher-task189-reference-5.3.2`。司令塔はFastFallbackExchangeFinderの250ms競争・retryOnConnectionFailureから独立した経路試行、RetryAndFollowUpInterceptorの503 Retry-After0再送とProtocolExceptionの非再送をこの版でも照合済み。既存実装/追加テストを継続し、テストの内容や期待値は弱めない。noticeの版/推移依存/実Android artifact表記も対応させる。下の5.5.1資料は経過参照にとどめる。
+
 ユーザーは「通信側の対策も今回進める」を承認済み。Apple歌詞だけをOkHttp 5へ移行し、IPv6失敗待ちを減らす。実機SIM OFFでもbeta5初回は公開ページの最初の301まで20,225ms、公開refresh全体22,721ms、account APIで全体35,007ms TIMEOUT。公開ページ解析20ms/asset54msで解析負荷ではない。端末curl -4は公開301/0.728秒、API root404/0.240秒、-6はいずれも接続未成立で6秒TIMEOUT。設定再表示の保存値再確認はaccount200/10,266ms・jp/SAVEDへ成功。秘密値は取得/記録していない。
 
 ## 更新可能
@@ -60,3 +64,4 @@
 - 初回 `.codex-bak/20261104-181602/` はwrapperの古い一般的な外部接続禁止と新依存取得の矛盾を報告。無変更/未実行で終了0。
 - ユーザーの今回の「通信側の対策も今回進める」はOkHttp5追加を含む明示承認。既存codex-runのCODEX_NOTEで、allowのGradle2コマンドがこの固定依存と推移依存を公式repositoryから解決することだけを、一般禁止の例外として明記する。全体ネットワーク解禁/別のインストールへ広げない。wrapper/.codex.conf/forbiddenルール自体は変更しない。
 - 司令塔が公式Maven sources.jarを読み取り資料として `/tmp/yluncher-task189-reference/{okhttp,mockwebserver,tls,okio}` へ展開。実装担当はこの参照資料を読み取りだけで使える。取得物のスクリプト実行は不可。
+- 2回目 `.codex-bak/20261104-182029/` は許可8ファイル実装後、指定テストコマンド1回18秒でcheckDebugAarMetadata失敗。テスト実行0件/release未実行、旧6件/.codex.conf無変更。最新Android AARのSDK37要件が原因。司令塔は依存解決情報・ソース・12件の新テストを読んで、上記互換版へ指示を限定更新した。CODEX_RESUME=1で同じ8ファイルをバックアップ付き更新として再開する。
