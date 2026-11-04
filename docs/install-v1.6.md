@@ -165,6 +165,16 @@ adb shell settings put secure enabled_accessibility_services "<今の値>:com.gt
 ### 導入
 §6 と同じ手順で、release 版を本体 → 中継の順に `install -r`。入れた後に通知へのアクセスを許可し直し、ユーザー補助「YLuncher(PiP の判定)」が外れていたら有効にし直す(§10)。版は 21 / 1.6.5。
 
+## 15. v2.1.0(2026-11-04)
+
+### 変わったこと
+- 歌詞の取得元に [AMLL TTML DB](https://github.com/amll-dev/amll-ttml-db) を足した(単語ごとの時刻つき)。Apple Music で再生中の曲は、再生情報の `MEDIA_ID`(Apple Music のカタログの曲 ID)で `am-lyrics/<id>.ttml` を直接取る。他のアプリは、1日1回取得する索引(`metadata/raw-lyrics-index.jsonl`、約 1.7MB)から曲名・アーティストで一意に決まるときだけ取る。取得先は GitHub の生ファイル → ミラー(stevexmh・gbclstudio)。単語の時刻がある曲は、歌に合わせて左から塗る。
+- 優先順位は AMLL(単語の時刻あり)→ LRCLIB の同期歌詞 → LRCLIB の平文。AMLL に無い曲(404)は、曲を再生するたびに AMLL だけを確かめ直す。
+- 歌詞表示がオフの間は、AMLL・LRCLIB とも通信しない。設計書 `docs/superpowers/specs/2026-11-04-ttml-lyrics-design.md`。
+
+### 導入
+§6 と同じ手順で、release 版を本体 → 中継の順に `install -r`。入れた後に通知へのアクセスを許可し直し、ユーザー補助「YLuncher(PiP の判定)」が外れていたら有効にし直す(§10)。版は 37 / 2.1.0。
+
 ## 14. v2.0.0(2026-11-04)
 
 ### 変わったこと
