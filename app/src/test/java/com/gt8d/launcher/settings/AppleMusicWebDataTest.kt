@@ -58,6 +58,56 @@ class AppleMusicWebDataTest {
         assertNotNull(data.register {})
     }
 
+    @Test fun newLoginClearsPastDeletionReceiptWithoutStartingBackend() = runTest {
+        val backend = Backend()
+        val data = AppleMusicWebData(backgroundScope, backend)
+        val firstDeletion = data.clear()
+        runCurrent()
+        assertFalse(firstDeletion.isCompleted)
+        assertEquals(AppleMusicWebDataState.CLEARING, data.state.value)
+        assertEquals(1, backend.checks)
+        assertEquals(1, backend.deletes)
+        backend.complete()
+        runCurrent()
+        assertTrue(firstDeletion.isCompleted)
+        assertEquals(AppleMusicWebDataState.CLEARED, data.state.value)
+
+        val firstRegistration = data.register { fail("Unregistered screen must not be closed") }
+        assertNotNull(firstRegistration)
+        assertEquals(AppleMusicWebDataState.IDLE, data.state.value)
+        runCurrent()
+        assertEquals(AppleMusicWebDataState.IDLE, data.state.value)
+        assertEquals(1, backend.checks)
+        assertEquals(1, backend.deletes)
+        firstRegistration!!.close()
+
+        val secondDeletion = data.clear()
+        runCurrent()
+        assertFalse(secondDeletion.isCompleted)
+        assertEquals(AppleMusicWebDataState.CLEARING, data.state.value)
+        assertEquals(2, backend.checks)
+        assertEquals(2, backend.deletes)
+        assertNull(data.register { fail("New screen must not open during deletion") })
+        runCurrent()
+        assertFalse(secondDeletion.isCompleted)
+        assertEquals(AppleMusicWebDataState.CLEARING, data.state.value)
+        assertEquals(2, backend.checks)
+        assertEquals(2, backend.deletes)
+        backend.complete()
+        runCurrent()
+        assertTrue(secondDeletion.isCompleted)
+        assertEquals(AppleMusicWebDataState.CLEARED, data.state.value)
+
+        val secondRegistration = data.register { fail("Unregistered screen must not be closed") }
+        assertNotNull(secondRegistration)
+        assertEquals(AppleMusicWebDataState.IDLE, data.state.value)
+        runCurrent()
+        assertEquals(AppleMusicWebDataState.IDLE, data.state.value)
+        assertEquals(2, backend.checks)
+        assertEquals(2, backend.deletes)
+        secondRegistration!!.close()
+    }
+
     @Test fun repeatedRequestsShareOneDeletionIncludingLateCallback() = runTest {
         val backend = Backend()
         val data = AppleMusicWebData(backgroundScope, backend)

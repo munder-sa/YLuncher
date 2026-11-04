@@ -47,7 +47,12 @@ class AppleMusicWebData(
 
     @MainThread fun register(closeScreen: () -> Unit): Registration? {
         if (!canStart) return null
-        return Registration(closeScreen).also { screens.add(it) }
+        return Registration(closeScreen).also {
+            screens.add(it)
+            if (mutableState.value == AppleMusicWebDataState.CLEARED) {
+                mutableState.value = AppleMusicWebDataState.IDLE
+            }
+        }
     }
 
     @MainThread fun clear(): Job {
