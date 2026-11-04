@@ -2,6 +2,13 @@
 
 最終更新: 2026-11-04 (JST)
 
+## 追加共有: IPv6ルールと自己ADBアプリ (2026-11-04 22:32 JST)
+
+- 利用者から、IPv6通信の問題は端末の `ip -6 rule add priority 32000 unreachable` に相当するルールが欠けていたことが原因、との報告を受領。続けて、このルールを自己ADBで追加する別アプリを作成中と共有された。端末側の対策はそのアプリの担当として記録する。YLuncher側の既存Fast Fallbackは接続待ちを減らす対策として維持し、今回アプリ/テスト/端末設定の変更は行わない。
+- 技術上の区別: `unreachable` は、そこまで経路探索が進んだIPv6要求に到達不能を返すルール。AOSPにもカーネル既定のmainテーブルへの意図しない流入を止める終端ルールがある。この追加を「外部へのIPv6経路を新設する」とは扱わず、IPv4へ切り替える実装では失敗待ちを短縮できるという整理にする。根拠: [AOSP RouteController](https://android.googlesource.com/platform/system/netd/+/refs/heads/main/server/RouteController.cpp#824)、[ip-rule仕様](https://man7.org/linux/man-pages/man8/ip-rule.8.html)。
+- 確認区分: 端末の原因は利用者の検証報告。司令塔の現状読取 `adb.exe -s 192.168.137.248:5555 shell ip -6 rule show` はdevice not found/終了1で、現在のルール一覧、追加前後の経路差、欠落する契機は未確認。過去のIPv4成功/IPv6接続TIMEOUTという実測はそのまま残す。自己ADBアプリのソース確認・動作確認は未実施。
+- Git: 再開時main=cbe45e5、origin/mainと同期済み。正式版タグはf0e5c9d。今回の追記はローカル文書更新として管理し、pushは未実施。既存未追跡3ファイルは対象外。決めたこと: 利用者報告と司令塔の実測を分け、端末対策とアプリ側対策の役割を記録する。文書のみのためビルド/テストは再実行しない。
+
 ## 再開時の要点 (2026-11-04 21:01 JST)
 
 - **正式版v2.3.0のpush完了**: この会話のCodex暫定司令塔が担当。ユーザーの正式版/push指示と実機の表示・同期「問題なさそう」を受領し、Task190/191を完了。正式版コミットはf0e5c9dedb76eccb01bd01f2e86f2caffd07fa33。mainへfast-forwardし、`git push --atomic origin main refs/tags/v2.3.0-release` が成功。直後の `git ls-remote` で両refがこのSHAと一致した。現在ブランチはmain、実装担当/Gradle実行中なし。この完了記録はmainの後続文書コミットへ含める。リリースタグはf0e5c9dのまま維持する。
