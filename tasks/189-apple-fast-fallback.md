@@ -86,3 +86,11 @@
 - 解除検証: 確認画面の初期ONを確認後、Webログイン削除だけOFFへ切替→接続解除。未接続/保存表示なし、force-stop/HOME後の新PID16172でも維持、AppleConnect開始ログなし。既存Webログイン画面の固定接続ボタンを押すとREADY1,941ms(公開refresh1,462ms/account2001,938ms)、Settingsでjp/SAVED・入力空を確認。Webログイン再入力なし。Cookie全文/ユーザーtokenを読み取っていない。認証済みWebデータ削除ONのケースは未確認。
 - 新プロセス直後にSettingsが黒画面になったが、HOME→設定一覧の開き直しで表示。AndroidRuntime:Eなし。beta5でもあった現象で原因未特定。
 - 全体再起動の確認は保留: 18:52頃に保存済み状態から `adb.exe -s 192.168.137.248:5555 reboot`、終了0。直後と18:57頃の `timeout 12s .../adb.exe connect 192.168.137.248:5555` は接続拒否10061、後続 `adb.exe devices -l` は端末なし。再起動完了・復元成功と扱わず、利用者へワイヤレスデバッグの再有効化を依頼した。再起動前のservice.adb.tcp.port=5555/persist.adb.tcp.port空と、既存導入文書の再起動ごとの有効化手順を確認済み。新たなアプリ変更/テスト再実行はない。
+
+## 端末再起動後の復元確認
+
+- 利用者の「ok つないだよ」後、`adb.exe devices -l` で従来の接続先がdevice。`shell getprop sys.boot_completed` は1、`shell cat /proc/uptime` は148.44秒、`shell pidof com.gt8d.launcher` は4412。再起動前の8,434秒以上/PID16172から変わり、端末再起動を確認した。
+- HOME→アプリ一覧長押し→設定一覧の描画確認→Apple歌詞の通常操作だけで保存値を自動復元。再ログイン/トークン入力/手動再確認なし。`logcat -d --pid=4412 -t 300 -v brief GT8D:D '*:S'` の固定AppleConnect行で公開refresh READY2,139ms、account200まで2,633ms、CONNECT READY2,635ms。ネイティブ画面に接続済みjp/この端末に保存済み・入力空を確認。設定黒画面は今回の導線で再現しなかったが、前回の原因は未特定のまま。
+- `shell dumpsys meminfo 4412` の限定読取: WebViews0、Activities2、PSS105,506KiB/RSS242,692KiB。復元のためにWeb画面を開いていない。単一時点の値で性能保証とは扱わない。実トークン/Cookie/認証画面は読み取っていない。
+- 決めたこと: 認証済みWebデータ削除ONと実歌詞採用の未検証を残し、今回の端末再起動後の保持成功とは分けて記録する。アプリ/テスト変更なし、単体テスト・ビルドは再実行0件。
+- その後のApple Music本体はホーム/ライブラリが読み込み表示、Lemonのライブラリ検索は結果なし。状態読取はmobile_data=1/airplane_mode_on=0、既定Wi-Fi/VALIDATEDと携帯網IMS接続。これだけでApple本体の使用回線や原因を断定せず、利用者へ再起動後のSIM設定を確認中。回答まで実機画面操作を止めた。YLuncherの接続復元は既に成功しており、この再生側の問題とは分けて記録する。
