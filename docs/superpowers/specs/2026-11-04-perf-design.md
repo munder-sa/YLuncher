@@ -123,3 +123,4 @@ MediaWatcher のセッションごとの更新、SetRunner の履歴照会の非
 - **ベースラインプロファイルを入れる**(新しいライブラリ `androidx.profileinstaller`、baselineprofile のプラグイン、macrobenchmark のモジュールの追加を承認。「新しいライブラリを入れない」の決まりの例外)。生成は司令塔が実機(adb)で行う。
 - 目標は「どの計測値も v2.1.0 より悪くならない」こと。改善の量は記録し、体感で判断する。
 - (2026-11-04 司令塔)「シークは即時配置」は、v1.7.1 以降の決まり「ちょうど1行進んだら送り、それ以外(2行以上の飛び・戻り・曲替え・最初の表示)はすぐ配置」の意味とする。シークを見分ける仕組みは足さない(隣の行へのシークは送りになる)。
+- (2026-11-04 司令塔)ベースラインプロファイルは、WSL から実機に adb が届かないため、macrobenchmark・baselineprofile のプラグインによる実機生成はやめ、`androidx.profileinstaller`(ライブラリ同梱のプロファイルを有効にする)+手書きの `app/src/main/baseline-prof.txt` にする。実機では `cmd package compile -m speed-profile -f` で効果を測る。Task 169。
