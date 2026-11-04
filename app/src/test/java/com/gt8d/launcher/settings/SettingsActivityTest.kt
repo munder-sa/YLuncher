@@ -77,8 +77,10 @@ class SettingsActivityTest {
             .create().start().resume().visible()
         rule.onNodeWithText("Apple Music の歌詞").assertIsDisplayed()
         rule.onNodeWithTag("apple_music_token").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("アプリの終了・再起動後は再入力が必要です。")
+        rule.onNodeWithText("接続情報をこの端末に保存し、再起動後に復元します。")
             .performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("アプリの終了・再起動後は再入力が必要です。")
+            .assertDoesNotExist()
         rule.onNodeWithTag("settings_item_sets").assertDoesNotExist()
     }
     @Test fun safetyCleared_startsHome_andFinishes() {

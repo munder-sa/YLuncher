@@ -2,9 +2,17 @@
 
 最終更新: 2026-11-04 (JST)
 
-## 再開時の要点 (2026-11-04 20時台)
+## 再開時の要点 (2026-11-04 20:58 JST)
 
-- **正式版の現在地**: Task190委譲は2版ファイルだけ更新、両2.3.0 / 47のrelease build成功(1分2秒)、旧同署名/非debuggable確認、両install -r成功。権限/HOME/通知listener5件/carsyso補助を維持、新PID5038。全テストの初回codex-verifyは実行中だが、SettingsActivityTestの旧再入力文言1件が失敗と判明。Task191を作成し、保持設計で承認済みの新文言へ移行・旧文言非表示を追加する。初回完了/全失敗一覧とXML保存を確認してから委譲し、該当Debugクラスと未実行だったRelease/panelhost/debug buildだけを補完する。pushは検証完了まで未実施。
+- **正式版の検証完了、これからpush**: この会話のCodex暫定司令塔が担当。ユーザーの正式版/push指示を受領済み。実機の表示・同期も「問題なさそう」と回答を受領した。Task190/191の実装担当は終了、Gradle実行中なし。作業ブランチfeat-apple-lyricsのHEADは2ead9e0で、版/テスト/リリース文書の9ファイルがコミット待ち。次はこの差分のコミット→main fast-forward→新規v2.3.0-releaseタグ→両refのatomic push→リモート照合。
+- **最終検証**: 初回codex-verifyのDebug2,008件中、旧「再入力」文言を期待した1件のみ失敗。Task191で承認済み保持仕様に合わせ、保存/復元文言の可視性と旧文言の非存在を検証した。対象Debug7件が58秒で成功、初回の他2,001件と合わせ全Debug範囲を確認。残りのapp Release2,008件/panelhost Debug5件・Release5件/両Debugビルドは10分55秒で成功。修正後の各範囲はfailure/error/skip0、全Debugやrelease APKを再実行していない。合計4,026件はvariant別の件数であり、重複再実行分を加算していない。詳細コマンド/照合はTask190/191。
+- **実機は本体/中継とも2.3.0 / 47**: 同署名のrelease APKをinstall -r済み。HOME/権限/通知listener/補助設定を維持。新PID5038で接続復元READY6,620ms、jp/SAVED・再入力なし。正式版のLemonはApple採用40行/277単語・297ms、ホーム表示を確認。最後はLemon PAUSED/74,307ms。bg-dexoptコマンドはSuccess(性能値の保証ではない)。確認用の一時画像は削除済み。
+- **配布物**: Git管理外build/releases/v2.3.0にYLuncher-2.3.0.apk、YLuncher-panel-2.3.0.apk、SHA256SUMS.txt。両署名/47/2.3.0/非debuggableとチェックサムを確認済み。GitHub Release作成・APKアップロードは未実施。今回のpush対象はmainとv2.3.0-releaseタグ。
+- **残る項目**: 起動直後の設定黒画面はbeta5/6で発生し、HOMEから設定一覧を開き直すと復帰。原因未特定、今回正式版の通常導線では再現なし。認証済みWebデータ削除ONの実機確認、通信断/他アプリ切替等の全場面は未実施。未追跡.mcp.json/Task170 md・allowは既存のまま対象外。以下は経過記録で、過去の「感想待ち/操作停止」は解除済み。
+
+## 20時台の正式版準備の経過
+
+- **正式版の現在地**: Task190委譲は2版ファイルだけ更新、両2.3.0 / 47のrelease build成功(1分2秒)、旧同署名/非debuggable確認、両install -r成功。権限/HOME/通知listener5件/carsyso補助を維持、新PID5038。再入力なしの接続復元READY6,620msとjp/SAVEDを画面確認。初回codex-verifyは9分16秒/終了1、Debug2,008件中旧再入力文言の1件だけ失敗/error・skip0。XML130スイートを/tmp/yluncher-v2.3.0-initial-testsへ保存済み。Task191で承認済み新文言と旧文言非表示へ移行し、該当Debug7件と未実行のRelease/panelhost/debug buildを補完する。次は同Taskの委譲。pushは検証完了まで未実施。
 
 - **正式版の作業を開始**: ユーザーが「オーケー、正式版としてpushまでお願い」と指示。感想回答待ち/実機操作停止は解除し、v2.3.0 / 47へ昇格する。Task 190は版2ファイルとrelease buildのみ委譲し、終了後に司令塔がcodex-verifyで全テスト/debug buildを1回。README/導入文書、署名/実機上書き、main fast-forwardとv2.3.0-release新規タグのpushを行う。GitHub ls-remoteではmain/旧tag=3a15ac0・新tagなし、ローカルmainは980964bで現HEADの祖先。GitHubコネクタは404、既存SSH Gitは利用可能。
 - この時点のHEADはd151dd9、実機は両beta6 / 46。以下の「公開未実施」「感想待ち」は経過。認証済みWebデータ削除ONや設定黒画面等の未完了項目は、正式版の記録にも明示して残す。
