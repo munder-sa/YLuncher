@@ -49,3 +49,11 @@ WebKit依存はTask 185で解決済み。指定Gradleに必要な承認済み依
 | panelhost/build/outputs/apk/release/panelhost-release.apk | 2021093 | 84f8abd8a6efaac433e87c63bc2bb335974bda8aa4b447058a03483d84f9496a |
 
 - 決めたこと: キャンセル前後の状態全体・保存オブジェクト・呼出回数・入力を照合。再接続は呼出計2回かつCONNECTED/SAVEDまで待ち、SECOND_TOKENとMANUALの保存・入力破棄・接続ボタン無効化を検証。ログは合成値を入力する前に初期化し、入力/確認/キャンセル/保存の各段階で非出力を確認。実機導入・保持はこの時点では未確認。
+
+## beta3実機導入・ログイン依頼 (2026-11-04 17:20〜17:27 JST)
+
+- 実装コミット `dd2ddaa`。Windows ADBの既存絶対パス、192.168.137.248:5555へ本体→中継のinstall -r、両方Success。版43 / beta3、署名表示2728742d、HOME、通知/Bluetooth、通知リスナー5件、ユーザー補助carsysoのみは直前状態と一致。
+- am start -W Homeは成功したが次の画像はApple Music前面だった。通常HOMEキーで移動し、遷移直後の黒画面後にHome描画/Your Lifeのメタデータを確認。前面Home/PID15545、指定AndroidRuntime:E/YLuncher:Eの直近150ログにエラー出力なし。ホーム→アプリ一覧長押し→設定→Apple Musicの歌詞という通常導線を確認。
+- 新設定の未接続/空入力、ログイン主ボタン、解除確認の初期ONと文字表示を実機で確認。初回ログイン前の空のYLuncher領域で解除を確定し、「Appleログイン情報を削除しました」を確認。WebView156でDELETE_BROWSING_DATA機能検査が通り完了callbackを受信したことをコードとの照合で確認。実アカウント入りの削除検証と混同しない。既存Music Token/Apple本体のデータは対象外。
+- ログインボタンから非exported AppleMusicWebLoginActivityが前面になったことをdumpsysのActivity名だけで確認。利用者へAppleログインと「このアカウントで接続」を依頼した。**回答までは画面操作・スクリーンショット・UIダンプを止める**。認証情報/トークン/URL本文は取得していない。
+- 回答待ちの間、古いCLEARED表示が次のregister後も残る点をコードから特定。Task 187で新規ログイン開始時に完了表示だけIDLEへ戻し、beta4を準備する。beta4を導入するのはログイン操作の回答後。認証/暗号化保存/プロセス再作成/上書き/再起動/Apple歌詞採用は引き続き未確認。

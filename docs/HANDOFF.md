@@ -4,6 +4,9 @@
 
 ## 再開時の要点 (2026-11-04 17時台・トークン保持の実装)
 
+- **実機は本体/中継beta3 / 43へ更新済み、Appleログインの利用者回答待ち**。Task 186実装は `dd2ddaa`。両install -r成功、版/署名/HOME/権限は一致。Home→設定→Apple歌詞の通常導線を確認。空の接続状態で解除の初期ONとWebView削除完了callbackを実機確認。実アカウント入りの削除や保持は未確認。
+- **現在は実機の画面操作/スクリーンショット/UIダンプを止めている**。AppleMusicWebLoginActivityの前面だけ確認し、利用者にAppleログイン→「このアカウントで接続」→結果表示を依頼。パスワード/トークンは共有不要。回答を受けてから実機操作を再開する。
+- 待機中の追加修正は[Task 187](../tasks/187-apple-clear-receipt.md)。CLEAREDが新規register後も残り、再ログイン後に古い削除完了表示が出るため、受理時にCLEAREDだけIDLEへ戻す。FAILED/CLEARINGや処理本体は変えない。対象WebDataテスト1件追加・同クラスだけ確認し、両beta4 / 44を準備する。**beta4導入は利用者のログイン回答後**に行い、保存済みなら上書き復元の実機確認を兼ねる。
 - **Task 186の追加検証とbeta3 APK準備まで完了**。Task 185の統合は `d52cd05`。`.codex-bak/20261104-171515/`終了0、許可3ファイルだけ変更。変更したUIクラス17件が1回成功・失敗/エラー/スキップ0、両release buildも1回成功/R8とlintVitalを含む。全差分/実コマンド/XMLを照合し再実行なし。次は署名照合済みのbeta3 / 43を実機へ導入する。テスト/版の変更と記録は直後のローカルコミットに含める。
 - APKは本体3,022,454 bytes、中継2,021,093 bytes。旧版と同署名。SHA-256とrelease内backup XML/非exported Activity/assetsの確認はTask 186末尾。実機の最後の読み取りはbeta2 / 42、前面Brave、Apple MusicはYour Life / DYGL / Thirstを一時停止、YLuncher PID4467。認証画面・私有データは取得していない。
 - 担当はこの会話のCodex暫定司令塔、ブランチfeat-apple-lyrics。ユーザーの設計了承「ok」を受け実装を進めている。Task 182=`d2473e5`、183=`3284de5`、184の取り込み=`c7f7be9`。Task 184の元worktreeは `/tmp/yluncher-apple-token-web` / feat-apple-token-web / `29836f4`、作業完了・清潔。
