@@ -1,0 +1,3 @@
+create app/src/main/java/com/gt8d/launcher/ui/home/LyricWindow.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/LyricWindowTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.LyricWindowTest'

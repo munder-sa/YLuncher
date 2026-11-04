@@ -1,0 +1,6 @@
+write app/build.gradle.kts
+create app/proguard-rules.pro
+write app/src/test/java/com/gt8d/launcher/config/ConfigCodecTest.kt
+write app/src/test/java/com/gt8d/launcher/config/ConfigRepositoryTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.config.*'
+command /home/munde/tools/gradle-run.sh :app:assembleDebug :app:assembleRelease
