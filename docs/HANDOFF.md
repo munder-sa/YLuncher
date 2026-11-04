@@ -2,12 +2,13 @@
 
 最終更新: 2026-11-04 (JST)
 
-## 再開時の要点 (2026-11-04 20:58 JST)
+## 再開時の要点 (2026-11-04 21:01 JST)
 
-- **正式版の検証完了、これからpush**: この会話のCodex暫定司令塔が担当。ユーザーの正式版/push指示を受領済み。実機の表示・同期も「問題なさそう」と回答を受領した。Task190/191の実装担当は終了、Gradle実行中なし。作業ブランチfeat-apple-lyricsのHEADは2ead9e0で、版/テスト/リリース文書の9ファイルがコミット待ち。次はこの差分のコミット→main fast-forward→新規v2.3.0-releaseタグ→両refのatomic push→リモート照合。
+- **正式版v2.3.0のpush完了**: この会話のCodex暫定司令塔が担当。ユーザーの正式版/push指示と実機の表示・同期「問題なさそう」を受領し、Task190/191を完了。正式版コミットはf0e5c9dedb76eccb01bd01f2e86f2caffd07fa33。mainへfast-forwardし、`git push --atomic origin main refs/tags/v2.3.0-release` が成功。直後の `git ls-remote` で両refがこのSHAと一致した。現在ブランチはmain、実装担当/Gradle実行中なし。この完了記録はmainの後続文書コミットへ含める。リリースタグはf0e5c9dのまま維持する。
 - **最終検証**: 初回codex-verifyのDebug2,008件中、旧「再入力」文言を期待した1件のみ失敗。Task191で承認済み保持仕様に合わせ、保存/復元文言の可視性と旧文言の非存在を検証した。対象Debug7件が58秒で成功、初回の他2,001件と合わせ全Debug範囲を確認。残りのapp Release2,008件/panelhost Debug5件・Release5件/両Debugビルドは10分55秒で成功。修正後の各範囲はfailure/error/skip0、全Debugやrelease APKを再実行していない。合計4,026件はvariant別の件数であり、重複再実行分を加算していない。詳細コマンド/照合はTask190/191。
 - **実機は本体/中継とも2.3.0 / 47**: 同署名のrelease APKをinstall -r済み。HOME/権限/通知listener/補助設定を維持。新PID5038で接続復元READY6,620ms、jp/SAVED・再入力なし。正式版のLemonはApple採用40行/277単語・297ms、ホーム表示を確認。最後はLemon PAUSED/74,307ms。bg-dexoptコマンドはSuccess(性能値の保証ではない)。確認用の一時画像は削除済み。
 - **配布物**: Git管理外build/releases/v2.3.0にYLuncher-2.3.0.apk、YLuncher-panel-2.3.0.apk、SHA256SUMS.txt。両署名/47/2.3.0/非debuggableとチェックサムを確認済み。GitHub Release作成・APKアップロードは未実施。今回のpush対象はmainとv2.3.0-releaseタグ。
+- **次の一手**: 今回依頼された正式版のmain/tag反映と実機更新は完了。下記の残課題は未完了事項として維持し、次に対応する対象を利用者と決める。Claudeへの復帰指示はまだないため、担当は暫定Codexのまま。
 - **残る項目**: 起動直後の設定黒画面はbeta5/6で発生し、HOMEから設定一覧を開き直すと復帰。原因未特定、今回正式版の通常導線では再現なし。認証済みWebデータ削除ONの実機確認、通信断/他アプリ切替等の全場面は未実施。未追跡.mcp.json/Task170 md・allowは既存のまま対象外。以下は経過記録で、過去の「感想待ち/操作停止」は解除済み。
 
 ## 20時台の正式版準備の経過
