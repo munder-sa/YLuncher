@@ -11,6 +11,24 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class ConfigRepositoryTest {
+    @Test fun fixedCurrentJson_loadSaveReload_preservesWholeWireFormat() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "config.json").apply { writeText(currentConfigFixture) }
+        val repo = ConfigRepository(file) { setOf("a", "b") }
+        val original = repo.config.first()
+        assertEquals(ConfigCodec.decode(currentConfigFixture), original)
+        assertEquals(currentConfigFixture, file.readText())
+        repo.update { it.copy(lyricsEnabled = false) }
+        val saved = file.readText()
+        val expectedJson = currentConfigFixture.replace("\"lyricsEnabled\":true", "\"lyricsEnabled\":false")
+        assertEquals(kotlinx.serialization.json.Json.parseToJsonElement(expectedJson),
+            kotlinx.serialization.json.Json.parseToJsonElement(saved))
+        assertEquals(original.copy(lyricsEnabled = false),
+            ConfigRepository(file) { setOf("a", "b") }.config.first())
+        assertFalse(File(dir, "config.bak.json").exists())
+        assertFalse(File(dir, "config-v2-backup.json").exists())
+    }
+
     @Test fun resetTurnsLyricsOff() = runTest {
         val repo = ConfigRepository(File(tempFolder.newFolder(), "config.json")) { installed }
         repo.update { it.copy(lyricsEnabled = true) }

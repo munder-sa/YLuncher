@@ -6,6 +6,61 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ConfigCodecTest {
+    @Test fun fixedCurrentJson_preservesAllSettingsAndWireNames() {
+        val expected = LauncherConfig(
+            version = 3,
+            screenSets = listOf(
+                ScreenSet("right", Slot.App("a"), Slot.Panel, SplitRatio.R6_4, "アプリ|パネル"),
+                ScreenSet("left", Slot.Panel, Slot.App("b"), SplitRatio.R4_6),
+                ScreenSet("apps", Slot.App("b"), Slot.App("a"), SplitRatio.R7_3),
+            ),
+            homeApps = listOf("b", "a"), panelApps = listOf("a", "b"),
+            dockApps = listOf("b"), idleApp = "a",
+            link = LinkConfig(LinkMode.Chrome, listOf("example.org"), "com.brave.browser"),
+            gesture = GestureConfig(12, false, 800), boot = BootConfig(true),
+            panelView = PanelView.Sets, dockMode = DockMode.Manual,
+            appListPkgs = listOf("b", "a"), lyricsEnabled = true,
+        )
+        val decoded = ConfigCodec.decode(currentConfigFixture)
+        assertEquals(expected, decoded)
+        val encoded = ConfigCodec.encode(decoded!!)
+        assertEquals(
+            kotlinx.serialization.json.Json.parseToJsonElement(currentConfigFixture),
+            kotlinx.serialization.json.Json.parseToJsonElement(encoded),
+        )
+        assertEquals(expected, ConfigCodec.decode(encoded))
+    }
+
+    @Test fun fixedLegacyJson_preservesDefaultsThroughRoundTrip() {
+        val expected = LauncherConfig(
+            version = 3, screenSets = listOf(ScreenSet("s", Slot.App("a"), Slot.Panel)),
+            homeApps = listOf("a"), panelApps = emptyList(), dockApps = emptyList(), idleApp = "a",
+            link = LinkConfig(LinkMode.InAppSplit, listOf("accounts.google.com"), "com.android.chrome"),
+            gesture = GestureConfig(48, true, 1000), boot = BootConfig(false),
+            panelView = PanelView.Apps, dockMode = DockMode.Auto,
+            appListPkgs = null, lyricsEnabled = false,
+        )
+        for (version in listOf(1, 2)) {
+            val fixture = """{"version":$version,"screenSets":[{"id":"s","left":{"pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.Panel"}}],"homeApps":["a"],"panelApps":[],"dockApps":[],"idleApp":"a"}"""
+            val decoded = ConfigCodec.decode(fixture)
+            assertEquals(expected, decoded)
+            assertEquals(expected, ConfigCodec.decode(ConfigCodec.encode(decoded!!)))
+        }
+    }
+
+    @Test fun fixedRatioNames_decodeAndEncodeWithoutRenaming() {
+        val ratios = listOf("R3_7" to SplitRatio.R3_7, "R4_6" to SplitRatio.R4_6,
+            "R5_5" to SplitRatio.R5_5, "R6_4" to SplitRatio.R6_4, "R7_3" to SplitRatio.R7_3)
+        for ((name, ratio) in ratios) {
+            val fixture = """{"version":3,"screenSets":[{"id":"s","left":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"b"},"ratio":"$name"}],"homeApps":[],"panelApps":[],"dockApps":[],"idleApp":"a"}"""
+            val decoded = ConfigCodec.decode(fixture)!!
+            assertEquals(listOf(ScreenSet("s", Slot.App("a"), Slot.App("b"), ratio)), decoded.screenSets)
+            val encoded = ConfigCodec.encode(decoded)
+            org.junit.Assert.assertTrue(encoded.contains("\"ratio\":\"$name\""))
+            assertEquals(decoded, ConfigCodec.decode(encoded))
+        }
+    }
+
     @Test fun decodesOldConfigWithoutLyricsEnabled() {
         val json = """{"version":3,"screenSets":[],"homeApps":[],"panelApps":[],"dockApps":[],"idleApp":"a"}"""
         assertEquals(false, ConfigCodec.decode(json)!!.lyricsEnabled)
@@ -173,3 +228,15 @@ class ConfigCodecTest {
         assertEquals(config.copy(screenSets = valid), ConfigCodec.decode(ConfigCodec.encode(config)))
     }
 }
+
+// Fixed wire-format fixture: never derive this JSON from the serializer under test.
+internal val currentConfigFixture = """
+    {"version":3,"screenSets":[
+      {"id":"right","left":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"a"},"right":{"type":"com.gt8d.launcher.config.Slot.Panel"},"ratio":"R6_4","appPairLabel":"アプリ|パネル"},
+      {"id":"left","left":{"type":"com.gt8d.launcher.config.Slot.Panel"},"right":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"b"},"ratio":"R4_6","appPairLabel":null},
+      {"id":"apps","left":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"b"},"right":{"type":"com.gt8d.launcher.config.Slot.App","pkg":"a"},"ratio":"R7_3","appPairLabel":null}
+    ],"homeApps":["b","a"],"panelApps":["a","b"],"dockApps":["b"],"idleApp":"a",
+    "link":{"mode":"Chrome","chromeDomains":["example.org"],"browserPkg":"com.brave.browser"},
+    "gesture":{"stripWidthPx":12,"glow":false,"longPressMs":800},"boot":{"waitForCar":true},
+    "panelView":"Sets","dockMode":"Manual","appListPkgs":["b","a"],"lyricsEnabled":true}
+""".trimIndent()
