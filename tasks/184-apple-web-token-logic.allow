@@ -1,0 +1,4 @@
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AppleWebTokenLogic.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AppleWebTokenLogicTest.kt
+command python3 -c 'from zipfile import ZipFile; z=ZipFile("/home/munde/.codex/attachments/7d3a9c1a-fe55-4572-ba63-4c88f6aa957f/MusicToken-source.zip"); print(z.read("MusicToken/src/local/musictoken/TokenLogic.java").decode()); print(z.read("MusicToken/test/local/musictoken/TokenLogicTest.java").decode())'
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleWebTokenLogicTest'
