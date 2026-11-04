@@ -210,6 +210,7 @@ object MediaWatcher {
             lastMetadataTitles[pkg] = title
             DiagLog.d("Lyrics", "metadata keys pkg=$pkg ${metadata?.keySet()?.sorted()?.joinToString(",").orEmpty()}")
         }
+        val ids = LyricsMetadataProbe.read(metadata)
         val artist = metadata?.getText(MediaMetadata.METADATA_KEY_ARTIST)?.toString()
         val artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
@@ -235,6 +236,7 @@ object MediaWatcher {
             hasFavoriteAction = hasFavoriteAction,
             paused = state?.state == PlaybackState.STATE_PAUSED,
             album = metadata?.getText(MediaMetadata.METADATA_KEY_ALBUM)?.toString(),
+            lyricsIdentity = lyricsIdentity(pkg, ids),
         )
     }
 

@@ -6,6 +6,11 @@ import android.content.Intent
 import android.os.SystemClock
 import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.media.lyrics.LyricsCache
+import com.gt8d.launcher.media.lyrics.AmllCache
+import com.gt8d.launcher.media.lyrics.AmllClient
+import com.gt8d.launcher.media.lyrics.AmllIndexStore
+import com.gt8d.launcher.media.lyrics.AmllIndexUrlConnectionTransport
+import com.gt8d.launcher.media.lyrics.AmllUrlConnectionTransport
 import com.gt8d.launcher.media.lyrics.LyricsRepository
 import com.gt8d.launcher.media.lyrics.LrclibClient
 import com.gt8d.launcher.media.lyrics.UrlConnectionTransport
@@ -74,6 +79,8 @@ object AppGraph {
         }
         val userAgent = "YLuncher/$versionName (https://github.com/munder-sa/YLuncher)"
         val client = LrclibClient(UrlConnectionTransport(), userAgent)
+        val index = AmllIndexStore(File(app.filesDir, "lyrics/amll-index"), AmllIndexUrlConnectionTransport(userAgent))
+        val amll = AmllClient(AmllUrlConnectionTransport(), userAgent, index)
         LyricsRepository(
             scope = lyricsScope,
             nowPlaying = MediaWatcher.nowPlaying,
@@ -82,6 +89,8 @@ object AppGraph {
             fetch = { q -> withContext(Dispatchers.IO) { client.fetch(q) } },
             clock = SystemClock::elapsedRealtime,
             io = Dispatchers.IO,
+            amllCache = AmllCache(File(app.filesDir, "lyrics/amll"), System::currentTimeMillis),
+            fetchAmll = amll::fetch,
         )
     }
     private val _frequentApps = MutableStateFlow<List<FrequentApp>?>(null)

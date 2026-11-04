@@ -1,0 +1,81 @@
+[INFO] codex-ask: ログ .codex-bak/ask-20261103-235814-262300/
+**結論：単語時刻付き歌詞の追加取得元として、技術的には使えます。LRCLIB を残した補助ソースとしての採用を勧めます。ただし、歌詞全体の利用権が一律に CC0 で保証されているわけではなく、公開配布前に権利条件の確認が必要です。**
+
+**1. ライセンス・帰属表示**
+
+- DB の [LICENSE](https://github.com/amll-dev/amll-ttml-db/blob/main/LICENSE) は CC0 1.0。ただし [README 共有協定（L300–302）](https://github.com/amll-dev/amll-ttml-db/blob/main/README.md#共享协议) は、**「外来データは元の提供者の条件、自作部分は CC0」**と区別しています。歌詞本文を含む全データの取得・表示が無条件に許諾済み、とは判断できません。
+- [他プロジェクトへの組み込み案内](https://github.com/amll-dev/amll-ttml-db#接入到其他项目) は明示されています。リポジトリへのリンクや歌詞制作者の表示は「希望するが強制ではない」とされています。ただし外来データ側に別の義務があれば、その確認は必要です。
+- DB は AGPL ではありません。一方、別プロジェクトの [AMLL 描画ライブラリは AGPLv3](https://github.com/amll-dev/applemusic-like-lyrics/blob/main/LICENSE)。**DB を HTTP 取得して独自実装で表示する案と、AMLL のコードを取り込む案は区別できます。**
+
+**2. 取得方法・検索・制限**
+
+公式に案内されているのは、認証不要の静的ファイル取得です。
+
+```text
+https://raw.githubusercontent.com/amll-dev/amll-ttml-db/refs/heads/main/{folder}/{id}.ttml
+```
+
+| folder | ID |
+|---|---|
+| `ncm-lyrics` | NetEase Cloud Music |
+| `am-lyrics` | Apple Music の楽曲 ID |
+| `qq-lyrics` | QQ Music |
+| `spotify-lyrics` | Spotify |
+
+曲名・歌手・アルバム・各社 ID・任意の ISRC を含む[全体索引 `metadata/raw-lyrics-index.jsonl`](https://raw.githubusercontent.com/amll-dev/amll-ttml-db/main/metadata/raw-lyrics-index.jsonl)と、各プラットフォームの `index.jsonl` があります。索引には履歴も含まれるため、重複・改訂の扱いが必要です。[取得仕様の根拠：README L274–297](https://github.com/amll-dev/amll-ttml-db/blob/main/README.md#接入到其他项目)
+
+- **端末から直接取得する構成は可能**。今回の調査でも Lemon の raw TTML を取得できました。Android 実機での通信確認はしていません。
+- 曲名検索の[コミュニティサイト](https://amlldb.bikonoo.com/search.html)はありますが、今回確認した資料では、安定した公開検索 API の契約・仕様は見つかりませんでした。自前の索引検索が確実です。
+- [作者ミラー・コミュニティミラー](https://github.com/amll-dev/amll-ttml-db#镜像源)も案内されています。[Dimeta ミラー](https://amll.mirror.dimeta.top/)は10分ごとの同期を明記しています。
+- DB 固有の数値的なリクエスト上限や SLA は確認できませんでした。無制限という意味ではありません。[GitHub は過大な帯域利用への制限を規定](https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies#9-excessive-bandwidth-use)しています。
+
+**3. 日本の曲の収録**
+
+日本語曲はあります。索引では YOASOBI「アイドル」「夜に駆ける」、稲葉曇「ラグトレイン」などを確認しました。ただし日本曲の件数・網羅率は集計できていません。以下は取得できた索引・実ファイルに基づく結果です。
+
+| 指定曲 | 確認結果 |
+|---|---|
+| サカナクション「夜の踊り子」 | 索引の曲名検索で見つからず。未収録の断定はしません |
+| サカナクション「僕と花」 | 同上。歌手名「サカナクション」も一致なし |
+| 米津玄師「Lemon」 | **収録を確認。単語時刻付き TTML あり** |
+
+根拠：[索引](https://raw.githubusercontent.com/amll-dev/amll-ttml-db/main/metadata/raw-lyrics-index.jsonl)、[Lemon 実ファイル・L1](https://raw.githubusercontent.com/amll-dev/amll-ttml-db/main/ncm-lyrics/536622304.ttml)。Lemon のメタデータには NCM `536622304`、Apple Music `1537460612`、ISRC `JPU901800227` が入っています。
+
+**4. 現在のモデルへの変換**
+
+**主旋律の開始時刻と文字列は変換できますが、情報は失われます。**
+
+| TTML | 現モデルへの対応 |
+|---|---|
+| `<p begin>` | `LyricLine.timeMs` |
+| 主旋律の `<span>` の本文 | 連結して `text` |
+| `<span begin>` | `LyricWord.timeMs` |
+| 連結前の文字位置 | `charStart`。Kotlin の文字列位置に合わせる |
+| 行・単語の `end` | 保存先がない |
+| 背景歌詞 `x-bg`、歌い手 `ttm:agent` | 区別するフィールドがない |
+| 翻訳・音訳・言語・歌詞制作者情報 | 保存先がない |
+
+根拠：[TTML 仕様 §4・§7](https://github.com/amll-dev/amll-ttml-db/wiki/格式规范)、[Lyrics.kt:7](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/media/lyrics/Lyrics.kt:7)。
+
+特に、現在の表示は次の単語開始までを補間し、最後の単語は次行などから終端を推定します。[LyricsPane.kt:50](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/ui/home/LyricsPane.kt:50)  
+そのため **TTML の歌唱終了・休符を正確に再現できません**。また、現在行の選択は1行なので、同時進行する背景歌詞・対唱の忠実な表示にはモデルと UI の拡張が必要です。[LrcParser.kt:78](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/media/lyrics/LrcParser.kt:78)
+
+**5. 推奨構成・工数・危険**
+
+提案する構成は次のとおりです。
+
+1. **索引を定期取得して端末内で検索**し、一致した TTML だけ取得。再生曲が変わるたびに全索引を取得しない。
+2. 照合は、取得できるならプラットフォーム ID／ISRC を優先。それ以外は曲名＋歌手＋アルバムを照合し、曖昧な候補は自動採用しない。現在の `LyricsQuery` は各社 ID・ISRC を持っていません。[Lyrics.kt:21](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/media/lyrics/Lyrics.kt:21)
+3. 優先順位は **確実に照合できた単語付き AMLL → LRCLIB 同期歌詞 → プレーン歌詞**。AMLL の通信失敗は LRCLIB へフォールバック。
+4. 索引・取得元・ID・改訂情報・TTML をキャッシュ。初期案として索引更新は1日程度、未収録は24時間、取得済みは条件付き再検証を推奨します。
+
+既存キャッシュは300ファイル上限、未収録は24時間ですが、取得済み歌詞に期限がありません。さらにキャッシュ命中で取得処理を終了するので、**既存の LRCLIB キャッシュが AMLL の導入・改訂を阻む点**を直す必要があります。[LyricsCache.kt:10](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/media/lyrics/LyricsCache.kt:10)、[LyricsRepository.kt:49](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/media/lyrics/LyricsRepository.kt:49)  
+索引取得には、現 HTTP 実装の **512 KiB 上限**も見直しが必要です。[LrclibClient.kt:36](/mnt/f/YLuncher/app/src/main/java/com/gt8d/launcher/media/lyrics/LrclibClient.kt:36)
+
+**工数は推測**ですが、主旋律だけの試作は2〜4人日、自動照合・キャッシュ更新・フォールバック・試験を含めて5〜10人日程度。背景歌詞・複数歌い手の忠実な表示は別途です。
+
+主な危険は、権利条件、別音源への誤照合、タイミングのずれです。公式も、原則として有効な NCM ID の音源について品質保証し、他サービスの音源との差には留保しています。[README L51–59](https://github.com/amll-dev/amll-ttml-db/blob/main/README.md#1-检查是否重复提交)
+
+実行したローカルコマンドは `cat`・`rg -n`・`sed -n` による読み取りのみです。存在しない `LyricsWindow.kt` の読み取りは失敗し、表示実装は `LyricsPane.kt` で確認しました。変更・ビルド・テストは行っていません。
+
+**決めたこと：なし。上記の構成・期間は採用前の提案です。**exit=0

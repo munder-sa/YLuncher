@@ -8,6 +8,10 @@ data class LyricWord(val timeMs: Long, val charStart: Int)
 
 data class LyricLine(val timeMs: Long, val text: String, val words: List<LyricWord> = emptyList())
 
+data class LyricsIdentity(val appleMusicId: String? = null, val isrc: String? = null)
+
+data class LyricsRequest(val query: LyricsQuery, val identity: LyricsIdentity = LyricsIdentity())
+
 sealed interface LyricsState {
     data object Off : LyricsState
     data object Loading : LyricsState

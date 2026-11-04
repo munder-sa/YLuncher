@@ -1,0 +1,10 @@
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AmllIndex.kt
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AmllIndexStore.kt
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AmllIndexTransport.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AmllIndexTest.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AmllIndexStoreTest.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AmllIndexTransportTest.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/AmllClient.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/AmllClientTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.*'

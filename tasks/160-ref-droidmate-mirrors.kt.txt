@@ -1,0 +1,146 @@
+    /**
+     * Parse a song identifier that may include an AMLL platform prefix.
+     * Examples:
+     *   "ncm:12345" -> ("ncm","12345")
+     *   "qq:ABCDEFGHI" -> ("qq","ABCDEFGHI")
+     *   "98765" -> ("ncm","98765")  // default to ncm for backward compatibility
+     */
+    private fun parseAmlLId(raw: String): Pair<String, String> {
+        // If the raw string is already a URL (e.g. from the AMLL search "file" field),
+        // treat it as a direct download link.
+        if (raw.startsWith("http://") || raw.startsWith("https://")) {
+            return "url" to raw
+        }
+
+        val parts = raw.split(":", limit = 2)
+        return if (parts.size == 2 && parts[0].isNotBlank()) {
+            parts[0].lowercase() to parts[1]
+        } else {
+            "ncm" to raw
+        }
+    }
+
+    @Volatile
+    private var lastAmlLError: String? = null
+
+    /**
+     * 从 AMLL TTML DB 获取歌词 (通过网易云音乐ID)
+     */
+    open suspend fun getAMLLLyrics(
+        songId: String,
+        title: String? = null,
+        artist: String? = null
+    ): UnifiedLyrics? {
+        /**
+         * allow callers to pass a platform prefix (e.g. "qq:12345") or omit for
+         * backwards compatibility.  default platform is ncm (网易云).
+         * If the "songId" is a direct URL (from AMLL search "file" field), we treat it as
+         * a direct download link.
+         */
+        val (platform, rawId) = parseAmlLId(songId)
+
+        /**
+         * some AMLL search results return native file names like "....ttml".
+         * For mirror endpoints we need to avoid appending ".ttml" twice.
+         */
+        val normalizedId = rawId.removeSuffix(".ttml")
+        val hasTtmlSuffix = rawId.endsWith(".ttml")
+
+        /**
+         * for QQ IDs we may receive "id1::id2".
+         * which is the typical Unilyric format, so split on
+         * "::" first to avoid producing an empty string for the second part.
+         */
+        val candidateIds = when {
+            platform == "qq" && normalizedId.contains("::") -> normalizedId.split("::", limit = 2)
+            else -> listOf(normalizedId)
+        }
+
+        var unknownHostCount = 0
+        var totalEndpoints = 0
+        lastAmlLError = null
+
+        for (normalizedSongId in candidateIds) {
+            /**
+             * build the list of endpoints; the mirrors we had before only host the ncm
+             * archive so they should only be used when platform == "ncm".
+             * If the rawId is a direct URL (platform="url"), use it directly.
+             */
+            val endpoints = mutableListOf<String>()
+            if (platform == "url") {
+                endpoints += rawId
+            } else {
+                // For the main AMLL endpoint we should use the raw ID as provided.
+                // (some platforms like raw-lyrics include the .ttml suffix in the ID)
+                endpoints += "https://amll-ttml-db.stevexmh.net/$platform/$rawId"
+
+                /**
+                 * Mirror endpoints exist for multiple platforms (not just `ncm`).
+                 * Determine the mirror folder name:
+                 * - if the platform already ends with "-lyrics" (e.g. raw-lyrics), keep it
+                 * - otherwise append "-lyrics" (e.g. ncm -> ncm-lyrics)
+                 */
+                val mirrorFolder = if (platform.endsWith("-lyrics")) platform else "${platform}-lyrics"
+                val idWithSuffix = if (hasTtmlSuffix) rawId else "$normalizedSongId.ttml"
+                endpoints += "https://amlldb.bikonoo.com/$mirrorFolder/$idWithSuffix"
+                endpoints += "https://amll.mirror.dimeta.top/api/db/$mirrorFolder/$idWithSuffix"
+                endpoints += "https://raw.githubusercontent.com/amll-dev/amll-ttml-db/refs/heads/main/$mirrorFolder/$idWithSuffix"
+            }
+
+            Timber.d("[AMLLBridge] AMLL probe for songId=$songId (platform=$platform, rawId=$rawId, normalized=$normalizedSongId, hasTtml=$hasTtmlSuffix) -> endpoints=$endpoints")
+
+            totalEndpoints += endpoints.size
+
+            // Try each endpoint sequentially until we successfully fetch and parse lyrics.
+            for (url in endpoints) {
+                try {
+                    Timber.d("[AMLLBridge] Fetching AMLL endpoint: $url")
+                    Timber.d("[AMLLBridge] Requesting URL: $url")
+                    val response = httpClient.get(url)
+                    if (!response.status.isSuccess()) {
+                        Timber.i("[AMLLBridge] AMLL endpoint non-success status ${response.status.value}: $url")
+                        continue
+                    }
+
+                    val content = response.body<String>()
+                    if (!content.contains("<tt", ignoreCase = true)) {
+                        Timber.w("[AMLLBridge] AMLL endpoint returned non-TTML payload: $url")
+                        continue
+                    }
+
+                    val parsed = parseTTML(content, title, artist)
+                    if (parsed != null && parsed.lines.isNotEmpty()) {
+                        /** 检查是否有歌曲结构 */
+                        val songStructures = parsed.metadata.songStructures
+                        if (!songStructures.isNullOrEmpty()) {
+                            Timber.v("[SongStructure] AMLL parsed structures: ${songStructures.size}")
+                        }
+
+                        /**
+                         * Mark the source for AMLL lyrics so downstream feature analysis
+                         * (e.g. overlap detection) can distinguish AMLL TTML DB content.
+                         * 保留歌曲结构信息
+                         */
+                        val withSource = parsed.copy(
+                            metadata = parsed.metadata.copy(
+                                source = "AMLL TTML DB",
+                                songStructures = songStructures  // 保留歌曲结构
+                            )
+                        )
+                        Timber.i("[AMLLBridge] Fetched AMLL lyrics from: $url")
+                        lastAmlLError = null
+                        return withSource
+                    }
+
+                    Timber.w("[AMLLBridge] TTML parse yielded empty result: $url")
+                } catch (e: UnknownHostException) {
+                    unknownHostCount += 1
+                    Timber.w("[AMLLBridge] AMLL host unresolved: $url $e")
+                } catch (e: Exception) {
+                    Timber.w("[AMLLBridge] AMLL endpoint failed: $url $e")
+                }
+            }
+        }
+
+        lastAmlLError = if (unknownHostCount == totalEndpoints) {
+            "All AMLL hosts are unreachable (DNS)."

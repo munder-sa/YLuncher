@@ -32,6 +32,58 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w600dp-h1000dp")
 class LyricsPaneTest {
+    private fun ttmlLines(firstEnd: String = "1.4") = kotlinx.coroutines.runBlocking {
+        val parsed = com.gt8d.launcher.media.lyrics.TtmlParser.parse("""
+            <tt xmlns="http://www.w3.org/ns/ttml"><body><div>
+            <p begin="1" end="3"><span begin="1" end="$firstEnd">架空</span><span begin="1.5" end="2">の朝</span></p>
+            <p begin="4" end="6">架空の空</p>
+            </div></body></tt>
+        """.trimIndent(), 8000)
+        (parsed as com.gt8d.launcher.media.lyrics.TtmlParseResult.WordSynced).lines
+    }
+
+    @Test fun ttmlWordsUseExistingFill() {
+        val sample = ttmlLines()
+        assertEquals(listOf(LyricWord(1000, 0), LyricWord(1500, 2)), sample[0].words)
+        assertEquals(1f, wordFillPosition(sample, 0, 1250, 8000), 0f)
+        now = now.copy(playing = true, positionMs = 1250, positionUpdatedAt = clock)
+        show(LyricsState.Synced(sample), detailSemantics = true)
+        rule.onNodeWithTag("player_lyrics_fill", useUnmergedTree = true).assertExists()
+        val counts = listOf(observer.compositions, observer.measures, observer.placements)
+        val frames = observer.frameUpdates
+        repeat(10) {
+            rule.runOnIdle { clock += 16 }
+            rule.mainClock.advanceTimeByFrame()
+        }
+        rule.waitForIdle()
+        assertTrue(observer.frameUpdates > frames)
+        assertEquals(counts, listOf(observer.compositions, observer.measures, observer.placements))
+    }
+
+    @Test fun ttmlEndDoesNotChangeFillModel() {
+        val early = ttmlLines("1.1")
+        val late = ttmlLines("1.4")
+        assertEquals(early, late)
+        assertEquals(1f, wordFillPosition(early, 0, 1250, 8000), 0f)
+        assertEquals(3f, wordFillPosition(early, 0, 2750, 8000), 0f)
+    }
+
+    @Test fun ttmlPlainLineHasNoPerFrameLoop() {
+        val sample = ttmlLines()
+        assertTrue(sample[1].words.isEmpty())
+        now = now.copy(playing = true, positionMs = 4500, positionUpdatedAt = clock)
+        show(LyricsState.Synced(sample), detailSemantics = true)
+        rule.onNodeWithTag("player_lyrics_current").assertTextEquals("架空の空")
+        rule.onNode(hasTestTag("player_lyrics_fill") and
+            hasAnyAncestor(hasTestTag("player_lyrics_line_1")), useUnmergedTree = true).assertDoesNotExist()
+        val counts = listOf(observer.compositions, observer.measures, observer.placements, observer.frameUpdates)
+        repeat(30) {
+            rule.runOnIdle { clock += 16 }
+            rule.mainClock.advanceTimeByFrame()
+        }
+        rule.waitForIdle()
+        assertEquals(counts, listOf(observer.compositions, observer.measures, observer.placements, observer.frameUpdates))
+    }
     @get:Rule val rule = createEmptyComposeRule()
     private lateinit var controller: ActivityController<ComponentActivity>
     private val lines = listOf(LyricLine(1000, "一"), LyricLine(2000, "二"), LyricLine(3000, "三"))

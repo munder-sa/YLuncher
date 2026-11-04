@@ -2,6 +2,8 @@ package com.gt8d.launcher.media
 
 import android.graphics.Bitmap
 import com.gt8d.launcher.media.lyrics.LyricsQuery
+import com.gt8d.launcher.media.lyrics.LyricsIdentity
+import com.gt8d.launcher.media.lyrics.LyricsRequest
 
 data class SessionSnapshot(
     val pkg: String,
@@ -17,6 +19,7 @@ data class SessionSnapshot(
     val hasFavoriteAction: Boolean,
     val paused: Boolean = false,
     val album: String? = null,
+    val lyricsIdentity: LyricsIdentity = LyricsIdentity(),
 )
 
 data class NowPlaying(
@@ -32,6 +35,7 @@ data class NowPlaying(
     val speed: Float = 1f,
     val album: String? = null,
     val metaTitle: String? = null,
+    val lyricsIdentity: LyricsIdentity = LyricsIdentity(),
 )
 
 fun SessionSnapshot.toNowPlaying(): NowPlaying = NowPlaying(
@@ -47,10 +51,25 @@ fun SessionSnapshot.toNowPlaying(): NowPlaying = NowPlaying(
     speed = speed,
     album = album?.takeIf { it.isNotBlank() },
     metaTitle = title?.takeIf { it.isNotBlank() },
+    lyricsIdentity = lyricsIdentity,
 )
+
+internal fun lyricsIdentity(pkg: String, ids: LyricsMetadataProbe.Result): LyricsIdentity {
+    val standard = ids.standard.value
+    val apple = ids.apple
+    val id = standard?.takeIf {
+        pkg == "com.apple.android.music" && it.isNotEmpty() &&
+            it.all { c -> c in '0'..'9' } && it.any { c -> c != '0' } &&
+            (apple.type == null || apple.value == it)
+    }
+    return LyricsIdentity(appleMusicId = id)
+}
 
 val NowPlaying.lyricsQuery: LyricsQuery?
     get() = LyricsQuery.of(metaTitle, artist, album, durationMs)
+
+val NowPlaying.lyricsRequest: LyricsRequest?
+    get() = lyricsQuery?.let { LyricsRequest(it, lyricsIdentity) }
 
 fun NowPlaying.positionAt(nowMs: Long): Long {
     val raw = if (playing) {

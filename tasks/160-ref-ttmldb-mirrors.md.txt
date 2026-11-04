@@ -1,0 +1,34 @@
+### 镜像源
+
+<details>
+官方源出于部分原因，可能偶发无法搜索歌词、未搜索到歌词、歌词返回数据异常等问题，您可以使用以下镜像源，在插件设置 - `歌词源` - `从歌词源字符串添加` 中输入以下内容：
+
+作者镜像源 [@Steve-xmh](https://github.com/Steve-xmh)
+
+```text
+61ba6770-f02f-11ef-a3ae-5396943709e6|AMLL%20TTML%20%E9%80%90%E8%AF%8D%E6%AD%8C%E8%AF%8D%E6%95%B0%E6%8D%AE%E5%BA%93%EF%BC%88stevexmh.net%20%E9%95%9C%E5%83%8F%EF%BC%89||ttml|https://amll-ttml-db.stevexmh.net/ncm/[NCM_ID]
+```
+
+### 社区镜像源
+
+您也可以尝试由社区提供的镜像源，具体使用方法请自行在站内查阅，感谢 [@HelloZGY](https://github.com/cybaka520), [@Luorix](https://github.com/LuorixDev) 与 [@Burial0268](https://github.com/Burial0268) ！
+
+[AMLL TTML DB 镜像站](https://amlldb.bikonoo.com/mirror.html) By [@HelloZGY](https://github.com/cybaka520)
+
+```text
+19cf30a0-6206-11f0-b2b3-0d580aff0f69|%E9%95%9C%E5%83%8F%E7%AB%99||ttml|https://amlldb.bikonoo.com/ncm-lyrics/[NCM_ID].ttml
+```
+
+[AMLL-TTML-DB 自动镜像站](https://amll.mirror.dimeta.top/) By [@Luorix](https://github.com/LuorixDev)
+
+```text
+06e48500-d086-11f0-bb6e-451fd0fc9216|Dimeta%E9%95%9C%E5%83%8F%E7%AB%99v1||ttml|https://amll.mirror.dimeta.top/api/db/ncm-lyrics/[NCM_ID].ttml
+```
+
+[GDBA 镜像站](https://amll-ttml-db.gbclstudio.cn) By [@Burial0268](https://github.com/Burial0268)
+```text
+c552e13a-19a4-4ff1-9b37-f4cdeb3de9dd|GDBA%E9%95%9C%E5%83%8F%E7%AB%99||ttml|https://amll-ttml-db.gbclstudio.cn/ncm-lyrics/[NCM_ID].ttml
+```
+</details>  
+
+## UniLyric [适配最多]
