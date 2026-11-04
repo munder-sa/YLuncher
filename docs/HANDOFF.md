@@ -4,6 +4,8 @@
 
 ## 再開時の要点 (2026-11-04 18時台)
 
+- **最新: Task 188=`c1e9b63`、両beta5 / 45実機更新成功。IPv6到達性の問題が有力。ユーザーは通信側の対策も今回含めることを承認済み**。Task 189でApple通信だけOkHttp5.5.1のFast Fallbackへ移行する。指示書/allowに範囲8ファイル、既存Transport6件と新テスト、beta6 / 46を具体化。署名/権限/HOME維持、PID31768。初回は公開最初の301まで20,225ms・refresh全体22,721ms、account中に35,007ms TIMEOUT。解析はページ20ms/asset54ms。端末curl IPv4は301/0.728秒とAPI404/0.240秒、IPv6はいずれも6秒のTCP接続TIMEOUT。proxy/private DNS globalはnull、設定は変更していない。
+- beta5でも保存済みjp/SAVEDへ再確認成功(account10,266ms/全体10,269ms)、再入力/Webログインなし。設定が一時黒画面になったがHOME→設定の開き直しで通常表示、当該PIDのAndroidRuntime:Eなし。原因未特定、恒常的な描画不具合とは断定しない。
 - 担当はこの会話のCodex暫定司令塔。feat-apple-lyrics、Task 188の実装/レビュー完了、workerなし。次は両beta5 / 45を実機へ上書きし、保存情報の初回復元を段階ログで診断する。正式公開/push/main取り込みは未実施。
 - ユーザーが「いまOFFに戻しました」とSIM OFFを報告。司令塔は回線設定を変更していない。その後beta4のYLuncherをforce-stop→HOMEで再起動(PID24341)、SAVED/確認中→再びTIMEOUT。したがってSIMだけで初回失敗の説明はできない。保存情報は残っている。Webログインや再入力はしていない。
 - Task 188 `.codex-bak/20261104-175111/`終了0。許可7ファイルだけ変更、既存Client/Provider17件と.codex.confは無変更。追加12件を含む29件成功(1回1分22秒)、release成功(1回49秒)。差分/全文/実コマンド/XMLを照合済み。allow警告は既知の引用符正規化差だけ。通信条件・期限・再試行・取消の契約は維持し、診断既定OFF/AppGraph2箇所だけON。秘密を受け取れない型/固定ログ文法を新テストで検証。

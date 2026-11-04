@@ -1,0 +1,10 @@
+write app/build.gradle.kts
+write panelhost/build.gradle.kts
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/AppleLyricsTransport.kt
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AppleLyricsTransportPolicy.kt
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AppleLyricsOkHttpTransport.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AppleLyricsOkHttpTransportTest.kt
+create app/src/main/assets/third_party/apple_music_http.txt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsTransportTest' --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsOkHttpTransportTest'
+command /home/munde/tools/gradle-run.sh :app:assembleRelease :panelhost:assembleRelease

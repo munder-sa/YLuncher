@@ -57,3 +57,11 @@ beta3初回接続とbeta4更新直後の保存値復元でTIMEOUTが発生し、
 - app: 3,038,838 bytes / SHA256 `1564331fc037f5d687ce678f34ae296136e0438546e59a4d2cc5c7a8dc5b26a9`。
 - panelhost: 2,021,089 bytes / SHA256 `a99551a690dd1fd1843fd8bf17078e40cce87f2d499e09576eabd2f22a135fee`。
 - 実機更新前: ユーザーがSIM OFFへ戻したと回答。beta4をforce-stop→HOMEで再作成(PID24341)してもSAVED→TIMEOUT。SIMだけでは説明できない。次にbeta5で段階時間を調べる。
+
+## beta5実機結果
+
+- 実装コミットc1e9b63。両install -r Success、両45/beta5、同署名表示2728742d、通知/Bluetooth許可とHOME維持。新PID31768。
+- 初回: 公開301まで20,225ms、200/2,455,875bytesまで22,097ms、ページ解析20ms/asset一覧80ms、asset200/3,344,359bytesを468ms・解析54ms、refresh READY22,721ms。account API開始22,723ms→接続全体35,007ms TIMEOUT。固定文法以外のログを取得していない。
+- SIM OFFの端末curl -4: music公開301/0.728秒、APIルート404/0.240秒。-6は両者TCP接続未成立で6秒TIMEOUT。global proxy/private DNS設定はnull、変更なし。IPv6到達性と逐次接続待ちが有力で、保存/解析の失敗ではない。
+- 再確認はaccount200/10,266ms、全体READY10,269ms、画面jp/SAVED。新たなログイン/トークン入力なし。
+- ユーザーが通信側の対策(OkHttp5のFast Fallback)も今回含めると了承。次はTask 189。正式公開は未実施。
