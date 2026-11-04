@@ -1,0 +1,3 @@
+write app/src/test/java/com/gt8d/launcher/settings/SettingsActivityTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.settings.SettingsActivityTest'
+command /home/munde/tools/gradle-run.sh :app:testReleaseUnitTest :panelhost:testDebugUnitTest :panelhost:testReleaseUnitTest :app:assembleDebug :panelhost:assembleDebug

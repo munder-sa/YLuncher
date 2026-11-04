@@ -4,6 +4,8 @@
 
 ## 再開時の要点 (2026-11-04 20時台)
 
+- **正式版の現在地**: Task190委譲は2版ファイルだけ更新、両2.3.0 / 47のrelease build成功(1分2秒)、旧同署名/非debuggable確認、両install -r成功。権限/HOME/通知listener5件/carsyso補助を維持、新PID5038。全テストの初回codex-verifyは実行中だが、SettingsActivityTestの旧再入力文言1件が失敗と判明。Task191を作成し、保持設計で承認済みの新文言へ移行・旧文言非表示を追加する。初回完了/全失敗一覧とXML保存を確認してから委譲し、該当Debugクラスと未実行だったRelease/panelhost/debug buildだけを補完する。pushは検証完了まで未実施。
+
 - **正式版の作業を開始**: ユーザーが「オーケー、正式版としてpushまでお願い」と指示。感想回答待ち/実機操作停止は解除し、v2.3.0 / 47へ昇格する。Task 190は版2ファイルとrelease buildのみ委譲し、終了後に司令塔がcodex-verifyで全テスト/debug buildを1回。README/導入文書、署名/実機上書き、main fast-forwardとv2.3.0-release新規タグのpushを行う。GitHub ls-remoteではmain/旧tag=3a15ac0・新tagなし、ローカルmainは980964bで現HEADの祖先。GitHubコネクタは404、既存SSH Gitは利用可能。
 - この時点のHEADはd151dd9、実機は両beta6 / 46。以下の「公開未実施」「感想待ち」は経過。認証済みWebデータ削除ONや設定黒画面等の未完了項目は、正式版の記録にも明示して残す。
 
