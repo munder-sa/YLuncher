@@ -13,8 +13,9 @@
 ## 作業状況と次の一手
 
 - 暫定司令塔への運用移行は `980964b` で完了(ローカル、未push)。対象3ファイルのステージ後の `git diff --cached --check` も終了コード0。
-- 現在の依頼は**軽い負荷軽減を、暫定司令塔の運用で試すこと**。Task 173 [ジャケット色抽出のコピー削減](../tasks/173-artwork-sampling-copy.md)を選定。既にARGB_8888の入力は元サイズで複製せず直接縮小し、他のconfigは従来の変換経路を保つ。
-- 次の一手: 指示書・allow を記録し、`codex-run tasks/173-artwork-sampling-copy.md` に実装を委譲→差分・許可範囲・対象テストをレビュー→結果を本ファイルへ記録する。アプリの版上げ・公開・実機へのインストールは今回の範囲外。
+- 現在の依頼は**軽い負荷軽減を、暫定司令塔の運用で試すこと**。Task 173 [ジャケット色抽出のコピー削減](../tasks/173-artwork-sampling-copy.md)は実装・対象テスト・司令塔レビューまで完了。既にARGB_8888の入力は元サイズで複製せず直接縮小し、他のconfigは従来の変換経路を保つ。
+- 作業ブランチは `perf-artwork-copy`。指示書・allow のコミットは `af5af7a`。実装の記録は件名 `perf: ジャケット色抽出の不要な全体コピーを省く` の Git 履歴を参照する。main への取り込み・push・版上げ・実機へのインストールは行っていない。
+- 次の一手はユーザーと選ぶ。実機効果を確かめる場合は、実機接続を確認して次版のベータで比較する。今回の変更だけで描画速度が何ms改善したとは報告しない。
 - 着手前の `ps -eo pid,ppid,etime,args` の検索では、codex-run / codex exec / Gradle の実行中プロセスは見つからなかった。追跡済みファイルの未コミット変更はなく、既存の未追跡4ファイルはそのまま。
 
 ## 移行時に確認した Git の状態
@@ -46,7 +47,7 @@
 
 ## 保留候補と運用上の知見
 
-- 性能改善の残り: MediaWatcher のセッションごとの更新、SetRunner の履歴照会の非同期化、利用履歴の集計頻度、ArtworkBackground のコピー、非表示時のタイマー停止。
+- 性能改善の残り: MediaWatcher のセッションごとの更新、SetRunner の履歴照会の非同期化、利用履歴の集計頻度、非表示時のタイマー停止。ArtworkBackground の元サイズのコピーは Task 173 でARGB_8888だけ削減し、他のconfigは維持した。
 - AMLL 索引の世代に応じた負キャッシュ無効化は延期中。
 - Gradle は `/home/munde/tools/gradle-run.sh`。対象テストは `:app:testDebugUnitTest --tests '…'` の形で指示書・allow に完全なコマンドを書く。Gradle は同時2本まで。同じテストを実装担当と司令塔で重ねて流さない。
 - 実機確認用は `<次の正式版>-betaN`、確認後に正式版。app と panelhost の版・署名を揃え、本体→中継の順に導入する。
@@ -70,3 +71,30 @@
 Claude への復帰時は、実行中の処理と未コミット変更を整理してから担当を「Claude への引き継ぎ待ち」にする。Claude が実際の Git 状態と照合した後、担当を「Claude」に更新する。
 
 移行元の記録: `/home/munde/.claude/projects/-mnt-f-YLuncher/memory/progress-handoff.md` と同ディレクトリの `MEMORY.md`、`commit-after-verify.md`、`release-beta-first.md`、Claude の最終会話。今後の進捗は本ファイルを更新する。
+
+## Task 173 の結果(2026-11-04)
+
+- 実装・テストの変更: `app/src/main/java/com/gt8d/launcher/ui/home/ArtworkBackground.kt`、`app/src/test/java/com/gt8d/launcher/ui/home/ArtworkBackgroundTest.kt` の2ファイル。既存テストは削除・変更せず、3件追加。
+- `codex-run tasks/173-artwork-sampling-copy.md`: 終了コード0。ログ: `.codex-bak/20261104-120418/` の `events.jsonl`・`last-message.md`・`stderr.log`。実装担当が司令塔の権限を継承せず、指定範囲で完了した。
+- テストは実装担当が次のコマンドを**1回**実行し、BUILD SUCCESSFUL。司令塔は同じテストを再実行せず、実行ログとXMLを照合した。
+
+```sh
+/home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.ArtworkBackgroundTest' --tests 'com.gt8d.launcher.ui.theme.ArtworkColorsTest'
+```
+
+- 結果: ArtworkBackgroundTest 19件 + ArtworkColorsTest 8件 = **27件成功、失敗0・エラー0・スキップ0**。XMLは `app/build/test-results/testDebugUnitTest/TEST-com.gt8d.launcher.ui.home.ArtworkBackgroundTest.xml` と同ディレクトリの `TEST-com.gt8d.launcher.ui.theme.ArtworkColorsTest.xml`。
+- 司令塔の検証: `git diff -- app/src/main/java/com/gt8d/launcher/ui/home/ArtworkBackground.kt app/src/test/java/com/gt8d/launcher/ui/home/ArtworkBackgroundTest.kt` でレビュー、`git diff --check` は終了コード0。縮小方式・色計算・例外処理・元画像を recycle しない後始末・鍵とキャッシュは維持されている。
+- `codex-run` はコマンド照合の警告を1件出した。`events.jsonl` の実コマンドは指示書と同じ引用符付き。`/home/munde/.local/bin/codex-run` の `split_commands` が shlex で引用符を除去し、`is_cmd_allowed` が引用符を含む allow の文字列と比較するための不一致と確認した。実コマンドの逸脱ではない。共通スクリプトの修正は今回行っていない。
+- `perf/artwork-copy` というブランチ名は既存の `perf` と衝突して作成に失敗(終了コード128)。`perf-artwork-copy` にして作成・指示書コミットが成功した。
+- 確認した削減: ARGB_8888の色抽出で元サイズの `copy` を呼ばない。1024×1024なら画素約4MiB分のコピーを省く計算。実機の抽出時間・メモリ使用量・操作感は未測定。アプリの版は2.2.0 / 39のまま。
+
+### 決めたこと
+
+- 最初の小規模実験として、独立した色抽出関数のコピー削減を選んだ。ARGB_8888だけを対象にして、他のconfigの色変換を維持した。
+- テストは画像抽出・色計算の2クラスに限定し、全テスト・リリースビルド・実機操作は行わない。
+- 実験ブランチ名は既存名と衝突しない `perf-artwork-copy` にした。
+- 実装担当はローカル変数 `source` を追加し、既存の `copy` / `sampled` の所有と後始末を維持した。
+- テスト寸法はARGBが96×48・48×96、小さいimmutable ARGBが16×8・32×16、RGB_565が65×37・16×8。
+- 固定パターンはARGB値 `FFFF4000・80FF4F00・C020B060・FF3050D0・7FFF00FF・00000000` を `(x / 7 + y / 5) % 6` で配置。
+- immutable画像は赤一色をコピーして作り、既存の期待色 `red` と2回照合した。
+- テスト専用の `patternedBitmap`・`readPixels`・`previousSampling` を追加。元画像の全画素は呼び出し前の読み出し値と比較し、生成物を finally で後始末する。参照コピーの失敗は requireNotNull でテストを失敗させる。

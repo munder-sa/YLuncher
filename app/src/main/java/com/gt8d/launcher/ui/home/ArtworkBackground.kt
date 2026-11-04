@@ -27,9 +27,14 @@ internal fun sampleArtworkColors(bitmap: Bitmap): ArtworkColors? {
     var sampled: Bitmap? = null
     return try {
         if (bitmap.isRecycled) return null
-        copy = bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return null
-        val (width, height) = artworkSampleSize(copy.width, copy.height)
-        sampled = Bitmap.createScaledBitmap(copy, width, height, false)
+        val source = if (bitmap.config == Bitmap.Config.ARGB_8888) {
+            bitmap
+        } else {
+            copy = bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return null
+            copy
+        }
+        val (width, height) = artworkSampleSize(source.width, source.height)
+        sampled = Bitmap.createScaledBitmap(source, width, height, false)
         val pixels = IntArray(width * height)
         sampled.getPixels(pixels, 0, width, 0, 0, width, height)
         extractArtworkColors(pixels)

@@ -3,6 +3,7 @@ package com.gt8d.launcher.ui.home
 import android.graphics.Bitmap
 import com.gt8d.launcher.media.NowPlaying
 import com.gt8d.launcher.ui.theme.ArtworkColors
+import com.gt8d.launcher.ui.theme.extractArtworkColors
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
 import org.junit.Assert.*
@@ -26,6 +27,71 @@ class ArtworkBackgroundTest {
         assertEquals(32 to 16, artworkSampleSize(64, 32))
         assertEquals(1 to 32, artworkSampleSize(1, 64))
         assertEquals(16 to 8, artworkSampleSize(16, 8))
+    }
+
+    @Test fun largeArgbMatchesPreviousSampling() {
+        for ((width, height) in listOf(96 to 48, 48 to 96)) {
+            val art = patternedBitmap(width, height, Bitmap.Config.ARGB_8888)
+            try {
+                assertEquals(Bitmap.Config.ARGB_8888, art.config)
+                val originalPixels = readPixels(art)
+                val expected = previousSampling(art)
+                assertNotNull(expected)
+
+                val actual = sampleArtworkColors(art)
+                assertNotNull(actual)
+                assertEquals(expected, actual)
+                assertFalse(art.isRecycled)
+                assertArrayEquals(originalPixels, readPixels(art))
+            } finally {
+                art.recycle()
+            }
+        }
+    }
+
+    @Test fun smallImmutableArgbRemainsUsable() {
+        for ((width, height) in listOf(16 to 8, 32 to 16)) {
+            val mutable = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+                eraseColor(android.graphics.Color.RED)
+            }
+            val art = try {
+                requireNotNull(mutable.copy(Bitmap.Config.ARGB_8888, false))
+            } finally {
+                mutable.recycle()
+            }
+            try {
+                assertEquals(Bitmap.Config.ARGB_8888, art.config)
+                assertFalse(art.isMutable)
+                val originalPixels = readPixels(art)
+                repeat(2) {
+                    assertEquals(red, sampleArtworkColors(art))
+                    assertFalse(art.isRecycled)
+                    assertArrayEquals(originalPixels, readPixels(art))
+                }
+            } finally {
+                art.recycle()
+            }
+        }
+    }
+
+    @Test fun rgb565MatchesPreviousSampling() {
+        for ((width, height) in listOf(65 to 37, 16 to 8)) {
+            val art = patternedBitmap(width, height, Bitmap.Config.RGB_565)
+            try {
+                assertEquals(Bitmap.Config.RGB_565, art.config)
+                val originalPixels = readPixels(art)
+                val expected = previousSampling(art)
+                assertNotNull(expected)
+
+                val actual = sampleArtworkColors(art)
+                assertNotNull(actual)
+                assertEquals(expected, actual)
+                assertFalse(art.isRecycled)
+                assertArrayEquals(originalPixels, readPixels(art))
+            } finally {
+                art.recycle()
+            }
+        }
     }
 
     @Test fun sameArtworkDoesNotReextract() = runTest {
@@ -217,5 +283,38 @@ class ArtworkBackgroundTest {
         holder.update(this, song(bitmap()))
         assertNotSame(caller, withTimeout(5000) { worker.await() })
         holder.remove(this)
+    }
+
+    private fun patternedBitmap(width: Int, height: Int, config: Bitmap.Config): Bitmap {
+        val colors = intArrayOf(
+            0xffff4000.toInt(), 0x80ff4f00.toInt(), 0xc020b060.toInt(),
+            0xff3050d0.toInt(), 0x7fff00ff, 0x00000000,
+        )
+        val pixels = IntArray(width * height) { index ->
+            val x = index % width
+            val y = index / width
+            colors[(x / 7 + y / 5) % colors.size]
+        }
+        return Bitmap.createBitmap(width, height, config).apply {
+            setPixels(pixels, 0, width, 0, 0, width, height)
+        }
+    }
+
+    private fun readPixels(bitmap: Bitmap): IntArray =
+        IntArray(bitmap.width * bitmap.height).also {
+            bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        }
+
+    private fun previousSampling(bitmap: Bitmap): ArtworkColors? {
+        val copy = requireNotNull(bitmap.copy(Bitmap.Config.ARGB_8888, false))
+        var sampled: Bitmap? = null
+        return try {
+            val (width, height) = artworkSampleSize(copy.width, copy.height)
+            sampled = Bitmap.createScaledBitmap(copy, width, height, false)
+            extractArtworkColors(readPixels(sampled))
+        } finally {
+            if (sampled !== bitmap && sampled !== copy) sampled?.recycle()
+            if (copy !== bitmap) copy.recycle()
+        }
     }
 }
