@@ -4,6 +4,9 @@
 
 ## 再開時の要点 (2026-11-04 20時台)
 
+- **正式版の作業を開始**: ユーザーが「オーケー、正式版としてpushまでお願い」と指示。感想回答待ち/実機操作停止は解除し、v2.3.0 / 47へ昇格する。Task 190は版2ファイルとrelease buildのみ委譲し、終了後に司令塔がcodex-verifyで全テスト/debug buildを1回。README/導入文書、署名/実機上書き、main fast-forwardとv2.3.0-release新規タグのpushを行う。GitHub ls-remoteではmain/旧tag=3a15ac0・新tagなし、ローカルmainは980964bで現HEADの祖先。GitHubコネクタは404、既存SSH Gitは利用可能。
+- この時点のHEADはd151dd9、実機は両beta6 / 46。以下の「公開未実施」「感想待ち」は経過。認証済みWebデータ削除ONや設定黒画面等の未完了項目は、正式版の記録にも明示して残す。
+
 - 担当はこの会話のCodex暫定司令塔。`feat-apple-lyrics`、実装`3e93af7`、再起動検証記録`52f7b19`。本体/中継は実機とも **2.3.0-beta6 / 46**。実行中の実装担当・Gradleなし。既存未追跡 `.mcp.json` / Task 170 md・allowは対象外。push/main取り込み/正式公開は未実施。
 - **確認済み**: Task 189の旧6+新12=18テスト成功、Task 188の29テスト成功、両releaseビルド/同署名更新成功。beta6初回の保存値復元はREADY2,628ms・jp/SAVED、再入力不要。接続解除(Webログイン削除OFF)→新プロセスでも未接続を維持→既存Webログインから再取得はREADY1,941ms・jp/SAVED。実トークン/Cookie/認証画面は取得していない。
 - **端末全体の再起動後も復元成功**: 利用者の「ok つないだよ」後、同じ192.168.137.248:5555へdevice接続、sys.boot_completed=1、uptime148.44秒、YLuncher新PID4412を確認。HOME→設定一覧→Apple歌詞の通常導線だけで、再入力/WebログインなしにREADY2,635ms、ネイティブ画面jp/SAVED・入力空を確認した。公開refresh2,139ms/account200まで2,633ms。WebViews0。設定黒画面はこの導線では再現なし。利用者へのADB再有効化依頼は解決済み。
