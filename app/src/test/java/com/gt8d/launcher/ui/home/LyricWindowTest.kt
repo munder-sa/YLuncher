@@ -76,6 +76,38 @@ class LyricWindowTest {
         }
     }
 
+    @Test fun integratedMotionRetainsMixedHeightRowsAcrossRapidRetargets() {
+        val hs = heights(1000)
+        val motion = LyricMotion()
+        var previous = plan(hs, 500)
+        motion.prepare(previous) {}
+        for (current in 501..505) {
+            val before = motion.windowRows.mapValues { it.value.sample() }
+            val next = plan(hs, current, previous, motion.displayedTops())
+            motion.prepare(next) {}
+            before.forEach { (i, sample) ->
+                assertEquals(sample.top, motion.windowRows.getValue(i).sample().top, 0.5f)
+            }
+            for (elapsed in listOf(25f, 100f, 300f)) {
+                motion.advance(elapsed)
+                val samples = motion.windowRows.mapValues { it.value.sample() }
+                samples.keys.sorted().zipWithNext().forEach { (a, b) ->
+                    assertTrue("overlap rows=$a,$b current=$current time=$elapsed",
+                        samples.getValue(b).top - samples.getValue(a).top >= hs[a] - 0.001f)
+                }
+            }
+            assertTrue(next.rows.keys.containsAll(previous.rows.keys))
+            assertSame(next, next.complete(previous.generation, true, true))
+            previous = next
+        }
+        motion.advance(900f)
+        motion.windowRows.values.forEach { assertEquals(it.targetTop, it.sample().top, 0.5f) }
+        val completed = previous.complete(previous.generation, true, true)
+        motion.retainWindowRows(completed.rows.keys)
+        assertEquals(completed.rows.keys, motion.windowRows.keys)
+        assertTrue(completed.rows.size < previous.rows.size)
+    }
+
     @Test fun firstLastBeforeFirstAndEmpty() {
         val hs = heights(30)
         for (i in listOf(-1, 0, 29)) assertCoverage(plan(hs, i), hs)

@@ -20,7 +20,10 @@ fun visibleMotionRows(startTops: List<Float>, targetTops: List<Float>, heights: 
     fun intersects(top: Float, height: Int) = top.isFinite() && height > 0 &&
         top < viewportHeight && top.toDouble() + height > 0
     return heights.indices.filterTo(mutableSetOf()) {
-        intersects(startTops[it], heights[it]) || intersects(targetTops[it], heights[it])
+        intersects(startTops[it], heights[it]) || intersects(targetTops[it], heights[it]) ||
+            (startTops[it].isFinite() && targetTops[it].isFinite() && heights[it] > 0 &&
+                minOf(startTops[it], targetTops[it]) < viewportHeight &&
+                maxOf(startTops[it], targetTops[it]) + heights[it] > 0)
     }
 }
 
@@ -41,9 +44,49 @@ fun canStaggerWithoutOverlap(startTops: List<Float>, targetTops: List<Float>, he
 
 internal data class LyricMotionSample(val top: Float, val scale: Float)
 
-/** One finite clock shared by visible rows. Only layer blocks read its snapshot state. */
+/** One finite clock shared by retained rows. Only layer blocks read its snapshot state. */
 internal class LyricMotion {
-    internal class Timeline(val durationMs: Int) {
+    var windowRows: Map<Int, Row> = emptyMap()
+        private set
+    private var windowGeneration = 0L
+
+    /** Prepared outside measure/layout. Identity is the absolute lyric row, not its window slot. */
+    fun prepare(plan: LyricWindowPlan, onComplete: () -> Unit) {
+        if (windowGeneration == plan.generation) return
+        val ids = plan.rows.keys.toList()
+        val starts = ids.map { i ->
+            val r = plan.rows.getValue(i)
+            if (plan.animated) windowRows[i]?.displayed ?: LyricMotionSample(r.startTop,
+                if (i == plan.current - 1) 1f else LyricsVisualStyle.InactiveScale)
+            else LyricMotionSample(r.targetTop, if (i == plan.current) 1f else LyricsVisualStyle.InactiveScale)
+        }
+        val targets = ids.map { plan.rows.getValue(it).targetTop }
+        val heights = ids.map { plan.rows.getValue(it).heightPx }
+        val visible = if (plan.animated) visibleMotionRows(starts.map { it.top }, targets, heights,
+            plan.geometry.heightPx) + ids.indexOf(plan.current) else emptySet()
+        val proposed = ids.indices.map { if (it in visible) lineDelayMs(ids[it], plan.current) else 0 }
+        val delays = if (canStaggerWithoutOverlap(starts.map { it.top }, targets, heights, proposed))
+            proposed else List(ids.size) { 0 }
+        val next = Timeline(if (plan.animated) LyricsVisualStyle.ScrollMs + (delays.maxOrNull() ?: 0) else 0,
+            onComplete)
+        windowRows = ids.indices.associate { slot ->
+            val id = ids[slot]
+            val scale = if (id == plan.current) 1f else LyricsVisualStyle.InactiveScale
+            // Retained guard rows also keep their last output on retargeting. They share this
+            // finite clock (no per-row job) and may enter a later window before completion.
+            val active = plan.animated
+            id to Row(targets[slot], if (active) starts[slot] else LyricMotionSample(targets[slot], scale),
+                scale, delays[slot], active, next)
+        }
+        timeline = next
+        windowGeneration = plan.generation
+        requests.trySend(next)
+    }
+
+    fun retainWindowRows(ids: Set<Int>) { windowRows = windowRows.filterKeys { it in ids } }
+
+    fun displayedTops(): Map<Int, Float> = windowRows.mapValues { it.value.displayed.top }
+    internal class Timeline(val durationMs: Int, var onComplete: (() -> Unit)? = null) {
         val elapsed = mutableFloatStateOf(0f)
     }
 
@@ -122,6 +165,9 @@ internal class LyricMotion {
                     onFrame()
                 }
             }
+            val finished = next.onComplete
+            next.onComplete = null
+            finished?.invoke()
         }
     }
 }

@@ -6,6 +6,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
@@ -28,10 +34,137 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w600dp-h1000dp")
 class LyricsPaneTest {
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun cachedWordBoundaryMatchesOriginalPixelsIncludingWrappedLineClear() {
+        for (density in listOf(1f, 2f)) for (width in listOf(80, 160)) {
+            val cached = Brush.horizontalGradient(listOf(Color.Black, Color.Transparent),
+                startX = 0f, endX = 24 * density)
+            for (x in listOf(0f, 8.5f, 40f, width.toFloat())) for (line in 0..1) {
+                fun render(original: Boolean): ImageBitmap {
+                    val image = ImageBitmap(width, 64)
+                    CanvasDrawScope().draw(Density(density), LayoutDirection.Ltr, Canvas(image), Size(width.toFloat(), 64f)) {
+                        drawRect(Color.White)
+                        val top = line * 32f
+                        val bottom = top + 32f
+                        if (original) {
+                            clipRect(0f, top, size.width, bottom) {
+                                drawRect(Brush.horizontalGradient(listOf(Color.Black, Color.Transparent),
+                                    startX = x - 12 * density, endX = x + 12 * density), blendMode = BlendMode.DstIn)
+                            }
+                            if (bottom < size.height) drawRect(Color.Transparent, Offset(0f, bottom),
+                                Size(size.width, size.height - bottom), blendMode = BlendMode.Clear)
+                        } else drawLyricWordBoundary(cached, x, top, bottom)
+                    }
+                    return image
+                }
+                val expected = render(true).toPixelMap()
+                val actual = render(false).toPixelMap()
+                for (y in 0 until 64) for (column in 0 until width) {
+                    assertEquals("density=$density width=$width x=$x line=$line pixel=$column,$y",
+                        expected[column, y].alpha, actual[column, y].alpha, 1f / 255f)
+                }
+            }
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun edgeMaskKeeps32dpFadeAndHandlesZeroSize() {
+        assertNull(lyricEdgeBrush(0f, 32f))
+        for (density in listOf(1f, 2f)) {
+            val height = (120 * density).toInt()
+            val image = ImageBitmap(8, height)
+            CanvasDrawScope().draw(Density(density), LayoutDirection.Ltr, Canvas(image), Size(8f, height.toFloat())) {
+                drawRect(Color.White)
+                drawRect(lyricEdgeBrush(size.height, 32 * density)!!, blendMode = BlendMode.DstIn)
+            }
+            val pixels = image.toPixelMap()
+            assertEquals(1f, pixels[4, height / 2].alpha, 0f)
+            assertEquals(1f, pixels[4, (32 * density).toInt()].alpha, 0f)
+            assertTrue(pixels[4, 0].alpha < 0.04f)
+            assertTrue(pixels[4, height - 1].alpha < 0.04f)
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun fixedBrushesAreNotRebuiltByWordProgressOrLineChanges() {
+        now = now.copy(positionMs = 1500, playing = true, positionUpdatedAt = clock)
+        show(LyricsState.Synced(listOf(
+            LyricLine(1000, "単語", listOf(LyricWord(1000, 0))),
+            LyricLine(10000, "次の単語", listOf(LyricWord(10000, 0))))))
+        drawPane()
+        assertTrue(observer.maskBrushes > 0)
+        assertTrue(observer.wordBrushes > 0)
+        val counts = observer.maskBrushes to observer.wordBrushes
+        val layoutCounts = listOf(observer.compositions, observer.measures, observer.placements)
+        repeat(10) {
+            rule.runOnIdle { clock += 16 }
+            rule.mainClock.advanceTimeByFrame()
+            drawPane()
+        }
+        assertEquals(counts, observer.maskBrushes to observer.wordBrushes)
+        assertEquals(layoutCounts, listOf(observer.compositions, observer.measures, observer.placements))
+        moveTo(10)
+        drawPane()
+        assertEquals(counts.first, observer.maskBrushes)
+        assertEquals(counts.second + 1, observer.wordBrushes)
+        val afterLineChange = observer.maskBrushes to observer.wordBrushes
+        rule.mainClock.advanceTimeBy(250)
+        drawPane()
+        assertEquals(afterLineChange, observer.maskBrushes to observer.wordBrushes)
+        rule.runOnIdle { paneWidth = 160.dp; Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(64)
+        drawPane()
+        assertTrue(observer.maskBrushes > counts.first)
+        assertTrue(observer.wordBrushes > counts.second)
+    }
+    @Test fun longLyricsConstructAndMeasureOnlyLocalWindow() {
+        val sample = List(10000) { LyricLine(it * 1000L, "歌詞 $it") }
+        now = now.copy(positionMs = 5000000)
+        show(LyricsState.Synced(sample))
+        assertTrue(observer.constructedRows.isNotEmpty())
+        assertTrue(observer.constructedRows.size < 40)
+        assertEquals(observer.constructedRows, observer.measuredRows)
+        assertTrue(observer.constructedRows.all { kotlin.math.abs(it - 5000) < 30 })
+        val counts = listOf(observer.compositions, observer.measures, observer.placements, observer.frameUpdates)
+        rule.mainClock.advanceTimeBy(1000)
+        assertEquals(counts, listOf(observer.compositions, observer.measures, observer.placements, observer.frameUpdates))
+        println("window long: total=${sample.size}, constructed=${observer.constructedRows.size}, measured=${observer.measuredRows.size}, idleObserverDelta=0")
+    }
+
+    @Test fun firstWindowDisplaySnapsWithoutAppearanceJobs() {
+        now = now.copy(positionMs = 1000)
+        show()
+        assertEquals(1f, observer.probes.getValue(0).alpha, 0f)
+        assertEquals(0, observer.alphaJobs)
+        assertEquals(0, observer.emphasisJobs)
+    }
+
+    @Test fun windowBeforeFirstToFirstPreservesFadeWithoutMovement() {
+        now = now.copy(positionMs = 0)
+        show()
+        assertEquals(0.62f, observer.probes.getValue(0).alpha, 0f)
+        moveTo(1, 200)
+        val row = observer.probes.getValue(0)
+        assertFalse(row.animated)
+        assertTrue(row.alpha > 0.62f && row.alpha < 1f)
+        rule.mainClock.advanceTimeBy(500)
+        assertEquals(1f, row.alpha, 0f)
+    }
+
+    @Test fun onlyCurrentWordRowHasOverlayAtRest() {
+        val sample = List(100) { LyricLine(it * 1000L, "単語 $it", listOf(LyricWord(it * 1000L, 0))) }
+        now = now.copy(positionMs = 50000)
+        show(LyricsState.Synced(sample))
+        assertEquals(setOf(50), observer.overlayRows)
+        assertEquals(0, observer.alphaJobs)
+        assertEquals(0, observer.emphasisJobs)
+        println("word overlays at rest: ${observer.overlayRows.size}, alphaJobs=${observer.alphaJobs}, emphasisJobs=${observer.emphasisJobs}")
+    }
     private fun ttmlLines(firstEnd: String = "1.4") = kotlinx.coroutines.runBlocking {
         val parsed = com.gt8d.launcher.media.lyrics.TtmlParser.parse("""
             <tt xmlns="http://www.w3.org/ns/ttml"><body><div>
@@ -88,20 +221,25 @@ class LyricsPaneTest {
     private lateinit var controller: ActivityController<ComponentActivity>
     private val lines = listOf(LyricLine(1000, "一"), LyricLine(2000, "二"), LyricLine(3000, "三"))
     private var clock = 1000L
+    private var paneWidth by mutableStateOf(329.dp)
+    private var paneHeight by mutableStateOf(240.dp)
+    private var fontScale by mutableFloatStateOf(1f)
+    private var paneState by mutableStateOf<LyricsState>(LyricsState.Synced(lines))
     private val observer = LyricsPaneObserver()
     private var now by mutableStateOf(NowPlaying("dummy", "架空の曲", "架空の人", null, null, false, false,
         positionMs = 2500, metaTitle = "架空の曲"))
     private fun show(state: LyricsState = LyricsState.Synced(lines), detailSemantics: Boolean = false) {
+        paneState = state
         rule.mainClock.autoAdvance = false
         controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         controller.get().setContent { LauncherTheme {
-            CompositionLocalProvider(LocalLyricsPaneObserver provides observer, LocalDensity provides Density(1f, 1f)) {
+            CompositionLocalProvider(LocalLyricsPaneObserver provides observer, LocalDensity provides Density(1f, fontScale)) {
                 if (detailSemantics) {
                     CompositionLocalProvider(LocalLyricsDetailSemantics provides true) {
-                        LyricsPane(state, now, Modifier.size(329.dp, 240.dp)) { clock }
+                        LyricsPane(paneState, now, Modifier.size(paneWidth, paneHeight)) { clock }
                     }
                 } else {
-                    LyricsPane(state, now, Modifier.size(329.dp, 240.dp)) { clock }
+                    LyricsPane(paneState, now, Modifier.size(paneWidth, paneHeight)) { clock }
                 }
             }
         } }
@@ -110,6 +248,121 @@ class LyricsPaneTest {
         rule.waitForIdle()
     }
     @After fun cleanup() { if (::controller.isInitialized) controller.pause().stop().destroy() }
+    private fun moveTo(row: Int, elapsed: Long = 64) {
+        rule.runOnIdle { now = now.copy(positionMs = row * 1000L); Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(elapsed)
+        rule.waitForIdle()
+    }
+
+    private fun drawPane() {
+        rule.runOnIdle {
+            val view = controller.get().window.decorView
+            val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+            view.draw(android.graphics.Canvas(bitmap))
+            bitmap.recycle()
+        }
+    }
+
+    @Test fun windowSizeDoesNotGrowWithSongLength() {
+        now = now.copy(positionMs = 500000)
+        show(LyricsState.Synced(List(1000) { LyricLine(it * 1000L, "歌詞") }))
+        val shortWindow = observer.constructedRows
+        rule.runOnIdle {
+            paneState = LyricsState.Synced(List(100000) { LyricLine(it * 1000L, "歌詞") })
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeBy(64)
+        assertEquals(shortWindow, observer.constructedRows)
+        assertEquals(shortWindow, observer.measuredRows)
+        assertTrue(observer.probes.values.all { !it.animated })
+        println("window song lengths: 1000=${shortWindow.size}, 100000=${observer.constructedRows.size}")
+    }
+
+    @Test fun windowMovementKeepsEnteringRowsAndShrinksOnlyAfterCompletion() {
+        now = now.copy(positionMs = 500000)
+        show(LyricsState.Synced(List(1000) { LyricLine(it * 1000L, "歌詞") }))
+        val initial = observer.constructedRows
+        val height = observer.probes.getValue(500).height
+        moveTo(501)
+        val moving = observer.constructedRows
+        assertTrue(moving.containsAll(initial))
+        for (i in 480..520) {
+            val start = 120f - height / 2f + (i - 500) * (height + 16)
+            val end = start - height - 16
+            if (minOf(start, end) < 240 && maxOf(start, end) + height > 0) assertTrue(i in moving)
+        }
+        val counts = listOf(observer.compositions, observer.measures, observer.placements)
+        val jobs = observer.alphaJobs to observer.emphasisJobs
+        rule.mainClock.advanceTimeBy(350)
+        assertEquals(counts, listOf(observer.compositions, observer.measures, observer.placements))
+        assertEquals(jobs, observer.alphaJobs to observer.emphasisJobs)
+        assertEquals(moving, observer.constructedRows)
+        assertEquals(6, observer.alphaJobs)
+        assertEquals(2, observer.emphasisJobs)
+        rule.mainClock.advanceTimeBy(650)
+        assertTrue(observer.constructedRows.size < moving.size)
+        val current = observer.probes.getValue(501)
+        assertEquals(120f, current.top + current.height / 2f, 0.5f)
+        println("window movement: initial=${initial.size}, moving=${moving.size}, settled=${observer.constructedRows.size}, activeObserverDelta=0, alphaJobs=${jobs.first}, emphasisJobs=${jobs.second}")
+    }
+
+    @Test fun wordOverlaysSurviveMultipleChangesThenExpireWithoutRestart() {
+        val sample = List(1000) { LyricLine(it * 1000L, "単語", listOf(LyricWord(it * 1000L, 0))) }
+        now = now.copy(positionMs = 500500)
+        show(LyricsState.Synced(sample))
+        moveTo(501, 200)
+        assertEquals(setOf(500, 501), observer.overlayRows)
+        moveTo(502, 64)
+        assertEquals(setOf(500, 501, 502), observer.overlayRows)
+        println("word overlays during rapid changes: ${observer.overlayRows.size}")
+        rule.mainClock.advanceTimeBy(350)
+        assertEquals(setOf(501, 502), observer.overlayRows)
+        rule.mainClock.advanceTimeBy(250)
+        assertEquals(setOf(502), observer.overlayRows)
+        moveTo(505)
+        assertEquals(setOf(505), observer.overlayRows)
+        assertTrue(observer.probes.values.all { !it.animated })
+    }
+
+    @Test fun windowJumpsBackwardsAndTrackChangesSnap() {
+        now = now.copy(positionMs = 500000)
+        show(LyricsState.Synced(List(1000) { LyricLine(it * 1000L, "歌詞") }))
+        moveTo(501, 200)
+        for (row in listOf(503, 499)) {
+            moveTo(row)
+            assertTrue(observer.probes.values.all { !it.animated })
+            val current = observer.probes.getValue(row)
+            assertEquals(120f, current.top + current.height / 2f, 0.5f)
+        }
+        moveTo(500, 200)
+        rule.runOnIdle { now = now.copy(title = "別の曲", metaTitle = "別の曲"); Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(64)
+        assertTrue(observer.probes.values.all { !it.animated })
+        val current = observer.probes.getValue(500)
+        assertEquals(120f, current.top + current.height / 2f, 0.5f)
+        val rows = observer.constructedRows
+        rule.mainClock.advanceTimeBy(1000)
+        assertEquals(rows, observer.constructedRows)
+    }
+
+    @Test fun widthFontAndZeroSizeInvalidateWindowGeometry() {
+        now = now.copy(positionMs = 500000)
+        show(LyricsState.Synced(List(1000) { LyricLine(it * 1000L, "歌詞の長い行\n折り返し") }))
+        moveTo(501, 200)
+        rule.runOnIdle { paneWidth = 160.dp; fontScale = 1.5f; Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(64)
+        assertTrue(observer.probes.values.all { !it.animated })
+        val current = observer.probes.getValue(501)
+        assertEquals(120f, current.top + current.height / 2f, 0.5f)
+        rule.runOnIdle { paneWidth = 0.dp; paneHeight = 0.dp; Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(64)
+        assertTrue(observer.constructedRows.size < 40)
+        rule.runOnIdle { paneWidth = 329.dp; paneHeight = 240.dp; Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(64)
+        assertTrue(observer.probes.values.all { !it.animated })
+        val restored = observer.probes.getValue(501)
+        assertEquals(120f, restored.top + restored.height / 2f, 0.5f)
+    }
     private fun center(text: String): Float {
         val rect = rule.onNodeWithText(text).getBoundsInRoot()
         return (rect.top.value + rect.bottom.value) / 2

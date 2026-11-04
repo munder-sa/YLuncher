@@ -77,7 +77,7 @@ internal class LyricWindowPlan internal constructor(
  * generation is a monotonically increasing preparation token, including across song changes.
  *
  * During retargeting displayedTops must contain every retained row's last layer output; a
- * settled plan may omit it. Newly entering rows extend the old target geometry. Their motion
+ * settled plan may omit it. Newly entering rows extend the last displayed boundary geometry. Their motion
  * and any per-row delay stay within the endpoint envelope, even for nonmonotonic staggering.
  * Contiguous boundary guard rows allow neighbour overlap checks without distant measurements.
  */
@@ -150,10 +150,19 @@ internal fun planLyricWindow(
         } while (tops.size != oldSize)
     }
     expand(distance)
+    fun startTop(i: Int, target: Float): Float {
+        if (!animated) return target
+        displayedTops[i]?.let { return it }
+        previous!!.rows[i]?.let { return it.targetTop }
+        // During rapid retargeting the boundary may not have reached its old target yet.
+        // Extending that target would insert a new neighbour inside the retained boundary row.
+        val boundary = i.coerceIn(previous.rows.keys.min(), previous.rows.keys.max())
+        val displayedBoundary = displayedTops[boundary] ?: previous.rows.getValue(boundary).targetTop
+        return displayedBoundary + target - tops.getValue(boundary)
+    }
     val rows = tops.mapValues { (i, target) ->
         val (key, h) = cache.getValue(i)
-        val start = if (animated) displayedTops[i] ?: previous!!.rows[i]?.targetTop ?: (target + offset) else target
-        LyricWindowRow(key, h, start, target)
+        LyricWindowRow(key, h, startTop(i, target), target)
     }.toMap()
 
     // Prepare the smaller arrival window now; completion needs no measurement or state writes.
