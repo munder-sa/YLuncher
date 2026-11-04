@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="app_webview" />
+        <exclude domain="sharedpref" path="WebViewChromiumPrefs.xml" />
+        <exclude domain="sharedpref" path="WebViewProfilePrefsDefault.xml" />
+        <exclude domain="sharedpref" path="AwOriginVisitLoggerPrefs.xml" />
+        <exclude domain="database" path="http_auth.db" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="app_webview" />
+        <exclude domain="sharedpref" path="WebViewChromiumPrefs.xml" />
+        <exclude domain="sharedpref" path="WebViewProfilePrefsDefault.xml" />
+        <exclude domain="sharedpref" path="AwOriginVisitLoggerPrefs.xml" />
+        <exclude domain="database" path="http_auth.db" />
+    </device-transfer>
+</data-extraction-rules>

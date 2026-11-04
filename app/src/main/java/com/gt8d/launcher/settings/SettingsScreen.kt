@@ -86,6 +86,8 @@ fun SettingsHost(
     launchablePackages: () -> List<String> = { AppGraph.catalog.launchables().map { it.pkg } },
     iconFor: ((String) -> ImageBitmap?)? = null,
     appleMusic: AppleMusicSession? = null,
+    onAppleMusicWebLogin: (() -> Unit)? = null,
+    appleMusicWebData: AppleMusicWebData? = null,
 ) {
     var nav by remember { mutableStateOf(if (initialRoute == null) SettingsNav() else SettingsNav(listOf(SettingsRoute.Root, initialRoute))) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -149,7 +151,8 @@ fun SettingsHost(
                 if (appleMusic == null) {
                     Text("接続設定を利用できません", color = Palette.Muted, fontSize = Dims.BodyText)
                 } else {
-                    AppleMusicLyricsScreen(appleMusic)
+                    AppleMusicLyricsScreen(appleMusic, onWebLogin = onAppleMusicWebLogin,
+                        webData = appleMusicWebData)
                 }
             } else if (nav.current == SettingsRoute.Permissions) {
                 AppPermissionsScreen()

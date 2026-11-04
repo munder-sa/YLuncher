@@ -1,0 +1,19 @@
+write app/build.gradle.kts
+write app/src/main/AndroidManifest.xml
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsActivity.kt
+write app/src/main/java/com/gt8d/launcher/settings/SettingsScreen.kt
+write app/src/main/java/com/gt8d/launcher/settings/AppleMusicLyricsScreen.kt
+write app/src/test/java/com/gt8d/launcher/settings/AppleMusicLyricsScreenTest.kt
+create app/src/main/java/com/gt8d/launcher/media/lyrics/AppleMusicRestoreTrigger.kt
+create app/src/main/java/com/gt8d/launcher/settings/AppleMusicWebLoginActivity.kt
+create app/src/main/java/com/gt8d/launcher/settings/AppleMusicWebLoginController.kt
+create app/src/main/java/com/gt8d/launcher/settings/AppleMusicWebData.kt
+create app/src/main/res/xml/apple_music_backup_rules.xml
+create app/src/main/res/xml/apple_music_data_extraction_rules.xml
+create app/src/main/assets/third_party/apple_music_webview.txt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/AppleMusicRestoreTriggerTest.kt
+create app/src/test/java/com/gt8d/launcher/settings/AppleMusicWebLoginTest.kt
+create app/src/test/java/com/gt8d/launcher/settings/AppleMusicWebDataTest.kt
+command python3 -c 'from zipfile import ZipFile; z=ZipFile("/home/munde/.codex/attachments/7d3a9c1a-fe55-4572-ba63-4c88f6aa957f/MusicToken-source.zip"); print(z.read("MusicToken/src/local/musictoken/MainActivity.java").decode()); print(z.read("MusicToken/THIRD_PARTY_NOTICES.txt").decode()); print(z.read("MusicToken/APACHE-2.0.txt").decode())'
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AppleMusicRestoreTriggerTest' --tests 'com.gt8d.launcher.settings.AppleMusicLyricsScreenTest' --tests 'com.gt8d.launcher.settings.AppleMusicWebLoginTest' --tests 'com.gt8d.launcher.settings.AppleMusicWebDataTest' --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsRepositoryTest'

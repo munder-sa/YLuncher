@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,9 +25,20 @@ import com.gt8d.launcher.media.lyrics.AppleLyricsReason
 import com.gt8d.launcher.media.lyrics.AppleLyricsResult
 import com.gt8d.launcher.media.lyrics.AppleMusicSession
 import com.gt8d.launcher.media.lyrics.AppleMusicStatus
+import com.gt8d.launcher.media.lyrics.AppleCredentialStore
+import com.gt8d.launcher.media.lyrics.AppleCredentialReadResult
+import com.gt8d.launcher.media.lyrics.AppleCredentialSource
+import com.gt8d.launcher.media.lyrics.StoredAppleCredential
+import com.gt8d.launcher.media.lyrics.AppleMusicRetentionStatus
 import com.gt8d.launcher.media.lyrics.LyricsState
 import com.gt8d.launcher.ui.theme.LauncherTheme
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -34,6 +46,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import org.junit.Assert.*
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -64,16 +77,24 @@ class AppleMusicLyricsScreenTest {
     private lateinit var activity: ComponentActivity
     private var visible by mutableStateOf(true)
     private val actions = SettingsActions({}, {}, { false }, {}, { false })
+    private val persistentFixtures = mutableListOf<PersistentFixture>()
+
+    @After fun releasePersistence() {
+        persistentFixtures.forEach { it.store.releaseAll(); it.scope.cancel() }
+    }
 
     private fun host(
         initialRoute: SettingsRoute? = SettingsRoute.AppleMusicLyrics,
         session: AppleMusicSession? = fixture.session,
+        onLogin: (() -> Unit)? = null,
+        webData: AppleMusicWebData? = null,
     ) {
         rule.setContent {
             LauncherTheme {
                 activity = LocalContext.current as ComponentActivity
                 if (visible) SettingsHost(actions, { visible = false }, {},
-                    initialRoute = initialRoute, appleMusic = session)
+                    initialRoute = initialRoute, appleMusic = session,
+                    onAppleMusicWebLogin = onLogin, appleMusicWebData = webData)
             }
         }
     }
@@ -301,7 +322,7 @@ class AppleMusicLyricsScreenTest {
         ShadowLog.clear()
         host()
         val failures = mapOf(
-            AppleLyricsReason.AUTH_REQUIRED to "接続を確認できませんでした。トークンを確認して再入力してください。",
+            AppleLyricsReason.AUTH_REQUIRED to "接続を確認できませんでした。Apple Musicにもう一度ログインしてください。",
             AppleLyricsReason.NETWORK to "通信できませんでした。接続を確認してやり直してください。",
             AppleLyricsReason.TIMEOUT to "確認に時間がかかりました。もう一度お試しください。",
             AppleLyricsReason.WAIT to "しばらく待ってから接続を確認してください。",
@@ -355,8 +376,8 @@ class AppleMusicLyricsScreenTest {
         open()
         val root = rule.onRoot().fetchSemanticsNode().boundsInRoot
         for (description in listOf(
-            "Apple Music Web のトークンを入力して接続を確認します。",
-            "アプリの終了・再起動後は再入力が必要です。",
+            "Apple Musicにログインして歌詞を接続します。",
+            "接続情報をこの端末に保存し、再起動後に復元します。",
             "取得できない曲は、ほかの歌詞サービスで表示します。",
         )) {
             val node = rule.onNodeWithText(description).performScrollTo().assertIsDisplayed()
@@ -394,6 +415,257 @@ class AppleMusicLyricsScreenTest {
         rule.onNodeWithTag("settings_item_apple_music_lyrics").assertExists()
         assertEquals(0, fixture.connectCalls.size)
         noLyrics()
+    }
+
+    @Test fun loginCallbackIsOptionalAndDiscardsManualInput() {
+        var calls = 0
+        var callback by mutableStateOf<(() -> Unit)?>(null)
+        rule.setContent {
+            LauncherTheme {
+                SettingsHost(actions, {}, {}, initialRoute = SettingsRoute.AppleMusicLyrics,
+                    appleMusic = fixture.session, onAppleMusicWebLogin = callback)
+            }
+        }
+        rule.onNodeWithTag("apple_music_web_login").assertIsNotEnabled()
+        input(TOKEN)
+        rule.runOnIdle { callback = { calls++ } }
+        click("apple_music_web_login")
+        assertEquals(1, calls)
+        emptyInput()
+        assertEquals(0, fixture.connectCalls.size)
+        assertNoSecrets()
+    }
+
+    @Test fun savedRestoreRequiresValidationAndRetryKeepsSessionCooldown() {
+        val f = persistent()
+        f.store.value = saved()
+        val validation = CompletableDeferred<AppleConnectResult>()
+        f.answer = { validation.await() }
+        host(session = f.session, webData = f.webData, onLogin = {})
+        awaitPersistence { f.calls == 1 }
+        rule.onNodeWithTag("apple_music_retention").assertTextEquals("この端末に保存済み")
+        rule.onNodeWithTag("apple_music_status").assertTextEquals("接続を確認中")
+        rule.runOnIdle { validation.complete(AppleConnectResult.Unavailable(AppleLyricsReason.NETWORK, 120L)) }
+        rule.onNodeWithTag("apple_music_status").assertTextEquals("接続の再確認が必要")
+        rule.onNodeWithText("通信できませんでした。接続を確認してやり直してください。").assertExists()
+        click("apple_music_restore")
+        assertEquals(1, f.calls)
+        rule.runOnIdle { f.now += 60_000 }
+        click("apple_music_restore")
+        assertEquals(1, f.calls)
+        rule.runOnIdle { f.now += 60_000; f.answer = { AppleConnectResult.Ready("jp") } }
+        click("apple_music_restore")
+        awaitPersistence { f.session.state.value.status == AppleMusicStatus.CONNECTED }
+        rule.onNodeWithTag("apple_music_status").assertTextEquals("接続済み（地域: jp）")
+        assertEquals(2, f.calls)
+        assertEquals(1, f.store.reads)
+        assertNotNull(f.store.value)
+        assertNoSecrets()
+    }
+
+    @Test fun persistentManualConnectShowsSavingThenSavedAndWriteFailureIsSessionOnly() {
+        val f = persistent()
+        host(session = f.session, webData = f.webData, onLogin = {})
+        awaitPersistence { f.store.reads == 1 && f.session.retention.value.status == AppleMusicRetentionStatus.NONE }
+        f.store.writeGate = CountDownLatch(1)
+        try {
+            submit()
+            awaitPersistence { f.session.retention.value.status == AppleMusicRetentionStatus.SAVING }
+            rule.onNodeWithTag("apple_music_status").assertTextEquals("接続済み（地域: jp）")
+            rule.onNodeWithTag("apple_music_retention").assertTextEquals("接続情報を保存中")
+            rule.onNodeWithTag("apple_music_web_login").assertIsNotEnabled()
+            emptyInput()
+        } finally { f.store.writeGate?.countDown() }
+        awaitPersistence { f.session.retention.value.status == AppleMusicRetentionStatus.SAVED }
+        rule.onNodeWithTag("apple_music_retention").assertTextEquals("この端末に保存済み")
+        assertEquals(AppleCredentialSource.MANUAL, f.store.value?.source)
+        f.store.failWrite = true
+        submit(SECOND_TOKEN)
+        awaitPersistence { f.session.retention.value.status == AppleMusicRetentionStatus.SESSION_ONLY }
+        rule.onNodeWithTag("apple_music_status").assertTextEquals("接続済み（地域: jp）")
+        rule.onNodeWithTag("apple_music_retention").assertTextEquals("この起動中のみ接続できます")
+        assertNull(f.store.value)
+        emptyInput()
+        assertNoSecrets()
+    }
+
+    @Test fun readAndClearFailuresHaveSeparateFixedMessages() {
+        val f = persistent()
+        f.store.failRead = true
+        f.store.readGate = CountDownLatch(1)
+        try {
+            host(session = f.session, webData = f.webData)
+            rule.onNodeWithTag("apple_music_retention").assertTextEquals("保存した接続情報を読み込み中")
+        } finally { f.store.readGate?.countDown() }
+        awaitPersistence { f.session.retention.value.status == AppleMusicRetentionStatus.ERROR }
+        rule.onNodeWithTag("apple_music_retention").assertTextEquals(
+            "保存した接続情報を読み込めませんでした。もう一度ログインしてください。")
+        f.store.failClear = true
+        click("apple_music_disconnect")
+        rule.onNodeWithTag("apple_music_clear_web").performClick()
+        rule.onNodeWithTag("apple_music_disconnect_confirm").performClick()
+        awaitPersistence { f.session.retention.value.problem == com.gt8d.launcher.media.lyrics.AppleMusicRetentionProblem.CLEAR }
+        rule.onNodeWithTag("apple_music_retention").assertTextEquals("接続情報の削除に失敗しました。もう一度解除してください。")
+        rule.onNodeWithTag("apple_music_status").assertTextEquals("接続情報の削除を確認できません")
+        assertEquals(0, f.backend.calls)
+        assertNoSecrets()
+    }
+
+    @Test fun disconnectConfirmationDefaultsOnCancelDoesNothingAndOptOutOnlyClearsCredentials() {
+        val f = persistent()
+        f.store.value = saved()
+        host(session = f.session, webData = f.webData, onLogin = {})
+        awaitPersistence { f.session.state.value.status == AppleMusicStatus.CONNECTED }
+        input(SECOND_TOKEN)
+        val maskedInputBeforeDialog = rule.onNodeWithTag("apple_music_token").fetchSemanticsNode()
+            .config[SemanticsProperties.EditableText]
+        assertEquals(SECOND_TOKEN.length, maskedInputBeforeDialog.length)
+        assertNotEquals(AnnotatedString(SECOND_TOKEN), maskedInputBeforeDialog)
+        click("apple_music_disconnect")
+        rule.onNodeWithTag("apple_music_clear_web").assertIsOn()
+        rule.onNodeWithTag("apple_music_disconnect_cancel").performClick()
+        assertEquals(0, f.store.clears)
+        assertEquals(0, f.backend.calls)
+        assertEquals(AppleMusicStatus.CONNECTED, f.session.state.value.status)
+        rule.onNodeWithTag("apple_music_token").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, maskedInputBeforeDialog))
+        click("apple_music_disconnect")
+        rule.onNodeWithTag("apple_music_clear_web").assertIsOn().performClick().assertIsOff()
+        rule.onNodeWithTag("apple_music_disconnect_confirm").performClick()
+        awaitPersistence { f.session.retention.value.status == AppleMusicRetentionStatus.NONE }
+        assertEquals(1, f.store.clears)
+        assertEquals(0, f.backend.checks)
+        assertEquals(0, f.backend.calls)
+        assertNull(f.store.value)
+        emptyInput()
+        click("apple_music_disconnect")
+        rule.onNodeWithTag("apple_music_clear_web").assertIsOn()
+        rule.onNodeWithTag("apple_music_disconnect_cancel").performClick()
+        assertNoSecrets()
+    }
+
+    @Test fun confirmedDeletionContinuesAfterLeavingAndKeepsBothPendingStates() {
+        val f = persistent()
+        f.store.value = saved()
+        host(session = f.session, webData = f.webData, onLogin = {})
+        awaitPersistence { f.session.state.value.status == AppleMusicStatus.CONNECTED }
+        f.store.clearGate = CountDownLatch(1)
+        try {
+            click("apple_music_disconnect")
+            rule.onNodeWithTag("apple_music_clear_web").assertIsOn()
+            rule.onNodeWithTag("apple_music_disconnect_confirm").performClick()
+            rule.onNodeWithTag("apple_music_status").assertTextEquals("接続情報を削除中")
+            rule.onNodeWithTag("apple_music_web_data_status").assertTextEquals("Appleログイン情報を削除中")
+            rule.onNodeWithTag("apple_music_web_login").assertIsNotEnabled()
+            rule.onNodeWithTag("apple_music_connect").assertIsNotEnabled()
+            assertEquals(1, f.backend.calls)
+            rule.runOnIdle { visible = false }
+        } finally { f.store.clearGate?.countDown() }
+        rule.runOnIdle { f.backend.complete() }
+        awaitPersistence { f.session.retention.value.status == AppleMusicRetentionStatus.NONE }
+        assertEquals(AppleMusicWebDataState.CLEARED, f.webData.state.value)
+        assertNull(f.store.value)
+        rule.runOnIdle { visible = true }
+        emptyInput()
+        rule.onNodeWithTag("apple_music_status").assertTextEquals("未接続")
+        rule.onNodeWithTag("apple_music_web_data_status").assertTextEquals("Appleログイン情報を削除しました")
+        assertNoSecrets()
+    }
+
+    @Test @Config(qualifiers = "w516dp-h1000dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE) @TextLayoutMode(TextLayoutMode.Mode.REALISTIC)
+    fun newLoginAndDisconnectControlsFitNarrowPaneAndWebFailureIsSeparate() {
+        val f = persistent()
+        f.store.value = saved()
+        f.answer = { AppleConnectResult.Unavailable(AppleLyricsReason.NETWORK) }
+        f.backend.supported = false
+        host(session = f.session, webData = f.webData, onLogin = {})
+        awaitPersistence { f.session.state.value.status == AppleMusicStatus.NEEDS_ATTENTION }
+        val root = rule.onRoot().fetchSemanticsNode().boundsInRoot
+        for (tag in listOf("apple_music_web_login", "apple_music_restore", "apple_music_disconnect")) {
+            val node = rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().fetchSemanticsNode()
+            assertTrue(node.boundsInRoot.left >= root.left)
+            assertTrue(node.boundsInRoot.right <= root.right)
+        }
+        click("apple_music_disconnect")
+        rule.onNodeWithTag("apple_music_clear_web").assertIsOn().assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        rule.onNodeWithText("この端末のAppleログイン情報も削除", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertFalse("Label layout: size=${layouts.single().size}, paragraph=${layouts.single().multiParagraph.width}x${layouts.single().multiParagraph.height}",
+            layouts.single().hasVisualOverflow)
+        rule.onNodeWithTag("apple_music_disconnect_confirm").assertIsDisplayed().performClick()
+        awaitPersistence { f.session.retention.value.status == AppleMusicRetentionStatus.NONE }
+        rule.onNodeWithTag("apple_music_web_data_status").assertTextEquals(
+            "Appleログイン情報の削除に失敗しました。もう一度解除してください。")
+        rule.onNodeWithTag("apple_music_status").assertTextEquals("未接続")
+        assertNull(f.store.value)
+        assertNoSecrets()
+    }
+
+    private fun persistent() = PersistentFixture().also { persistentFixtures += it }
+    private fun awaitPersistence(condition: () -> Boolean) {
+        rule.waitUntil(10_000) {
+            // IO completion posts to Android's main looper; advancing Compose's clock alone
+            // does not drain that queue in Robolectric's paused-looper mode.
+            shadowOf(Looper.getMainLooper()).idle()
+            condition()
+        }
+    }
+    private fun saved() = StoredAppleCredential(TOKEN, "jp", AppleCredentialSource.WEB, 1_000L)
+
+    private class PersistentFixture {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val store = GatedStore()
+        val backend = WebBackend()
+        val webData = AppleMusicWebData(scope, backend)
+        var now = 1_000L
+        var calls = 0
+        var answer: suspend () -> AppleConnectResult = { AppleConnectResult.Ready("jp") }
+        val session = AppleMusicSession({ calls++; answer() },
+            { _, _, _ -> error("Settings must not request lyrics") }, store, scope, clock = { now })
+    }
+
+    private class GatedStore : AppleCredentialStore {
+        @Volatile var value: StoredAppleCredential? = null
+        @Volatile var reads = 0
+        @Volatile var clears = 0
+        @Volatile var failRead = false
+        @Volatile var failWrite = false
+        @Volatile var failClear = false
+        @Volatile var readGate: CountDownLatch? = null
+        @Volatile var writeGate: CountDownLatch? = null
+        @Volatile var clearGate: CountDownLatch? = null
+        override fun read(): AppleCredentialReadResult {
+            reads++
+            readGate?.let { check(it.await(20, TimeUnit.SECONDS)) }
+            if (failRead) throw IOException("$EXCEPTION_TEXT $TOKEN")
+            return value?.let { AppleCredentialReadResult.Ready(it) } ?: AppleCredentialReadResult.Missing
+        }
+        override fun write(credential: StoredAppleCredential): Boolean {
+            writeGate?.let { check(it.await(20, TimeUnit.SECONDS)) }
+            if (failWrite) return false
+            value = credential
+            return true
+        }
+        override fun clear(): Boolean {
+            clears++
+            clearGate?.let { check(it.await(20, TimeUnit.SECONDS)) }
+            if (failClear) return false
+            value = null
+            return true
+        }
+        fun releaseAll() { readGate?.countDown(); writeGate?.countDown(); clearGate?.countDown() }
+    }
+
+    private class WebBackend : AppleMusicWebData.Backend {
+        var checks = 0
+        var calls = 0
+        var supported = true
+        var callback: (() -> Unit)? = null
+        override fun supported(): Boolean { checks++; return supported }
+        override fun delete(onComplete: () -> Unit) { calls++; callback = onComplete }
+        fun complete() = checkNotNull(callback).invoke()
     }
 
     private fun assertNoSecrets() {

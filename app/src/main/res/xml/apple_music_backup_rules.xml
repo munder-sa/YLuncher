@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="root" path="app_webview" />
+    <exclude domain="sharedpref" path="WebViewChromiumPrefs.xml" />
+    <exclude domain="sharedpref" path="WebViewProfilePrefsDefault.xml" />
+    <exclude domain="sharedpref" path="AwOriginVisitLoggerPrefs.xml" />
+    <exclude domain="database" path="http_auth.db" />
+</full-backup-content>

@@ -63,7 +63,7 @@ flowchart LR
 - パスワードはアプリ独自の入力欄へ集めない。JavaScriptのネイティブブリッジ、WebViewデバッグ、file/contentアクセス、HTTP/mixed content、SSLエラーの無視は有効にしない。元コードの有効化されていない機能を追加しない。
 - 上位画面/ポップアップの遷移は元のApple HTTPS境界を引き継ぎ、紛らわしい別ドメイン、userinfo、443以外、intent/custom schemeを拒否。about:blankは信頼済みApple画面からのポップアップの初期状態に限る。URL本文をログへ出さず、表示するのは検証済みoriginだけ。
 - Cookie取得は画面が前面の間だけ。接続ボタンを押した時に再取得し、検出済みの古いコピーを使わない。文字列はdecodeせず、制御文字/既存サイズ制限で検証する。
-- GET_COOKIE_INFO非対応なら期限表示なしで接続可能とする。新依存は元アプリと同じAndroidX WebKit 1.8.0を第一候補とし、実装前に既存依存・R8・API利用との整合を確認する。取得画面以外の通常再生経路に依存を初期化しない。
+- GET_COOKIE_INFO非対応なら期限表示なしで接続可能とする。実装準備でAndroidX WebKit **1.13.0**を選んだ。元の1.8.0にない、完了通知付きWebStorageCompat.deleteBrowsingDataを利用するため。公式AARのminCompileSdk34は既存35の範囲。取得画面以外の通常再生経路にWebViewを初期化しない。
 - WebViewがない/無効、認証エラー、SSLエラー、画面再作成、プロセス死亡、中断は固定文言で安全に終了できる。手動入力の経路は残す。
 
 ## 復元・更新・解除の状態管理
@@ -112,3 +112,5 @@ flowchart LR
 - [アプリサンドボックス](https://source.android.com/docs/security/app-sandbox): 他アプリの私有データは直接共有されない。
 - [CookieManagerCompat](https://developer.android.com/reference/androidx/webkit/CookieManagerCompat): Cookie情報取得API。
 - [ActivityResultRegistry実装](https://github.com/androidx/androidx/blob/androidx-main/activity/activity/src/main/java/androidx/activity/result/ActivityResultRegistry.kt): 未配信の結果をSavedStateへ保持するため、結果Intentへ秘密値を入れない設計にした。
+- [WebStorageCompat](https://developer.android.com/reference/androidx/webkit/WebStorageCompat): 1.13追加のdeleteBrowsingDataはCookie/ネットワークcache/JS保存領域を対象に、完了callbackを提供する。機能非対応は明示失敗とし、削除完了を偽らない。
+- [ChromiumのWebView保存先](https://github.com/chromium/chromium/blob/main/android_webview/docs/net-debugging.md): 既定のアプリ内app_webview領域。既存WebView利用がないため既定profileを使い、root/app_webviewをバックアップから除外する。

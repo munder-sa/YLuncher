@@ -28,7 +28,11 @@ class SettingsActivity : ComponentActivity() {
                         else -> null
                     },
                     onOpenSet = { AppGraph.runner.open(it); finish() },
-                    appleMusic = AppGraph.appleMusic)
+                    appleMusic = AppGraph.appleMusic,
+                    onAppleMusicWebLogin = {
+                        startActivity(Intent(this, AppleMusicWebLoginActivity::class.java))
+                    },
+                    appleMusicWebData = AppGraph.appleMusicWebData)
             }
         }
     }

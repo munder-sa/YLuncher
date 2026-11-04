@@ -15,6 +15,9 @@ import com.gt8d.launcher.media.lyrics.AppleLyricsCache
 import com.gt8d.launcher.media.lyrics.AppleLyricsClient
 import com.gt8d.launcher.media.lyrics.AppleLyricsUrlConnectionTransport
 import com.gt8d.launcher.media.lyrics.AppleMusicSession
+import com.gt8d.launcher.media.lyrics.AndroidAppleCredentialStore
+import com.gt8d.launcher.media.lyrics.observeAppleMusicRestore
+import com.gt8d.launcher.settings.AppleMusicWebData
 import com.gt8d.launcher.media.lyrics.AppleWebTokenProvider
 import com.gt8d.launcher.media.lyrics.LyricsRepository
 import com.gt8d.launcher.media.lyrics.LrclibClient
@@ -81,9 +84,12 @@ object AppGraph {
         val transport = AppleLyricsUrlConnectionTransport()
         val tokens = AppleWebTokenProvider(transport)
         val client = AppleLyricsClient(transport, tokens)
-        AppleMusicSession(client::connect, client::fetch)
+        AppleMusicSession(client::connect, client::fetch, AndroidAppleCredentialStore(app), lyricsScope)
     }
+    val appleMusicWebData: AppleMusicWebData by lazy { AppleMusicWebData(lyricsScope) }
     val lyrics: LyricsRepository by lazy {
+        observeAppleMusicRestore(lyricsScope, MediaWatcher.nowPlaying,
+            latestConfig.map { it?.lyricsEnabled == true }) { appleMusic.restoreIfNeeded() }
         val versionName = try {
             app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
         } catch (_: Exception) {

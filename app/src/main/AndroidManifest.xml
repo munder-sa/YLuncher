@@ -43,6 +43,8 @@
         android:name=".LauncherApp"
         android:icon="@mipmap/ic_launcher"
         android:label="YLuncher"
+        android:fullBackupContent="@xml/apple_music_backup_rules"
+        android:dataExtractionRules="@xml/apple_music_data_extraction_rules"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
@@ -78,6 +80,11 @@
 
         <activity
             android:name=".settings.SettingsActivity"
+            android:exported="false"
+            android:resizeableActivity="true" />
+
+        <activity
+            android:name=".settings.AppleMusicWebLoginActivity"
             android:exported="false"
             android:resizeableActivity="true" />
 
