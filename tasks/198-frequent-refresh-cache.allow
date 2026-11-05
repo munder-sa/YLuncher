@@ -1,0 +1,4 @@
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+create app/src/main/java/com/gt8d/launcher/apps/FrequentAppsRefresher.kt
+create app/src/test/java/com/gt8d/launcher/apps/FrequentAppsRefresherTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.apps.FrequentAppsRefresherTest' --tests 'com.gt8d.launcher.apps.FrequentAppsTest' --tests 'com.gt8d.launcher.apps.UsageHistoryTest' --tests 'com.gt8d.launcher.ui.panel.PanelScreenTest'

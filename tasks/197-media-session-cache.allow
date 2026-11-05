@@ -1,0 +1,4 @@
+write app/src/main/java/com/gt8d/launcher/media/MediaWatcher.kt
+create app/src/main/java/com/gt8d/launcher/media/MediaSessionCache.kt
+create app/src/test/java/com/gt8d/launcher/media/MediaWatcherTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.MediaWatcherTest' --tests 'com.gt8d.launcher.media.NowPlayingTest' --tests 'com.gt8d.launcher.media.LyricsIdentityTest' --tests 'com.gt8d.launcher.media.LyricsMetadataProbeTest'

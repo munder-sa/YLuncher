@@ -2,6 +2,12 @@
 
 最終更新: 2026-11-06 (JST)
 
+## 中優先の負荷改善に着手 (2026-11-06)
+
+- ユーザーがMediaWatcher/SetRunner/AppGraph/ArtworkBackgroundの4候補から「効果がありそうなものから試して適用」を承認。担当はCodex暫定司令塔。基点7c06c7b、実機beta2/49、ADB192.168.137.200:40275。
+- [作業記録](performance/2026-11-06-runtime-cost.md)とTask197/198 md/allowを作成。通知単位のsnapshotと7日集計60秒キャッシュから着手し、別worktreeで委譲する。SetRunnerは共有watcherとキャンセル/timeout経路を確認中。ARGB_8888の原寸copy省略は既に実装済み。
+- 既存未追跡.mcp.json/Task170、過去の背景/Shader実験worktreeは維持。新たな正式化/pushはしない。
+
 ## 描画軽量化: 5までの比較・ベータ導入完了 (2026-11-06 01時台)
 
 - 担当は引き続き**Codex暫定司令塔**。ユーザーの「寝るので5まで」に従い、Task192〜196の比較・採否判断・ベータ作成・機械的な実機場面確認を完了。**見た目/操作感の利用者確認は起床後**。単語区間CPU20%削減は未達。正式化、main取り込み、push、公開は行っていない。
