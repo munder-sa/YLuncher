@@ -2,7 +2,16 @@
 
 最終更新: 2026-11-06 (JST)
 
-## v2.3.1正式ビルド・適用に着手 (2026-11-06)
+## v2.3.1正式ビルド・適用完了 (2026-11-06 08時台)
+
+- **Codex暫定司令塔**がユーザー依頼「リリースビルドを切って適用して」に対応。確認済みbeta3を両 **2.3.1 / 51** へ昇格し、GT8Dへ同署名上書き済み。機能追加なし。正式版の記録は[Task201](../tasks/201-v2.3.1-release.md)。以下のbeta3時点の「正式化しない」は当時の記録で、この依頼を受けて正式化した。
+- Task201 `.codex-bak/20261106-080632/` は版2ファイルのみ、逸脱なし、releaseビルド1回48秒成功。司令塔の既存codex-verifyは1回18分18秒で成功。app Debug/Release各2,044件、panelhost各5件、**合計4,098件・failure/error/skip 0**。両Debugビルド成功。追加修正/再試験なし。XMLと終了ログは `build/releases/v2.3.1/tests/`。
+- 配布物は `build/releases/v2.3.1/` の `YLuncher-2.3.1.apk`、`YLuncher-panel-2.3.1.apk`、`SHA256SUMS.txt`。本体SHA256 `c5712ded5e79ad785acd05f10b912fc17c01b6f6bd25a229ec4afa6f3e7f2da7`、中継 `58b61249e26af833d7e40c32b5d27b4e98f1f296690a131e489495931f4a2f0d`。署名は従来と一致、両非debuggable、実機base.apkのハッシュも一致。
+- 実機 `192.168.137.200:40275`、PID19652。既定HOME/通知リスナー/既存ユーザー補助を導入前後で照合し維持。再入力なしCONNECT READY1,417ms、怪獣のApple歌詞accepted=true（46行318単語、348ms）。ホームの単語塗り/背景、再生、パネル＋Maps、パネルから停止→HOMEを確認。最終は歌詞ON・怪獣76.176秒PAUSED、YouTubeもPAUSED。PID不変、同PIDAndroidRuntimeエラーなし。
+- 本体の実効ARTは **speed-profile / cmdline**。通常操作→SAVE_PROFILE result12→compileで確認。既知のINSTALL_PROFILE result3とは区別する。依存更新なし。SIM/ネットワーク/表示設定は変更なし。利用者の見た目/操作感確認、実車60Hz、長時間の熱/電力は未検証。前奏/通知/照会回数の改善を全体CPUや単語描画の改善へ拡大解釈しない。
+- 次: この正式版の差分と記録をコミットし、ローカルmainへfast-forward、新規ローカルv2.3.1-releaseタグを作成する。リモートpush/Release公開は今回未実施。終了時のGit状態は確定後に追記する。既存未追跡3件と不採用の実験worktreeは維持する。
+
+### 正式化開始時の記録
 
 - ユーザーの「リリースビルドを切って適用して」を受領。Codex暫定司令塔が確認済みbeta3/50を **2.3.1 / 51** へ昇格する。Task201は版2ファイルとreleaseビルド1回だけを委譲。終了後に既存codex-verifyを全範囲1回実行し、成功確認後に実機へ適用する。
 - 基点perf-runtime-cost/f523852。実機192.168.137.200:40275は両2.3.1-beta3/50、PID32366、怪獣16.574秒PAUSED/通常HOME。導入前のHOME/通知リスナー/accessibilityを/tmp/yluncher-231-before.jsonへ記録。機能変更や依存更新は追加せず、公開先へのpush/アップロードは今回の指示に含めない。

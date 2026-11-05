@@ -1,6 +1,6 @@
 # YLuncher
 
-GT8D（Android 15）用のカスタムランチャー、v2.3.0。左右の分割を「画面セット」として保存し、ひと押しで呼び出せます。
+GT8D（Android 15）用のカスタムランチャー、v2.3.1。左右の分割を「画面セット」として保存し、ひと押しで呼び出せます。
 
 ![ホーム：画面セットも音楽も、ここから。](docs/site/img/home.png)
 
@@ -49,7 +49,7 @@ YLuncher を既定のホームに設定します。
 adb shell cmd role add-role-holder android.app.role.HOME com.gt8d.launcher 0
 ```
 
-詳しくは [導入手順とv2.3.0の変更点](docs/install-v1.6.md#17-v2302026-11-04) を参照してください。
+詳しくは [導入手順とv2.3.1の変更点](docs/install-v1.6.md#18-v2312026-11-06) を参照してください。
 
 ## よくある質問
 
