@@ -52,3 +52,45 @@ Task197/198は別worktreeへ具体的md/allowで委譲し、Gradle最大2本。�
 - FrequentAppsRefresherが専用scopeを保持。権限例外は使用不可。空ランキングも成功とし、更新中は前回値を表示、null/例外/同世代cancelは手動fallbackへ戻す。キャンセルは再送出し、旧世代は公開しない。
 - 同じApplicationでhelperを保持、context/override/reset変更でclose。公開とcloseは同じlock、読取対象とAppCatalogはそのApplicationに固定。常駐timer、差分集計、新規依存は追加しない。
 - 2件を統合して確認版 **2.3.1-beta3 / 50** を作成する。SetRunner/追加画像変換は今回は適用しない。
+
+## 確認用ベータ3
+
+Task200 `.codex-bak/20261106-073852/` は版2ファイルのみ変更。`/home/munde/tools/gradle-run.sh :app:assembleRelease :panelhost:assembleRelease` を1回実行、**1分17秒で成功**。成功済みテストの再実行なし。本体/中継は50/2.3.1-beta3。署名SHA256は既存と同じ `44d8c612bd3948e265840f28adff0f820d5893d0ba24d888b041ca16544f7f6d`。
+
+| APK | SHA256 |
+|---|---|
+| `build/runtime-cost/beta3/app.apk` | `faca03ff569bab3fa8e31287768d015d83a44bb204182efbcc51c7f283942405` |
+| `build/runtime-cost/beta3/panelhost.apk` | `18e8b6c7be62721800a6063d31c32a96e5efea367b1cfdee94f45decbfc706e2` |
+
+両APKのinstall -r成功、実機base.apkのハッシュ一致、HOME/通知リスナー/accessibilityの導入前後一致を確認。PID32366。APKはGit管理外、旧beta2は `build/runtime-cost/control/`、8クラス分のテストXMLは `build/runtime-cost/tests/` に保存。
+
+初回のspeed-profileコンパイル直後はART verify、通常操作後に再compileして**speed-profile / cmdline**を確認した。同梱ProfileInstaller 1.3.1のINSTALL_PROFILE通知はresult=3で、既存AARのjavapから **RESULT_UNSUPPORTED_ART_VERSION** と確認。通知成功と混同しない。新たな依存更新は行わず、最終の実効コンパイル状態だけを確認した。CPUの前後比較はこの実行条件から主張しない。
+
+実機のセッション切替では、Apple Musicの停止状態からYouTubeへ切替し、ホームの再生ボタンでYouTubeだけがPLAYING、もう一度押してPAUSEDになることをmedia_sessionと画面で照合した。Appleはその間4.580秒で停止を維持。Appleを再開するとLemonへ表示/背景/歌詞が戻り、シーク51.843秒→停止54.638秒の操作が反映された。
+
+YouTubeの古い停止セッションへのplayだけではmetadataが空のままSTOPPEDだったため、アプリ画面から動画を選び直して検証した。この準備段階をセッション切替成功と混同しない。セッション別操作は実機 `cmd media_session monitor` のhelpでplay/pause/next/previous/qを確認して使用。新規ツールやAPKの追加導入はない。
+
+## 利用履歴の実機比較
+
+同じ通常画面1920×1080/238dpi/30Hz、同じApple Musicアルバム画面からHOMEへ10回、各復帰後2秒待機。候補は最後の操作から62秒以上待ち、成功キャッシュが期限切れの状態から開始した。頻出アプリの既存ログで実集計を数え、PIDが窓内で変わらないことも確認。
+
+| 条件 | ベータ2 / 49 | ベータ3 / 50 |
+|---|---:|---:|
+| ホーム復帰 | 10回 | 10回 |
+| 7日分の実集計 | 10回 | 1回 |
+| 実集計ログの対象イベント数 | 702〜720件 | 728件 |
+| PID | 30219 | 32366 |
+
+**この短い連続復帰で全期間集計回数を90%削減**。試行の間に端末履歴は増えており、同じイベント配列での処理時間比較ではない。アプリ全体のCPU/フレーム時間や消費電力を90%減らしたという意味ではない。権限確認は各復帰で続ける。採用判断は実機での照会回数減少と、既存順位・権限・世代競合のテスト成功による。
+
+再現: `python3 /tmp/yluncher-runtime-baseline.py control` / `candidate`。数値は `/tmp/yluncher-runtime-control.json` / `yluncher-runtime-candidate.json`。candidateの開始は端末時刻07:45:53、実効ARTはspeed-profile。更新頻度を制限したランキングの主観的な使い勝手は、利用者の普段の操作で確認待ち。
+
+## 最終の場面確認と残る事項
+
+- ホームの次曲操作で、同じAppleセッションのLemon→クランベリーとパンケーキの曲名/画像/進捗/歌詞更新を確認。さらに異なるアルバムの怪獣へ切り替え、青〜茶の背景と歌詞へ更新した。
+- 保存接続は再入力なしでCONNECT/READY（3,888ms）。Lemon/怪獣のApple歌詞はcache=missで受理された。クランベリーはAppleがINVALID、AMLLは404後にLRCLIBキャッシュへfallbackして表示した。Appleの3曲成功とは扱わず、INVALIDの原因は今回調査しない。取得順序/クライアント/TTML処理は変更していない。
+- セット4のパネル＋Mapsへ移行し、曲名/背景/1行歌詞を表示。ホームへ復帰して怪獣16.574秒で停止。YouTubeも停止。PID32366は導入後の確認中に変化せず、同PIDのAndroidRuntimeエラー出力なし。
+- `python3 /tmp/yluncher-perf-sample.py runtime-beta3-paused 20`: 実測18.50秒、CPU0.22%（1コア100%）、描画0回。連続drawが増えていないことの確認で、旧版とのCPU改善率は算出しない。描画0件の分位値4950msは無効値として評価しない。
+- 実機の見た目は司令塔が一時画面で確認、利用者の主観的な操作感は確認待ち。スクリーンショット8件は確認後削除し、歌詞本文/認証値をGitへ保存しない。
+
+今回適用したのはMediaWatcherと頻出アプリ集計の2件。SetRunner非同期化は上記の次段階設計、非ARGB画像変換は実機での追加効果未確認として残す。歌詞の単語描画20%削減、実車60Hz、全体CPU/消費電力改善率は今回の成果ではない。正式版/pushは未実施。採用2件の対象87件とreleaseビルドは成功済みで、全テストは正式化時の別工程にする。
