@@ -7,6 +7,8 @@
 - ユーザーがMediaWatcher/SetRunner/AppGraph/ArtworkBackgroundの4候補から「効果がありそうなものから試して適用」を承認。担当はCodex暫定司令塔。基点7c06c7b、実機beta2/49、ADB192.168.137.200:40275。
 - [作業記録](performance/2026-11-06-runtime-cost.md)とTask197/198 md/allowを作成。通知単位のsnapshotと7日集計60秒キャッシュから着手し、別worktreeで委譲する。SetRunnerは共有watcherとキャンセル/timeout経路を確認中。ARGB_8888の原寸copy省略は既に実装済み。
 - 既存未追跡.mcp.json/Task170、過去の背景/Shader実験worktreeは維持。新たな正式化/pushはしない。
+- Task197/198の委譲は完了。通知27件/集計60件が各1回で成功、計87件・failure/error/skip 0。許可3ファイルずつ、既存テスト無変更。元コミット0ce1edc/e70c494を `perf-runtime-cost` へcherry-pick。詳細と決定事項は作業記録。main側Task200で両50/2.3.1-beta3へ版変更とreleaseのみを委譲する。
+- 実機beta2でホーム復帰10回→全期間集計10回を記録。Lemon256×256/ARGB_8888は既に原寸copy省略経路。SetRunnerは共有状態の書換とretry/Safety順序の分離が必要と読み取り相談でも確認したため、今回は先行2件を適用し、SetRunnerは次段階へ分ける。単なるIO移動は行わない。
 
 ## 描画軽量化: 5までの比較・ベータ導入完了 (2026-11-06 01時台)
 
