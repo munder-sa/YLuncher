@@ -1,13 +1,18 @@
 # YLuncher 共有引き継ぎ
 
-最終更新: 2026-11-04 (JST)
+最終更新: 2026-11-05 (JST)
+
+## IPv6調査報告のリモート反映 (2026-11-05)
+
+- 利用者の「リモートgit にもコミット＆Push」を受領。IPv6ルール欠落の報告と自己ADBアプリの役割を記録したローカルコミットaa64c7eを、`git push origin main` でmunder-sa/YLuncherへ反映。終了0、リモートmainはcbe45e5→aa64c7e。この完了記録もmainへ含める。
+- 差分は文書2ファイルのみ、`git diff --check origin/main..HEAD` は成功。アプリ/テスト/版/端末設定の変更なし、ビルド・テスト再実行0件。v2.3.0-releaseタグはf0e5c9dを維持。既存未追跡.mcp.json/Task170 md・allowは対象外。追加の実装判断なし。
 
 ## 追加共有: IPv6ルールと自己ADBアプリ (2026-11-04 22:32 JST)
 
 - 利用者から、IPv6通信の問題は端末の `ip -6 rule add priority 32000 unreachable` に相当するルールが欠けていたことが原因、との報告を受領。続けて、このルールを自己ADBで追加する別アプリを作成中と共有された。端末側の対策はそのアプリの担当として記録する。YLuncher側の既存Fast Fallbackは接続待ちを減らす対策として維持し、今回アプリ/テスト/端末設定の変更は行わない。
 - 技術上の区別: `unreachable` は、そこまで経路探索が進んだIPv6要求に到達不能を返すルール。AOSPにもカーネル既定のmainテーブルへの意図しない流入を止める終端ルールがある。この追加を「外部へのIPv6経路を新設する」とは扱わず、IPv4へ切り替える実装では失敗待ちを短縮できるという整理にする。根拠: [AOSP RouteController](https://android.googlesource.com/platform/system/netd/+/refs/heads/main/server/RouteController.cpp#824)、[ip-rule仕様](https://man7.org/linux/man-pages/man8/ip-rule.8.html)。
 - 確認区分: 端末の原因は利用者の検証報告。司令塔の現状読取 `adb.exe -s 192.168.137.248:5555 shell ip -6 rule show` はdevice not found/終了1で、現在のルール一覧、追加前後の経路差、欠落する契機は未確認。過去のIPv4成功/IPv6接続TIMEOUTという実測はそのまま残す。自己ADBアプリのソース確認・動作確認は未実施。
-- Git: 再開時main=cbe45e5、origin/mainと同期済み。正式版タグはf0e5c9d。今回の追記はローカル文書更新として管理し、pushは未実施。既存未追跡3ファイルは対象外。決めたこと: 利用者報告と司令塔の実測を分け、端末対策とアプリ側対策の役割を記録する。文書のみのためビルド/テストは再実行しない。
+- Git: 当時の再開時main=cbe45e5、origin/mainと同期済み。正式版タグはf0e5c9d。追記はaa64c7eとしてローカルへコミットし、当日はpush未実施(11月5日の反映結果は上記)。既存未追跡3ファイルは対象外。決めたこと: 利用者報告と司令塔の実測を分け、端末対策とアプリ側対策の役割を記録する。文書のみのためビルド/テストは再実行しない。
 
 ## 再開時の要点 (2026-11-04 21:01 JST)
 
