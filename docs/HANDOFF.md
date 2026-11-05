@@ -2,6 +2,14 @@
 
 最終更新: 2026-11-06 (JST)
 
+## v2.3.1のリモート反映・Release公開完了 (2026-11-06 08:40 JST)
+
+- ユーザーの追加指示「終わったらリモートpushとリリースもね」を受領。Codex暫定司令塔がmainと `v2.3.1-release` をatomic push。リモートmain **8ff09e6**、タグ **8ec12673023fe5dc50f634dbf50a01c75e7cac8f** をls-remoteで照合した。この公開完了記録は後続のmain文書コミットとしてpushし、正式版タグは動かさない。
+- [GitHub Release v2.3.1-release](https://github.com/munder-sa/YLuncher/releases/tag/v2.3.1-release) を正式Releaseとして公開。ID435889090、published_at=2026-11-05T23:40:26Z（JST 11月6日08:40）。draft=false / prerelease=false、latestのIDも一致。既存リポジトリはprivateで、閲覧にはアクセス権が必要。認証なしの404はこの公開範囲によるもので、可視性は変更していない。
+- 添付は **YLuncher-2.3.1.apk / YLuncher-panel-2.3.1.apk / SHA256SUMS.txt** の3件。下書きで添付後、ファイル名/サイズ/state=uploaded/GitHubのdigestを照合してから公開し、公開後も再照合した。本体・中継のSHA256は下記と同じ。チェックサムファイル自体は `bce62eefe33d8738d460becaf5d028d8ea536d029d8ced72a2a5322834f66afa`。
+- GitHub連携ツールはRelease作成/添付非対応、ghバイナリも未導入だったため、既存Git SSHと既存認証を使うREST APIで実施。WSLのDNS解決が失敗したため、Windowsで解決したIPを当該接続だけに指定した。SSHホスト鍵/TLS証明書の検証は維持し、OSのDNS設定・リポジトリ設定は変更していない。今後同じ症状があればIPを再解決し、今回の値を恒久設定しない。
+- APK/アプリ/テスト/実機は前の確認済み2.3.1 / 51を使用し、再ビルド・再試験・再インストールは0回。全4,098件成功と実機確認は下記記録。既存未追跡3件と実験worktreeは維持。次は利用者の通常利用での見た目/操作感確認、追加改善は別途設計する。以下の「公開未実施」は追加指示前の履歴。
+
 ## v2.3.1正式ビルド・適用完了 (2026-11-06 08時台)
 
 - **Codex暫定司令塔**がユーザー依頼「リリースビルドを切って適用して」に対応。確認済みbeta3を両 **2.3.1 / 51** へ昇格し、GT8Dへ同署名上書き済み。機能追加なし。正式版の記録は[Task201](../tasks/201-v2.3.1-release.md)。以下のbeta3時点の「正式化しない」は当時の記録で、この依頼を受けて正式化した。
