@@ -79,23 +79,47 @@ internal fun interludeLitDots(startMs: Long, endMs: Long, positionMs: Long): Int
 }
 
 @Composable
-private fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position: State<Long>, emphasis: State<Float>) {
+internal fun InterludeDots(current: Boolean, startMs: Long, endMs: Long, position: State<Long>, emphasis: State<Float>) {
     val detailSemantics = LocalLyricsDetailSemantics.current
+    val observer = LocalLyricsPaneObserver.current
+    val probe = remember(observer) { observer?.let { InterludeDrawProbe() } }
     val retained = remember { object { var lit = 0 } }
+    val litDots = remember(startMs, endMs, position) {
+        derivedStateOf(structuralEqualityPolicy()) {
+            interludeLitDots(startMs, endMs, position.value)
+        }
+    }
+    val drawDots: DrawScope.() -> Unit = {
+        // Retain the last displayed count, without subscribing inactive rows to position.
+        val lit = if (current) litDots.value.also { retained.lit = it } else retained.lit
+        val amount = emphasis.value
+        probe?.let {
+            it.startMs = startMs; it.endMs = endMs; it.current = current
+            it.lit = lit; it.emphasis = amount
+        }
+        repeat(3) { i ->
+            val activeAlpha = if (i < lit) 1f else 0.35f
+            drawCircle(Color.White.copy(alpha = 0.25f + (activeAlpha - 0.25f) * amount),
+                radius = 6.dp.toPx(), center = Offset((6 + i * 20).dp.toPx(), 6.dp.toPx()))
+        }
+    }
     Box(Modifier.fillMaxWidth().then(if (detailSemantics && current) Modifier.testTag("player_lyrics_interlude") else Modifier),
         contentAlignment = Alignment.CenterStart) {
         Text(" ", if (detailSemantics) Modifier else Modifier.clearAndSetSemantics {},
             color = Color.Transparent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Canvas(Modifier.size(52.dp, 12.dp)) {
-            val lit = interludeLitDots(startMs, endMs, position.value)
-            if (current) retained.lit = lit
-            repeat(3) { i ->
-                val activeAlpha = if (i < (if (current) lit else retained.lit)) 1f else 0.35f
-                drawCircle(Color.White.copy(alpha = 0.25f + (activeAlpha - 0.25f) * emphasis.value),
-                    radius = 6.dp.toPx(), center = Offset((6 + i * 20).dp.toPx(), 6.dp.toPx()))
-            }
+            val observe = observer?.observeInterludeDraw
+            if (observe != null && probe != null) observe(probe) { drawDots() } else drawDots()
         }
     }
+}
+
+internal class InterludeDrawProbe {
+    var startMs = 0L
+    var endMs = 0L
+    var current = false
+    var lit = 0
+    var emphasis = 0f
 }
 
 internal val LyricAlphaKey = SemanticsPropertyKey<Float>("LyricAlpha")
@@ -110,6 +134,7 @@ internal class LyricDrawProbe {
 }
 internal val LyricDrawProbeKey = SemanticsPropertyKey<LyricDrawProbe>("LyricDrawProbe")
 internal class LyricsPaneObserver {
+    var observeInterludeDraw: ((InterludeDrawProbe, () -> Unit) -> Unit)? = null
     var constructedRows: Set<Int> = emptySet()
     var measuredRows: Set<Int> = emptySet()
     var overlayRows: Set<Int> = emptySet()

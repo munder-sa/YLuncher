@@ -2,9 +2,12 @@ package com.gt8d.launcher.ui.home
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.runtime.snapshots.SnapshotStateObserver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -39,6 +42,337 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w600dp-h1000dp")
 class LyricsPaneTest {
+    // Observe the reads made inside the real Canvas callback. Explicit draws below only
+    // re-arm observation and inspect output; invalidations are counted on snapshot apply.
+    private inner class InterludeWatch : AutoCloseable {
+        val drawn = linkedSetOf<InterludeDrawProbe>()
+        private val invalidations = mutableMapOf<InterludeDrawProbe, Int>()
+        private val snapshots = SnapshotStateObserver { it() }
+        private val changed: (InterludeDrawProbe) -> Unit = {
+            invalidations[it] = count(it) + 1
+        }
+        init {
+            snapshots.start()
+            observer.observeInterludeDraw = { probe, draw ->
+                snapshots.observeReads(probe, changed, draw)
+                drawn += probe
+            }
+        }
+        fun count(probe: InterludeDrawProbe) = invalidations[probe] ?: 0
+        fun draw() {
+            drawn.clear()
+            drawPane()
+        }
+        fun change(probe: InterludeDrawProbe, expected: Int, update: () -> Unit) {
+            rule.runOnIdle {
+                val before = count(probe)
+                update()
+                Snapshot.sendApplyNotifications()
+                assertEquals("draw invalidations", expected, count(probe) - before)
+            }
+        }
+        override fun close() {
+            observer.observeInterludeDraw = null
+            snapshots.stop()
+            snapshots.clear()
+        }
+    }
+
+    private class DotsInput {
+        var row by mutableIntStateOf(0)
+        var current by mutableStateOf(true)
+        var start by mutableLongStateOf(0L)
+        var end by mutableLongStateOf(3000L)
+        var position by mutableStateOf(mutableLongStateOf(0L))
+        val emphasis = mutableFloatStateOf(1f)
+    }
+
+    private fun showDots(input: DotsInput) {
+        rule.mainClock.autoAdvance = false
+        controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        controller.get().setContent {
+            CompositionLocalProvider(LocalLyricsPaneObserver provides observer,
+                LocalLyricsDetailSemantics provides true, LocalDensity provides Density(1f)) {
+                Box(Modifier.size(52.dp, 12.dp).background(Color.Black)) {
+                    // Match the row identity keys used by both LyricsPane paths.
+                    key(input.row) {
+                        InterludeDots(input.current, input.start, input.end, input.position, input.emphasis)
+                    }
+                }
+            }
+        }
+        controller.visible()
+        rule.mainClock.advanceTimeBy(64)
+        rule.waitForIdle()
+    }
+
+    private fun assertDotPixels(lit: Int, emphasis: Float) {
+        rule.runOnIdle {
+            val view = controller.get().findViewById<android.view.View>(android.R.id.content)
+            val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+            try {
+                view.draw(android.graphics.Canvas(bitmap))
+                repeat(3) { i ->
+                    val expected = if (i < lit) 0.25f + 0.75f * emphasis else 0.25f + 0.10f * emphasis
+                    val pixel = bitmap.getPixel(6 + i * 20, 6)
+                    for (actual in listOf(android.graphics.Color.red(pixel), android.graphics.Color.green(pixel),
+                        android.graphics.Color.blue(pixel))) {
+                        assertEquals("dot $i", expected, actual / 255f, 1f / 255f)
+                    }
+                }
+            } finally { bitmap.recycle() }
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun interludeDrawInvalidatesOnlyAtLitBoundaries() {
+        InterludeWatch().use { watch ->
+            val input = DotsInput()
+            showDots(input)
+            watch.draw()
+            val probe = watch.drawn.single()
+            assertEquals(0, probe.lit)
+            assertDotPixels(0, 1f)
+            val samples = listOf(1L to 0, 999L to 0, 1000L to 1, 1001L to 1,
+                1999L to 1, 2000L to 2, 2001L to 2, 2999L to 2, 3000L to 3, 3001L to 3)
+            var previous = 0
+            for ((position, lit) in samples) {
+                watch.change(probe, if (lit == previous) 0 else 1) { input.position.longValue = position }
+                watch.draw()
+                assertEquals("position=$position", lit, probe.lit)
+                assertDotPixels(lit, 1f)
+                previous = lit
+            }
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun interludeInactiveRowRetainsDotsAndStillInvalidatesForFade() {
+        InterludeWatch().use { watch ->
+            val input = DotsInput().apply { position.longValue = 2000L }
+            showDots(input)
+            watch.draw()
+            val probe = watch.drawn.single()
+            assertEquals(2, probe.lit)
+            watch.change(probe, 1) { input.emphasis.floatValue = 0.75f }
+            watch.draw()
+            assertEquals(0.75f, probe.emphasis, 0f)
+            assertDotPixels(2, 0.75f)
+            rule.runOnIdle { input.current = false; input.position.longValue = 0L; Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(32)
+            watch.draw()
+            assertFalse(probe.current)
+            assertEquals(2, probe.lit)
+            watch.change(probe, 0) { input.position.longValue = 3000L }
+            watch.change(probe, 1) { input.emphasis.floatValue = 0.5f }
+            watch.draw()
+            assertEquals(2, probe.lit)
+            assertEquals(0.5f, probe.emphasis, 0f)
+            assertDotPixels(2, 0.5f)
+            watch.change(probe, 0) { input.position.longValue = 1000L }
+            watch.change(probe, 1) { input.emphasis.floatValue = 0f }
+            watch.draw()
+            assertEquals(2, probe.lit)
+            assertDotPixels(2, 0f)
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun interludeRebindsPositionAndBoundsWithoutStaleRetention() {
+        InterludeWatch().use { watch ->
+            val input = DotsInput().apply { position.longValue = 1000L }
+            val old = input.position
+            showDots(input)
+            watch.draw()
+            val probe = watch.drawn.single()
+            assertEquals(1, probe.lit)
+            val replacement = mutableLongStateOf(2500L)
+            rule.runOnIdle { input.position = replacement; Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(32)
+            watch.draw()
+            assertEquals(2, probe.lit)
+            watch.change(probe, 0) { old.longValue = 3000L }
+            watch.change(probe, 1) { replacement.longValue = 500L }
+            watch.draw()
+            assertEquals(0, probe.lit)
+            watch.change(probe, 1) { replacement.longValue = 1500L }
+            watch.draw()
+            assertEquals(1, probe.lit)
+            rule.runOnIdle { input.current = false; input.position = mutableLongStateOf(3000L); Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(32)
+            watch.draw()
+            assertEquals(1, probe.lit)
+            watch.change(probe, 0) { replacement.longValue = 0L }
+            watch.change(probe, 0) { input.position.longValue = 2999L }
+            rule.runOnIdle { input.current = true; Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(32)
+            watch.draw()
+            assertEquals(2, probe.lit)
+            rule.runOnIdle { input.start = 2000L; input.end = 5000L; Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(32)
+            watch.draw()
+            assertEquals(0, probe.lit)
+            watch.change(probe, 1) { input.position.longValue = 4000L }
+            watch.draw()
+            assertEquals(2, probe.lit)
+            rule.runOnIdle {
+                input.current = false; input.start = 6000L; input.end = 9000L
+                Snapshot.sendApplyNotifications()
+            }
+            rule.mainClock.advanceTimeBy(32)
+            watch.draw()
+            assertEquals(2, probe.lit)
+            rule.runOnIdle { input.row++; Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(32)
+            watch.draw()
+            val reusedRow = watch.drawn.single()
+            assertNotSame(probe, reusedRow)
+            assertEquals(0, reusedRow.lit)
+            assertDotPixels(0, 1f)
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun interludeShortAndNonPositiveIntervalsKeepTheirBoundaries() {
+        InterludeWatch().use { watch ->
+            val input = DotsInput().apply { start = 1000L; end = 1003L; position.longValue = 999L }
+            showDots(input)
+            watch.draw()
+            val probe = watch.drawn.single()
+            assertEquals(0, probe.lit)
+            for ((position, lit) in listOf(1000L to 0, 1001L to 1, 1002L to 2, 1003L to 3, 1004L to 3)) {
+                watch.change(probe, if (lit == probe.lit) 0 else 1) { input.position.longValue = position }
+                watch.draw()
+                assertEquals(lit, probe.lit)
+                assertDotPixels(lit, 1f)
+            }
+            for (end in listOf(1000L, 999L)) {
+                rule.runOnIdle { input.end = end; input.position.longValue = 999L; Snapshot.sendApplyNotifications() }
+                rule.mainClock.advanceTimeBy(32)
+                watch.draw()
+                assertEquals(0, probe.lit)
+                watch.change(probe, 1) { input.position.longValue = 1000L }
+                watch.draw()
+                assertEquals(3, probe.lit)
+                assertDotPixels(3, 1f)
+                watch.change(probe, 0) { input.position.longValue = 1001L }
+            }
+        }
+    }
+
+    private fun checkInterludePlaybackChanges(detailSemantics: Boolean) {
+        InterludeWatch().use { watch ->
+            now = now.copy(positionMs = 1000L, playing = true, positionUpdatedAt = clock)
+            show(LyricsState.Synced(listOf(LyricLine(0L, "♪"), LyricLine(3000L, "♪"),
+                LyricLine(6000L, "次"))), detailSemantics)
+            watch.draw()
+            val first = watch.drawn.single { it.current }
+            assertEquals(1, first.lit)
+            val invalidations = watch.count(first)
+            val frames = observer.frameUpdates
+            val layout = listOf(observer.compositions, observer.measures, observer.placements)
+            repeat(5) {
+                rule.runOnIdle { clock += 16L }
+                rule.mainClock.advanceTimeByFrame()
+            }
+            assertEquals(invalidations, watch.count(first))
+            assertTrue(observer.frameUpdates > frames)
+            assertEquals(layout, listOf(observer.compositions, observer.measures, observer.placements))
+            rule.runOnIdle { now = now.copy(positionMs = 1500L, playing = false); Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(64)
+            watch.draw()
+            assertSame(first, watch.drawn.single { it.current })
+            assertEquals(1, first.lit)
+            val stoppedFrames = observer.frameUpdates
+            rule.runOnIdle { clock += 1000L }
+            rule.mainClock.advanceTimeBy(64)
+            assertEquals(stoppedFrames, observer.frameUpdates)
+            rule.runOnIdle { now = now.copy(positionMs = 2500L); Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(64)
+            watch.draw()
+            assertEquals(2, first.lit)
+            rule.runOnIdle { now = now.copy(positionMs = 3500L); Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(250)
+            watch.draw()
+            assertFalse(first.current)
+            assertEquals(2, first.lit)
+            assertTrue(first.emphasis > 0f && first.emphasis < 1f)
+            val second = watch.drawn.single { it.current }
+            assertEquals(3000L, second.startMs)
+            assertEquals(0, second.lit)
+            rule.mainClock.advanceTimeBy(600)
+            rule.runOnIdle { now = now.copy(playing = true, positionUpdatedAt = clock); Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(64)
+            rule.runOnIdle { clock += 500L }
+            rule.mainClock.advanceTimeByFrame()
+            watch.draw()
+            assertEquals(1, second.lit)
+            assertEquals(2, first.lit)
+            assertEquals(0f, first.emphasis, 0f)
+            rule.runOnIdle {
+                now = now.copy(title = "別の曲", metaTitle = "別の曲", playing = false, positionMs = 500L)
+                Snapshot.sendApplyNotifications()
+            }
+            rule.mainClock.advanceTimeBy(64)
+            watch.draw()
+            val nextTrack = watch.drawn.single { it.current }
+            assertNotSame(first, nextTrack)
+            assertEquals(0, nextTrack.lit)
+            rule.runOnIdle {
+                paneState = LyricsState.Synced(listOf(LyricLine(1000L, "♪"), LyricLine(4000L, "次")))
+                now = now.copy(positionMs = 2500L)
+                Snapshot.sendApplyNotifications()
+            }
+            rule.mainClock.advanceTimeBy(64)
+            watch.draw()
+            val nextLines = watch.drawn.single { it.current }
+            assertNotSame(nextTrack, nextLines)
+            assertEquals(1000L, nextLines.startMs)
+            assertEquals(1, nextLines.lit)
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun windowInterludeHandlesPauseResumeSeekTrackAndLineChanges() = checkInterludePlaybackChanges(false)
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun detailedInterludeHandlesPauseResumeSeekTrackAndLineChanges() = checkInterludePlaybackChanges(true)
+
+    private fun checkIntroDraws(detailSemantics: Boolean) {
+        InterludeWatch().use { watch ->
+            now = now.copy(positionMs = 1000L)
+            show(LyricsState.Synced(listOf(LyricLine(10000L, "最初"))), detailSemantics)
+            watch.draw()
+            val intro = watch.drawn.single()
+            assertTrue(intro.current)
+            assertEquals(0, intro.lit)
+            for (position in listOf(4000L, 5000L)) {
+                rule.runOnIdle { now = now.copy(positionMs = position); Snapshot.sendApplyNotifications() }
+                rule.mainClock.advanceTimeBy(64)
+                watch.draw()
+                assertSame(intro, watch.drawn.single())
+                assertEquals(1, intro.lit)
+            }
+            rule.runOnIdle { now = now.copy(positionMs = 5001L); Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(64)
+            watch.draw()
+            assertTrue(watch.drawn.isEmpty())
+            rule.onNodeWithTag("player_lyrics_interlude").assertDoesNotExist()
+            rule.runOnIdle { now = now.copy(positionMs = 10000L); Snapshot.sendApplyNotifications() }
+            rule.mainClock.advanceTimeBy(600)
+            watch.draw()
+            assertTrue(watch.drawn.isEmpty())
+            if (detailSemantics) rule.onNodeWithTag("player_lyrics_current").assertTextEquals("最初")
+            else assertEquals(setOf(0), observer.constructedRows)
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun windowIntroDrawsStopAtExistingCutoff() = checkIntroDraws(false)
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun detailedIntroDrawsStopAtExistingCutoff() = checkIntroDraws(true)
+
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun cachedWordBoundaryMatchesOriginalPixelsIncludingWrappedLineClear() {
         for (density in listOf(1f, 2f)) for (width in listOf(80, 160)) {
