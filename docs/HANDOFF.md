@@ -2,6 +2,21 @@
 
 最終更新: 2026-11-06 (JST)
 
+## 描画軽量化: 5までの比較・ベータ導入完了 (2026-11-06 01時台)
+
+- 担当は引き続き**Codex暫定司令塔**。ユーザーの「寝るので5まで」に従い、Task192〜196の比較・採否判断・ベータ作成・機械的な実機場面確認を完了。**見た目/操作感の利用者確認は起床後**。単語区間CPU20%削減は未達。正式化、main取り込み、push、公開は行っていない。
+- 作業ブランチ `perf-lyrics-render`。採用コードは **e5f78cb** の前奏/間奏の点灯数依存だけ。最終版/比較記録は **d6ac0aa**。この引き継ぎ更新を別コミットする。mainは計画文書の299aa5d、origin/mainはa7951e7のまま（終了時に実refを照合）。既存未追跡 `.mcp.json` とTask170 md/allowは触らない。
+- Aの交互3組で前奏CPU中央値31.23→7.90%（74.7%減）、draw81→5。単語CPU35.62→35.59%で削減なし。遅延フレーム差は追加1組で再現せず、原因未特定のため滑らかさ改善とは報告しない。前奏traceはdoFrame両63回、draw63→4。時計/単語塗り/色/タイミングは維持。詳細は[比較記録](performance/2026-11-06-lyrics-render-comparison.md)。
+- B1は3組すべて測定完了。CPU中央値36.12→36.13%、RT25.24→25.35%で不採用。`/tmp/yluncher-lyrics-background` / `perf-lyrics-background` / **3df8267** を独立保持し、取り込まない。追加Offscreen背景は任意候補のため今回は未実施。
+- Cは `/tmp/yluncher-lyrics-shader` / `perf-lyrics-shader` / **74e7001**（指示書のみ）で保留。LyricWordBrush.ktとLyricWordBrushTest.ktの新規2ファイルは同worktreeに**未追跡**で残る。12件すべてRobolectricのsoftware CanvasがRuntimeShaderを拒否し、画素比較前に失敗。失敗XML/ログを保持、Ignore/期待値緩和なし、本体未配線。GPUの画素/性能は未確認。次に追うならGPUで比較できる検証方法の設計が必要。
+- 検証: Task193の指定LyricsPaneTestは最適化前57件/6失敗→実装後**57件成功**、error/skip 0、既存49件無変更。B1のHomeMiniPlayerTestは**40件成功**、Cは**12件/12失敗**で採用しない。成功済み試験の再実行と全試験は行わず、各実行コマンド/失敗経緯は比較記録へ記載。
+- Task196 `.codex-bak/20261106-005509/` は版2ファイルだけ更新、`/home/munde/tools/gradle-run.sh :app:assembleRelease :panelhost:assembleRelease` 1回47秒成功。実機は本体 `com.gt8d.launcher` / 中継 `com.gt8d.launcher.panel` とも **2.3.1-beta2 / 49**、ADB **192.168.137.200:40275**。両install -r後の版/実機base.apkハッシュを照合。本体SHA256 `186dd05b0a10e8078537cd2876fbfb0dfc85de9617012e8b896aaf3a93772c1c`、中継 `b66a5defb99effa62e1c01b2017026812530c31a26762447b4b4096b0f72d249`。APKは `build/perf-lyrics/final-beta2/`。
+- 既存署名SHA256 `44d8c612bd3948e265840f28adff0f820d5893d0ba24d888b041ca16544f7f6d`、HOME、通知リスナー5件、accessibility（carsysoのみ）は維持。初回compileのART verifyを確認して既存ProfileInstallReceiverのINSTALL_PROFILE→再compileを実施し、最終 **speed-profile / cmdline** を確認。比較窓のspeed条件とは区別する。
+- 最終PID30219で保存接続を復元（CONNECT/READY 1,510ms）、LemonのApple歌詞cache=miss成功（40行/277語）、怪獣もcache=miss成功（46行/318語）。再入力なし。歌詞ON/OFF、37.876秒停止→144.857秒前方→54.458秒後方シーク→再開、連続行送り、異なるアルバムへの背景/歌詞更新、セット4のパネル＋Maps→HOMEを確認。Plain/Loading、幅/font/zero-size等の人工ケースはユニットで確認し、全ケースの実機再現とは扱わない。
+- 最終は単一のHomeActivity、歌詞ON、**怪獣15.068秒で一時停止**。19.08秒の停止窓はCPU0.21%/draw0。確認中のPID変更なし、同PIDのAndroidRuntimeエラー出力なし、熱状態0（実温度未取得）。PCは通常ミラー、display0 1920×1080/238dpi/**30Hz**。RAV4の60Hzでの検証は未実施。SIM/ネットワーク/解像度/Hzの変更なし。
+- 実装担当・Gradle・比較scriptはすべて終了。一時PNG12件を削除済み。数値/traceは `/tmp/yluncher-render-comparison/`、停止窓は `/tmp/yluncher-perf-20261105/beta2-final-paused.json`、APK/XMLはGit管理外 `build/perf-lyrics/`。認証値/歌詞本文をGitへ記録しない。
+- 次の一手: 起床後にベータ2の見た目と操作感を利用者へ確認する。単語区間の削減目標未達を共有し、追加GPU検証に進むかを別途設計する。正式版を依頼された場合に全試験をまとめて1回、版更新/実機確認後に対象のpush・公開へ進む。以下は進行時点の履歴であり、「進行中」は当時の状態。
+
 ## 描画軽量化: 背景の比較開始、Shader保留 (2026-11-06 00:47)
 
 - Task194の実装/検証が完了。worktree `/tmp/yluncher-lyrics-background` の3df8267に記録、40件成功/失敗・error・skip0。先行5回は新規の寸法fixture待機タイムアウト（旧実装でも再現）、手動clock/snapshot反映で全期待値を維持して解消。release1回成功。実装担当停止済み。候補B1本体SHA256 `68e1b27a829b159d1a298f3a829ab8a9350baccea9c36568c39a778208e78c8d`、同署名48/beta1。`build/perf-lyrics/background`に保存。
