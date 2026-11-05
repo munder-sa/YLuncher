@@ -2,6 +2,21 @@
 
 最終更新: 2026-11-06 (JST)
 
+## 中優先の負荷改善: 先行2件をbeta3へ適用 (2026-11-06 07時台)
+
+- **Codex暫定司令塔**がユーザー依頼「中で効果がありそうなものから試して適用」に対応。MediaWatcherの通知単位更新と7日集計の再利用を実装・テスト・実機比較して適用済み。SetRunner/追加画像変換は下記理由で次段階へ分ける。見た目/操作感の利用者確認は待ち。正式化/main取り込み/push/公開はしない。
+- ブランチ **perf-runtime-cost**。通知は **93ad4fd**、集計は **d72d414**、beta3/比較結果は **0090623**。直前の歌詞改善ブランチperf-lyrics-render/7c06c7bを基点とし、前奏改善も維持。mainは299aa5d、origin/mainはa7951e7のまま。今回の追跡対象変更はコミット済み、既存未追跡 `.mcp.json` とTask170 md/allowは維持する。
+- Task197 `.codex-bak/20261106-072915/`（`/tmp/yluncher-media-cache`）は許可3ファイルのみ、27件成功（新規10＋既存17）。Task198 `.codex-bak/20261106-072917/`（`/tmp/yluncher-frequent-cache`）も3ファイルのみ、60件成功（新規18＋既存42）。各指定コマンド1回、計**87件成功、failure/error/skip 0**、既存テスト無変更。XML/実行イベント/差分を照合し再試験なし。allow警告は--tests引用符の正規化差のみ。実コマンドと決定事項は[作業記録](performance/2026-11-06-runtime-cost.md)。
+- 通知の3セッション＋100件の位置callbackテストで初期化後のmetadata/state/label読取は各0回。callbackのnull、同一package複数、破棄、旧通知、transport送信先、receiver登録解除を確認。snapshot選択規則/位置補間/歌詞識別は維持。ラベルはlocale/configuration/package変更と集合変更で無効化する。
+- 集計の実機比較は同じ10回のApple画面→HOMEで、**7日分照会10回→1回（回数90%減）**。候補は62秒待って期限切れから開始し、PID不変を確認。全体CPU90%減という意味ではない。成功完了から60秒を再利用、失敗後5秒で再試行、権限確認は毎要求IO、失効/再許可はTTLを解除。順位の鮮度は最大約60秒＋次の要求まで。
+- Task200 `.codex-bak/20261106-073852/` は版2ファイルだけ **2.3.1-beta3 / 50** へ更新、release1回1分17秒成功。両APKを実機 **192.168.137.200:40275** へinstall -r済み。署名/実機base.apkハッシュ一致、HOME/通知リスナー/accessibilityを維持。本体SHA256 `faca03ff569bab3fa8e31287768d015d83a44bb204182efbcc51c7f283942405`、中継 `18e8b6c7be62721800a6063d31c32a96e5efea367b1cfdee94f45decbfc706e2`。APKは `build/runtime-cost/beta3/`、旧beta2はcontrol、対象XMLはtests。
+- 最終ART **speed-profile / cmdline**。INSTALL_PROFILEのresult=3は既存ProfileInstaller 1.3.1の **UNSUPPORTED_ART_VERSION** とAARのjavapで判明。初回compileではverify、通常操作後の再compileでspeed-profileとなった。通知を同梱baseline適用成功とは扱わない。依存更新は今回しない。前の記録の「プロファイル適用」は実効フィルタの確認と区別して読む。
+- 実機はYouTubeとAppleの選択切替、ホームの再生/停止が選択先だけへ届くこと、Appleへの戻りとシーク51.843→停止54.638秒、同セッションの次曲変更、別アルバム怪獣、セット4のパネル＋Maps→HOMEを確認。保存接続は再入力なしCONNECT/READY、Lemon/怪獣Apple歌詞受理。クランベリーはApple INVALID後にLRCLIB fallback表示（INVALID原因未調査、取得系無変更）。
+- 最終PID32366、歌詞ON、**怪獣16.574秒で一時停止したHOME**。YouTubeも停止。確認中PID不変/同PIDAndroidRuntimeエラーなし。停止18.50秒でCPU0.22%/draw0。通常PCミラー1080p/238dpi/30Hz、実車60Hz未検証。SIM/ネットワーク/表示設定は変更なし。
+- SetRunnerは読み取り相談 `.codex-bak/ask-20261106-073224-63136/answer.md` でも、共有skew/成功状態とretry/Safety/guardの順序管理が必要と確認。単純なIO移動はせず、照会とmainでの確定を分離する次段階案を作業記録に残した。画像は6a2c20cでARGB_8888の原寸copyを省略済み。今回実機のApple256×256/YouTube476×357も同形式で追加効果なし、非ARGB/HARDWAREは未検証。
+- 委譲/ビルド/実機比較のプロセスはすべて終了。今回の一時画面PNG8件は削除済み。数値は `/tmp/yluncher-runtime-control.json` / `yluncher-runtime-candidate.json` と `/tmp/yluncher-perf-20261105/runtime-beta3-paused.json`。比較scriptは `/tmp/yluncher-runtime-baseline.py`。認証値/歌詞本文をGitへ保存しない。新worktreeは個別コミット済み、過去の背景/Shader実験はそのまま維持。
+- 次: 利用者にbeta3の普段の操作感を確認してもらう。SetRunnerを進める場合は作業記録の世代・照会順序・共有状態分離の設計を具体化。正式化の依頼があれば全テストを1回まとめ、版と実機を確認して対象のpush/公開へ進む。以下は過去時点の履歴。
+
 ## 中優先の負荷改善に着手 (2026-11-06)
 
 - ユーザーがMediaWatcher/SetRunner/AppGraph/ArtworkBackgroundの4候補から「効果がありそうなものから試して適用」を承認。担当はCodex暫定司令塔。基点7c06c7b、実機beta2/49、ADB192.168.137.200:40275。
