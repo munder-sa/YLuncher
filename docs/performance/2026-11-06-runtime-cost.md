@@ -94,3 +94,54 @@ YouTubeの古い停止セッションへのplayだけではmetadataが空のま�
 - 実機の見た目は司令塔が一時画面で確認、利用者の主観的な操作感は確認待ち。スクリーンショット8件は確認後削除し、歌詞本文/認証値をGitへ保存しない。
 
 今回適用したのはMediaWatcherと頻出アプリ集計の2件。SetRunner非同期化は上記の次段階設計、非ARGB画像変換は実機での追加効果未確認として残す。歌詞の単語描画20%削減、実車60Hz、全体CPU/消費電力改善率は今回の成果ではない。正式版/pushは未実施。採用2件の対象87件とreleaseビルドは成功済みで、全テストは正式化時の別工程にする。
+
+## v2.3.1後の追加候補調査 (2026-11-06)
+
+前節はbeta3時点の履歴。その後2.3.1 / 51を正式化し、全4,098件成功、実機適用、main/tagのpush、GitHub Release作成を完了した。今回の基点はmain `2e92e63`。ユーザーの「他にパフォーマンス向上に寄与できそうな点」に対する調査で、アプリ実装・テスト・依存は変更していない。
+
+### 今回の実機確認
+
+- ADB `192.168.137.200:40275` はdevice、本体2.3.1 / 51、PID19652。実効ARTはspeed-profile / cmdlineを維持。
+- HomeActivityはRESUMEDかつvisible、PanelActivityはSTOPPEDかつvisible=false。ホームだけが見えている状態で、同PIDの現在のNetworkCallback登録が **2件**（callbackRequest 1125/1131）残存。dumpsysの過去REGISTER/RELEASEや同じ要求の重複表示を数えず、現行uid/pidの登録行から数えた。どの登録が何%のCPUを使うかは未測定。
+- 歌詞のファイル本文は取得せず、件数・サイズだけを集計。LRCLIBは **46件 / 46,404 bytes**、AMLLは **1件 / 8,046 bytes**。AMLL検索表 `lyrics/amll-index/table.jsonl` は現在存在しない（wcはNo such file/終了1）。索引の全走査を現端末の常時負荷とは扱わない。
+- 実行した読み取り: `adb.exe ... get-state`、`shell dumpsys package com.gt8d.launcher`、`shell pidof com.gt8d.launcher`、`shell dumpsys package dexopt`、`shell dumpsys activity activities`、`shell dumpsys connectivity`。キャッシュは対象ディレクトリの `find ... -maxdepth 1 -type f -name '*.json' -exec stat -c %s {} \;`、索引は `wc -l -c` で確認した。
+- 今回は画面操作・設定変更・トレースの新規採取をしていない。新しいCPU削減率、電力、60Hzでの改善は未測定。以下の数値根拠は既存の比較記録と区別する。
+
+### 優先して調べる候補
+
+| 候補 | 狙う場面と根拠 | 変更リスク・次の検証 |
+|---|---|---|
+| **次の小規模計測: 画面の重複監視と非表示更新** | 停止したパネルを残したHOME/他アプリ表示。現在もネットワーク登録2件、電波通知から権限照会までmainで実行。200ms/500msのUIタイマーにも停止条件がない | 中。監視の共有・表示中だけのUI更新を分けて比較。復帰時に即時同期し、分割で見えている画面は停止しない |
+| **最大の負荷候補: 単語歌詞の描画・合成** | 直近の同条件比較で単語区間CPU35.62→35.59%と改善なし。RenderThread主体という既存の診断もある | 高。現行と画素を照合できるGPU検証を先に作り、マスク用Offscreenや文字の二重描画の削減を一項目ずつ比較 |
+| **中: 利用履歴の取得イベントを絞る** | 切替監視と7日集計は全イベントを受信後、ACTIVITY_RESUMEDだけを使う。API35のイベント指定を活用可能 | 低〜中。同じ期間の旧/新結果を実機で照合し、受信件数・IPC時間・解析時間を比較。パッケージ範囲や時計補正は維持 |
+| **中: SetRunnerの履歴照会をmainから分離** | 切替中の200ms周期で同期queryEvents。タップ/カーテン更新と競合し得る | 高。上記の共有skew/成功状態/世代/照会順序の設計が必要。まず実機traceで同期待ち時間を測る。総CPU削減とは別 |
+| **導入直後向け: ProfileInstallerのAPI35対応** | 依存1.3.1はINSTALL_PROFILE result3。現端末はADBでspeed-profileにしたが、通常のAPK更新だけで同等とは限らない | 低〜中。1.4.1を候補とし、手動最適化なしで更新→profile書込み→実効ARTを検証。現端末への即時追加効果は未確認 |
+| **後順位: AMLL/LRCLIBキャッシュ整理** | AMLLは削除不要でも全件ソートし、比較関数内で全文JSONを再解析。蓄積時に増えるが現端末AMLLは1件 | 低〜中。上限内ならソート前に終了し、上限超過時のsavedAt読取りを1ファイル1回へ。300件/32MiB/破損時/削除順を維持 |
+| **後順位: セット番号の同期ファイルIO** | HOME/セット切替の操作経路でlast_set_index.txtを直接read/write。小さいファイルだがmainのIOになる | 中。まず遅延を計測。同じ番号の重複書込み抑制から検討し、異常終了・再起動時の保存順序を崩さない |
+
+#### 重複監視・非表示更新の具体箇所
+
+[PanelEnvironment.kt](../../app/src/main/java/com/gt8d/launcher/ui/panel/PanelEnvironment.kt) 61〜94行はCompositionごとにNetworkCallback/電波receiverを登録し、解除はonDispose。STOPでは解除しない。refresh（62〜65行）はWi-Fi/BTと全権限をまとめて読むため、RSSI/capabilities通知でも `Settings.canDrawOverlays`、UsageStatsのAppOps確認まで進む（132〜140行）。新旧2つのoverloadがあり、通常のHome/PanelはAppCatalogState版、設定画面はAppCatalog版を使う。共有化では両方の使用箇所を確認する。
+
+まずラジオ状態と権限確認を分離し、変更通知の情報で足りる箇所の再照会を減らす。権限は復帰時と適切な変更検知で即時更新できることを確かめ、古い許可表示を残さない。次に表示クライアントで共有する監視を検討する。2登録を1つにできても、アプリCPUが半分になるという意味ではない。
+
+[PanelScreen.kt](../../app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt) 68〜83行のcollectAsState、166〜175行の500ms再生位置更新、[LyricIndex.kt](../../app/src/main/java/com/gt8d/launcher/ui/home/LyricIndex.kt) 22〜27行の200ms行検索、[PanelContent.kt](../../app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt) 110〜114行の時計が候補。公式もAndroidでは[collectAsStateWithLifecycle](https://developer.android.com/develop/ui/compose/state)を推奨する。ただしFlow収集の置換だけで独立したdelayループが止まるわけではなく、各producerにも表示条件が必要。MediaWatcher自体を停止して選択先/transport/復帰時の情報を失わないようにする。
+
+通常の非表示Composeのフレーム更新とdelayを同一視せず、「見えない画面を描画し続けている」と断定しない。既存の非表示中3.35%はv2.3.0の測定であり、MediaWatcher改善後の2.3.1へそのまま適用しない。検証はHomeのみ/分割/全画面非表示それぞれで、登録数、callbackと権限照会の回数、CPU、復帰時の表示を比較する。
+
+#### 利用履歴・導入時最適化の具体箇所
+
+[UsageHistory.kt](../../app/src/main/java/com/gt8d/launcher/apps/UsageHistory.kt) 28〜35行、[UsageStatsForegroundEvents.kt](../../app/src/main/java/com/gt8d/launcher/foreground/UsageStatsForegroundEvents.kt) 50〜76行はいずれもACTIVITY_RESUMEDだけを結果に使う。[UsageEventsQuery.Builder.setEventTypes](https://developer.android.com/reference/android/app/usage/UsageEventsQuery.Builder)はAPI35から利用できるため、minSdk35の本アプリで候補にできる。変更後のGT8Dでの互換・短縮量は未確認。特にForeground側は自アプリのRESUMEDを使う時計補正も保つ。まずイベント種別だけを絞り、非同期化やパッケージ限定と混ぜず検証する。
+
+[gradle/libs.versions.toml](../../gradle/libs.versions.toml) 6行はProfileInstaller 1.3.1。[公式リリースノート](https://developer.android.com/jetpack/androidx/releases/profileinstaller)では1.4.0でAPI35以降のprofile取込み/書込み対応、安定版は1.4.1。以前のresult3と対応する具体的な更新候補である。これはJava/Kotlinの実行・起動の最適化を通常導入でも成立させる案で、RenderThread主体の描画負荷を解決したという意味ではない。既存baseline-prof.txtは広い手書き指定のため、その後に実際のHOME/パネル/曲変更を収録したプロファイルへ改善する余地もあるが、追加効果は別計測にする。
+
+#### 後順位の根拠と除外した候補
+
+- [AmllCache.kt](../../app/src/main/java/com/gt8d/launcher/media/lyrics/AmllCache.kt) 91〜95行はソート評価後に上限判定。比較関数でJSONを読むため、大量保存時のコストは単なる1回の全件走査より大きくなり得る。[LyricsCache.kt](../../app/src/main/java/com/gt8d/launcher/media/lyrics/LyricsCache.kt) 71〜79行は上限超過時だけだが同じ比較関数内読取りがある。両方IO上であり、今の件数から描画負荷の主因には挙げない。
+- [AmllIndexStore.kt](../../app/src/main/java/com/gt8d/launcher/media/lyrics/AmllIndexStore.kt) 44〜48行と[AmllIndex.kt](../../app/src/main/java/com/gt8d/launcher/media/lyrics/AmllIndex.kt) 68〜74行は検索ごとに全表のJSON解析とdigest計算を行う。索引作成時の検索キー/世代情報の再利用は候補だが、現在表が存在せずApple直取得中心のため保留。曖昧一致の検出や索引更新後の無効化を省略しない。
+- [ConfigRepository.kt](../../app/src/main/java/com/gt8d/launcher/config/ConfigRepository.kt) 36〜46行のセット番号IOは、[SetRunner.kt](../../app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt) 245/454行等から同期到達する。通常の設定DataStoreはIO上であり、設定保存全体がmainにあるとはしない。
+- 長い曲名の[MarqueeText.kt](../../app/src/main/java/com/gt8d/launcher/ui/layout/MarqueeText.kt)は描画ごとに端のGradient Brushを生成する。drawWithCache化は小候補だが1周だけのスクロールで、歌詞の連続描画より低優先。使用頻度と割当を測ってから扱う。
+- 全セッション再読取、ホーム復帰ごとの7日再集計、ARGB_8888画像の原寸コピーは改善済み。背景だけの層分離は[既存比較](2026-11-06-lyrics-render-comparison.md)で効果なし。これらを新規の改善として重複計上しない。
+- 単語のRuntimeShader案はソフトウェアCanvasのテストで不成立。端末GPUが非対応と確定したわけではない。文字自体のBrush描画なども含め、GPU上で同時刻の旧/新画像を照合できる検証を先に設計する。実験の失敗テストを消す・画素差基準を緩めることはしない。
+
+決めたこと: 今回は候補調査のみ。次の小規模実験は重複監視/非表示更新、次点は履歴のイベント絞込みを推奨する。大きな描画改善はGPUでの互換確認から別に進める。キャッシュ整理・索引は実機の現在件数から順位を下げ、ProfileInstallerは通常導入時の再現性として分離する。テスト/ビルド/インストール/端末設定変更は0回で、新しい性能改善率は主張しない。
