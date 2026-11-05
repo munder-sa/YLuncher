@@ -2,6 +2,15 @@
 
 最終更新: 2026-11-06 (JST)
 
+## 描画軽量化: 交互3組と次の候補 (2026-11-06 00:29)
+
+- main作業場所は `perf-lyrics-render` / e5f78cb、前奏改善のユニットとrelease完成。実機A/B 3組を完了し、[比較記録](performance/2026-11-06-lyrics-render-comparison.md)を作成中。前奏CPU中央値31.23→7.90%（74.7%減）、draw81→5。単語CPU35.62→35.59%、目標20%未達。単語の遅延フレーム数に差があるため、追加確認を実施中で正式採用は未確定。
+- 別枠のLemon約40〜60秒atraceは、RenderThread DrawFrames p50が基準18.435ms/候補17.817ms、p90が24.729/25.731ms。main doFrame p50は4.305/4.416ms。両版の描画時間に大差はないが、3組の遅延率差を取り消す根拠にはしない。追加の対照/候補1組を `a-*-delaycheck` として実行中。元3組は除外しない。
+- Task196候補build `.codex-bak/20261106-000443/` はファイル編集なし、release1回1m08s成功。候補本体SHA256 `dd0f88a9b516779e229119a04e4075d2818bdad00027579fbb71ef9d004ee75f`、panel `9a5ba9d4872e7d82923c392b91560597728e18edbb8e691b8a5cc89405f47143`。同署名、beta1/48。実機appは比較の都度control/interludeを上書き、panelは対照beta1/48を維持。
+- Task194は `/tmp/yluncher-lyrics-background` / perf-lyrics-background（基点e5f78cb、指示書252f26f）で委譲中、ログ `.codex-bak/20261106-002845/`、timeout1800。通常graphicsLayerによる背景だけの分離を先に試す。HomeMiniPlayerと同Testの2ファイル限定、色抽出/版は変更なし。独立worktreeのため司令塔はmain側の記録と実機比較を継続する。
+- Task195の準備worktreeは `/tmp/yluncher-lyrics-shader` / perf-lyrics-shader（基点e5f78cb、指示書74e7001）。新規helper/Testだけの画素成立確認に限定し、既存KaraokeLineへは未配線。背景の実機比較待ち時間にこの独立proofだけ先行可能とする。採用判断と本体への統合はA→B→C順、Gradle同時実行は最大2。失敗した実験を本体へ混ぜず、旧方式を維持する。
+- 数値元データ/traceは `/tmp/yluncher-render-comparison/`、制御scriptは `/tmp/yluncher-compare-run.py`、`yluncher-perf-v2.py`、`yluncher-trace-run.py`。認証値/歌詞本文は保存しない。一時画面PNGは終了時削除する。最終beta/場面確認/利用者起床後の見た目確認は未完了。
+
 ## 描画軽量化: Task193の実装検証 (2026-11-06)
 
 - Task193 `.codex-bak/20261105-235000/` 完了。許可2ファイルのみ、既存49件無変更＋追加8件。最適化前57件中6失敗（1m51s）、実装後57件全成功（1m39s）、error/skip 0。実Canvasの読取依存をSnapshotStateObserverで観測し、強制draw回数とは区別。点中央のNative Graphics画素も1/255で照合。通常/詳細経路の曲・行変更、停止/シーク/再開、前奏終了を確認。

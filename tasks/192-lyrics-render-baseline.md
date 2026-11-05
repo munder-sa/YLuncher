@@ -19,3 +19,13 @@
 ## 記録
 
 各試行のJSON、gfxinfo、meminfo、必要なトレースを一時領域へ保存し、採用判断に使う統計は文書へ残す。生の画像/実歌詞はGitへ保存しない。前回の0.45%のようにPLAYINGが維持されない測定は再利用しない。
+
+## 確定した実行手順 (2026-11-06)
+
+- 基準ソース4ea66f4、候補Aのソースe5f78cb。全比較APKはrelease/R8あり、48/beta1、同じ署名。本体を毎回install -rし、`cmd package compile -m speed -f com.gt8d.launcher`。compileの実状態speedを確認した。
+- 通常画面display0、1920x1080/238dpi/30Hz、前面Homeは1 Activity。scrcpy 5.0.1の通常mirrorを使用し、引数は `-s 192.168.137.200:40275 --max-fps=60 -b 16M --audio-source=playback --print-fps`。転送用display7の60Hzはアプリの60fpsを意味しない。
+- Apple Musicで同じLemon - Singleを開き、Lemon行を選択→HOME→40秒暖機→pause→Sliderを左端までdragしてposition0確認→play→約41〜71秒の30秒窓。続いて同じアルバムのPaper Flower→HOME→12秒暖機→同じ0シーク→play→約2〜5秒の3秒窓。前奏6秒窓のpilotは歌詞開始が混ざったため除外した。
+- 曲の選択IDはLemon1537460612 / Paper Flower1537460614、album1537460610。[Appleの公開カタログ](https://itunes.apple.com/lookup?id=1537460610&entity=song&country=jp)でID/曲名/長さを照合。dumpsysのPlaybackStateはID値を出さないため、各観測点の同定は曲名・artist・album・状態・position/updated/speedと選択した画面による。数値IDを毎回セッションから採取したとは扱わない。
+- `/tmp/yluncher-compare-run.py` が上記操作、`/tmp/yluncher-perf-v2.py` が/media_sessionとuptime、/proc差分、gfxinfo、meminfoを採取。30秒窓は5秒ごとに再生状態を確認。最初と最後の前面Activity一致と位置の単調増加を必須とする。窓の実時間は端末uptime差で計算し、ホストsleep30秒と同一とはみなさない。
+- 生データ `/tmp/yluncher-render-comparison/`、APKと対象テストXML `build/perf-lyrics/`。基準/候補を交互に3組。同一パッケージのART speed条件であり、通常のspeed-profile状態の値とは直接比較しない。
+- Thermal Statusは前後0。HALが実温度を出さずbattery温度0も無効なので、温度は未測定。短い前奏窓のthread ticksはprocess ticksと採取時点が僅かにずれるため内訳の和を厳密な値にしない。gfxの個別framestatsは末尾120件リングなので、間隔統計はその末尾サンプルと明記する。
