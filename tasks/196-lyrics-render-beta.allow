@@ -1,1 +1,3 @@
+write app/build.gradle.kts
+write panelhost/build.gradle.kts
 command /home/munde/tools/gradle-run.sh :app:assembleRelease :panelhost:assembleRelease
