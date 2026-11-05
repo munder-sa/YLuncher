@@ -2,6 +2,14 @@
 
 最終更新: 2026-11-06 (JST)
 
+## 描画軽量化: 背景の比較開始、Shader保留 (2026-11-06 00:47)
+
+- Task194の実装/検証が完了。worktree `/tmp/yluncher-lyrics-background` の3df8267に記録、40件成功/失敗・error・skip0。先行5回は新規の寸法fixture待機タイムアウト（旧実装でも再現）、手動clock/snapshot反映で全期待値を維持して解消。release1回成功。実装担当停止済み。候補B1本体SHA256 `68e1b27a829b159d1a298f3a829ab8a9350baccea9c36568c39a778208e78c8d`、同署名48/beta1。`build/perf-lyrics/background`に保存。
+- 司令塔が `b-base-1/2/3`（interlude APK）と`b-layer-1/2/3`（background APK）の単語30秒交互比較を実行中。まだBの採用を決めていない。単語の追加診断1組はcontrol35.59%/interlude35.68%、遅延27/29で差は再現せず。前奏traceはdoFrame両63回、draw63→4、RT合計1,032→66ms。Aをベータ採用候補に進める。
+- Task195 `.codex-bak/20261106-003005/` は実験環境非対応で停止/保留。新規2ファイルは `/tmp/yluncher-lyrics-shader` に未追跡のまま保持。12試験全部 `Software rendering doesn't support RuntimeShader`。画素差やGPU対応は未測定。既存コード無変更・本体へ未配線・APK未作成。失敗を消さず、mainへ取り込まない。実装担当は停止済み。今後のGPU専用検証は別設計とする。
+- Task194/195の指示書/allowをmain作業場所にも複写し、比較記録へ経緯を追加した。両実装担当のallow警告は指定--tests引用符の正規化差のみ。全テストの再実行なし。次はBの採否→Task196で両beta2/49→実機の場面確認→最終記録。利用者の見た目確認は起床後。
+- Aの停止中の点領域を実機で比較し、同じメディア位置の84×30px領域のRGB差は0（このケースは0点灯）。候補/対照PNGは/tmpのみ、終了時削除する。既存PythonにPillowはなく使わず、標準ライブラリのPNG読取で比較した。ツール/依存インストールなし。
+
 ## 描画軽量化: 交互3組と次の候補 (2026-11-06 00:29)
 
 - main作業場所は `perf-lyrics-render` / e5f78cb、前奏改善のユニットとrelease完成。実機A/B 3組を完了し、[比較記録](performance/2026-11-06-lyrics-render-comparison.md)を作成中。前奏CPU中央値31.23→7.90%（74.7%減）、draw81→5。単語CPU35.62→35.59%、目標20%未達。単語の遅延フレーム数に差があるため、追加確認を実施中で正式採用は未確定。

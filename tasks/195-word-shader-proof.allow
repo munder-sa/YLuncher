@@ -1,0 +1,3 @@
+create app/src/main/java/com/gt8d/launcher/ui/home/LyricWordBrush.kt
+create app/src/test/java/com/gt8d/launcher/ui/home/LyricWordBrushTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.LyricWordBrushTest'
