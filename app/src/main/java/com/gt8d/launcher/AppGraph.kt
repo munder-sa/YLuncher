@@ -26,8 +26,8 @@ import com.gt8d.launcher.notice.NoticeOverlay
 import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.apps.AppCatalogState
 import com.gt8d.launcher.apps.FrequentApp
+import com.gt8d.launcher.apps.FrequentAppsRefresher
 import com.gt8d.launcher.apps.UsageHistory
-import com.gt8d.launcher.apps.rankFrequent
 import com.gt8d.launcher.apps.settingsComponent
 import com.gt8d.launcher.apps.HiddenApps
 import com.gt8d.launcher.apps.startStockLauncher
@@ -118,46 +118,67 @@ object AppGraph {
     val frequentApps: StateFlow<List<FrequentApp>?> = _frequentApps.asStateFlow()
     private val _usageAvailable = MutableStateFlow(false)
     val usageAvailable: StateFlow<Boolean> = _usageAvailable.asStateFlow()
-    private var frequentRefreshRunning = false
+    private var frequentRefresher: FrequentAppsRefresher? = null
     private var frequentTestOverride = false
+    private var frequentRefresherFactoryForTest:
+        ((Application, (List<FrequentApp>?, Boolean) -> Unit) -> FrequentAppsRefresher)? = null
+
+    // close と公開は helper 内の同じロックで直列化する。公開側は AppGraph のロックを取らない。
+    private fun discardFrequentRefresher() {
+        frequentRefresher?.close()
+        frequentRefresher = null
+    }
+
+    private fun publishFrequentApps(ranked: List<FrequentApp>?, available: Boolean) {
+        _usageAvailable.value = available
+        _frequentApps.value = ranked
+    }
+
+    @Synchronized
+    internal fun setFrequentRefresherFactoryForTest(
+        factory: ((Application, (List<FrequentApp>?, Boolean) -> Unit) -> FrequentAppsRefresher)?,
+    ) {
+        discardFrequentRefresher()
+        frequentRefresherFactoryForTest = factory
+        frequentTestOverride = false
+        publishFrequentApps(null, false)
+    }
 
     @Synchronized
     internal fun setFrequentAppsForTest(ranked: List<FrequentApp>?, available: Boolean) {
+        discardFrequentRefresher()
         frequentTestOverride = true
-        _frequentApps.value = ranked
-        _usageAvailable.value = available
+        publishFrequentApps(ranked, available)
     }
 
     @Synchronized
     internal fun clearFrequentAppsForTest() {
+        discardFrequentRefresher()
         frequentTestOverride = false
-        _frequentApps.value = null
-        _usageAvailable.value = false
+        publishFrequentApps(null, false)
     }
 
     @Synchronized
     fun refreshFrequentApps() {
-        if (!::app.isInitialized || frequentRefreshRunning || frequentTestOverride) return
-        frequentRefreshRunning = true
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            try {
-                val history = UsageHistory(app)
-                val available = history.available()
-                val launches = history.launchesSince(System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000)
-                val excluded = setOfNotNull(app.packageName, OwnPackages.PANEL_HOST,
-                    settingsComponent(app.packageManager)?.packageName) + HiddenApps.packages
-                val ranked = launches?.let { rankFrequent(it, catalog.installed() - excluded) }
-                synchronized(this@AppGraph) {
-                    if (!frequentTestOverride) {
-                        _usageAvailable.value = available
-                        _frequentApps.value = ranked
-                    }
-                }
-                DiagLog.d("Frequent", "events=${launches?.size} top=$ranked")
-            } finally {
-                synchronized(this@AppGraph) { frequentRefreshRunning = false }
+        if (!::app.isInitialized || frequentTestOverride) return
+        val refresher = frequentRefresher ?: run {
+            val context = app
+            frequentRefresherFactoryForTest?.invoke(context, ::publishFrequentApps) ?: run {
+                val history = UsageHistory(context)
+                val currentCatalog = AppCatalog(context)
+                FrequentAppsRefresher(
+                    available = { history.available() },
+                    launchesSince = { history.launchesSince(it) },
+                    eligible = {
+                        val excluded = setOfNotNull(context.packageName, OwnPackages.PANEL_HOST,
+                            settingsComponent(context.packageManager)?.packageName) + HiddenApps.packages
+                        currentCatalog.installed() - excluded
+                    },
+                    publish = ::publishFrequentApps,
+                )
             }
-        }
+        }.also { frequentRefresher = it }
+        refresher.refresh()
     }
 
     // 場面テストの受け口からパネルに起動を頼む
@@ -366,6 +387,8 @@ object AppGraph {
     @Synchronized
     fun init(app: Application) {
         if (::app.isInitialized && this.app !== app) {
+            discardFrequentRefresher()
+            if (!frequentTestOverride) publishFrequentApps(null, false)
             sharedAppCatalogState?.close()
             sharedAppCatalogState = null
         }
