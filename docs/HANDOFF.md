@@ -2,6 +2,21 @@
 
 最終更新: 2026-11-05 (JST)
 
+## 負荷分析とscrcpy試験環境 (2026-11-05)
+
+- **担当はCodex暫定司令塔、分析完了・改善実装は未着手**。利用者が「全体を調べて優先順位を決める」を選択。結果と条件、コード参照、未確認事項は [負荷分析](performance/2026-11-05-bottlenecks.md)。通常画面でLemon歌詞ONのCPU34.35/35.90%、OFF3.99/4.01%（1コア100%）を確認。停止ホーム0.16%、非表示の再生中3.35%、セット4＋Maps4.90%。分割の単語塗り条件は未照合で、同一描画の比較にはしない。
+- CPUサンプル1,091件/lost 0はRenderThread70.85%、main24.29%。atrace20秒のdoFrame p90 7.48ms、DrawFrames p90 25.83ms。最優先は歌詞の描画範囲/合成、次に非表示の更新/メディアsnapshot、切替時の同期UsageStats照会と復帰時の7日間集計は追加計測対象。背景色や歌詞の見た目を維持する方針。具体実装・改善率はまだ決めていない。
+- **利用予定条件は1920×1080・60Hz**。利用者が途中の720p想定を訂正。現在はRAV4未接続、PCでの確認。通常display 0は1920×1080/density238/30Hzの1モードを報告。scrcpy転送画面の60Hzと区別した。車載接続時のAndroidの表示モード/フレーム周期は未確認。
+- 利用者とscrcpyを新規仮想画面へ切替。標準サブ画面ランチャーと右端ナビバーが出たため、司令塔が既存scrcpyだけを正常終了/再起動し `--no-vd-system-decorations` を追加。**現在はdisplay 6: 1920×1080/238dpi/60Hz、YLuncherの試験用root task 3318**。右端の重なりが消えたことをウィンドウ画像で確認。通常display 0には設定アプリを開き、元のHomeActivity/task3305を隠して二重描画を避けた。通常画面のwm size/density/Hz設定は変更なし。
+- 現在のWindows scrcpy 5.0.1引数: `-s 192.168.137.200:40275 --new-display=1920x1080/238 --max-fps=60 -b 16M --audio-source=playback --no-vd-destroy-content --no-vd-system-decorations --print-fps`。終了時に仮想画面のActivityは元画面へ戻る。再起動するとdisplay IDが変わるので固定しない。YLuncherはHOMEカテゴリのみで、`--start-app` 任せにせず、必要に応じ既存の試験用root taskを `am display move-stack` で移す。通常の分割/HOME操作が仮想画面と同一に動く保証はない。
+- 仮想画面のLemon ONはCPU35.69%/558描画/28.89秒。ただしframestatsのIntendedVsync間隔は中央値53.11ms、deadline差分の最頻値33.33msのままで、60fps動作を再現できたとは報告しない。仮想画面OFFは再生状態が維持されずBUFFERINGとなり、比較から除外。終了時Lemon PAUSED/84,750ms、歌詞ON、仮想画面のホームを維持。
+- 実機app/panelhostは2.3.0 / 47、YLuncher PID9825を維持。アプリ/テスト/版/通信設定の変更、ビルド、単体テスト、インストール、pushは0件。実装担当/Gradleなし。Git開始時main=a7951e7、origin/mainと同期。今回の文書だけをローカルコミット対象とし、既存未追跡 `.mcp.json` / Task170 md・allowは触れない。正式版tag=f0e5c9dは維持。
+- 一時数値・トレースは `/tmp/yluncher-perf-20261105/`。認証値/歌詞本文を文書に含めない。端末上の今回のatrace/perfファイル2件は削除済み。次の一手はこの分析を基に、描画範囲/合成の比較設計を指示書へ落とすこと。車載での60Hz、切替の詳細時間、長時間熱/電力は別途未確認。
+
+## 現在のADB接続先 (2026-11-05)
+
+- 利用者の接続先変更連絡を受け、Windows SDKの `adb.exe devices -l` を実行。新接続先は **192.168.137.200:40275**、状態device、product/device=lito、model=Lito_for_arm64、transport_id=3。続く `adb.exe -s 192.168.137.200:40275 get-state` はdevice、`shell getprop ro.product.model` はLito for arm64、いずれも終了0。ADB shellへの到達を確認した。以後の実機操作はこの接続先を使い、過去の192.168.137.248:5555を固定使用しない。端末設定/アプリの変更なし、テスト/ビルドの実行なし。
+
 ## IPv6調査報告のリモート反映 (2026-11-05)
 
 - 利用者の「リモートgit にもコミット＆Push」を受領。IPv6ルール欠落の報告と自己ADBアプリの役割を記録したローカルコミットaa64c7eを、`git push origin main` でmunder-sa/YLuncherへ反映。終了0、リモートmainはcbe45e5→aa64c7e。この完了記録もmainへ含める。
