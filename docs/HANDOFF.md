@@ -9,7 +9,8 @@
 - 配布物は `build/releases/v2.3.1/` の `YLuncher-2.3.1.apk`、`YLuncher-panel-2.3.1.apk`、`SHA256SUMS.txt`。本体SHA256 `c5712ded5e79ad785acd05f10b912fc17c01b6f6bd25a229ec4afa6f3e7f2da7`、中継 `58b61249e26af833d7e40c32b5d27b4e98f1f296690a131e489495931f4a2f0d`。署名は従来と一致、両非debuggable、実機base.apkのハッシュも一致。
 - 実機 `192.168.137.200:40275`、PID19652。既定HOME/通知リスナー/既存ユーザー補助を導入前後で照合し維持。再入力なしCONNECT READY1,417ms、怪獣のApple歌詞accepted=true（46行318単語、348ms）。ホームの単語塗り/背景、再生、パネル＋Maps、パネルから停止→HOMEを確認。最終は歌詞ON・怪獣76.176秒PAUSED、YouTubeもPAUSED。PID不変、同PIDAndroidRuntimeエラーなし。
 - 本体の実効ARTは **speed-profile / cmdline**。通常操作→SAVE_PROFILE result12→compileで確認。既知のINSTALL_PROFILE result3とは区別する。依存更新なし。SIM/ネットワーク/表示設定は変更なし。利用者の見た目/操作感確認、実車60Hz、長時間の熱/電力は未検証。前奏/通知/照会回数の改善を全体CPUや単語描画の改善へ拡大解釈しない。
-- 次: この正式版の差分と記録をコミットし、ローカルmainへfast-forward、新規ローカルv2.3.1-releaseタグを作成する。リモートpush/Release公開は今回未実施。終了時のGit状態は確定後に追記する。既存未追跡3件と不採用の実験worktreeは維持する。
+- 正式版コミットは **8ec12673023fe5dc50f634dbf50a01c75e7cac8f**。ローカルmainをperf-runtime-costからfast-forwardし、新規ローカル **v2.3.1-release** タグを同コミットへ作成した。この確定記録は後続のmain文書コミットに含め、タグは動かさない。origin/mainはa7951e7、リモートpush/Release公開は今回未実施。
+- 委譲/検証/インストールはすべて終了。今回の一時画面2枚は削除済み。最終状態 `/tmp/yluncher-231-final.json`、導入前後は同before/after.json。既存未追跡 `.mcp.json` とTask170 md/allowは維持し、背景/Shader等の実験worktreeも取り込まず維持した。次は利用者による普段の見た目/操作感確認。SetRunnerの追加改善は既存の次段階設計に沿って別途扱う。
 
 ### 正式化開始時の記録
 
