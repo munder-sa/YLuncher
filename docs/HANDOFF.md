@@ -2,6 +2,15 @@
 
 最終更新: 2026-11-05 (JST)
 
+## 描画軽量化の実行開始 (2026-11-05)
+
+- 利用者が就寝前に「5まで進めておいて」と指示。Task192〜196の比較/統合/確認用ベータまで自律継続し、主観的な見た目の最終確認は起床後とする。正式公開/pushは今回行わない。
+- Task196先行分 `.codex-bak/20261105-233914/` は版2ファイルのみ変更、release build 1回52秒成功、単体テスト0回。対照Aを `build/perf-lyrics/control/` へ保存済み。本体SHA256 `6f4a6f53815b8b7a063f807f31230506469f74edad9b976a41811a50180eb08f`、panel `7d16342dadf29a932bbd8a6d9f96765947a4b0250ee45f574d86f4ede302c733`。両署名SHA256 `44d8c612bd3948e265840f28adff0f820d5893d0ba24d888b041ca16544f7f6d`。次はTask193の委譲と対照Aの実機計測。
+- 比較用のART状態は各上書き後 `cmd package compile -m speed -f com.gt8d.launcher` に固定する。端末helpでspeed/forceの契約を確認済み。通常利用のspeed-profileとは別条件で、旧分析のCPUとは直接比べず今回のA/B間で評価する。
+- 利用者の「OK進めましょう」を受領。`perf-lyrics-render` を299aa5dから作成。Task192の比較条件、Task193の2ファイル限定指示書/allow、Task196の版ビルド限定指示書/allowを用意した。次は機能変更前の対照A APKを作るため、Task196を先行委譲する。
+- 交互比較時のrelease版ダウングレードを避けるため、対照A/候補Bとも実験用2.3.1-beta1 / 48を使い、候補名/ソース/SHAで識別する。最終採用版は次のbeta/codeへ進める。対照APKを保存してからTask193の実装へ進む。
+- 実機接続192.168.137.200:40275はdevice、app2.3.0 / 47、PID9825。通常画面30Hz、仮想display6は1080p/60Hz。前面がApple Music（6）とMaps（0）へ変わっていたため、計測前に曲と単一Homeの条件を揃える。battery温度0は無効値、thermalservice get-thermal-statusは未対応だった。今回の正式版/pushは未着手。
+
 ## 歌詞描画の軽量化計画 (2026-11-05)
 
 - 利用者の「歌詞ON時の描画負荷軽減の計画」を受け、[設計](superpowers/specs/2026-11-05-lyrics-render-cost-design.md)と[実施計画](superpowers/plans/2026-11-05-lyrics-render-cost.md)を作成。担当は引き続きCodex暫定司令塔。**今回は計画のみ、実装/委譲は未開始**。
