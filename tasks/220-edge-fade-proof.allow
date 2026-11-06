@@ -1,0 +1,3 @@
+write tools/renderprobe/src/main/AndroidManifest.xml
+create tools/renderprobe/src/main/java/com/gt8d/launcher/renderprobe/EdgeFadeProbe.kt
+create tools/renderprobe/EDGE_FADE.md
