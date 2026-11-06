@@ -1,0 +1,2 @@
+write app/src/test/java/com/gt8d/launcher/settings/AppleMusicLyricsScreenTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.settings.AppleMusic*'
