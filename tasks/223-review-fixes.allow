@@ -1,0 +1,13 @@
+write app/src/main/java/com/gt8d/launcher/media/lyrics/AppleLyricsClient.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/AppleWebTokenProvider.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/AppleMusicSession.kt
+write app/src/main/java/com/gt8d/launcher/media/MediaSessionCache.kt
+write app/src/main/java/com/gt8d/launcher/config/LastSetIndexStore.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/AppleLyricsClientTest.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/AppleWebTokenProviderTest.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/AppleMusicSessionTest.kt
+write app/src/test/java/com/gt8d/launcher/media/MediaWatcherTest.kt
+write app/src/test/java/com/gt8d/launcher/config/LastSetIndexStoreTest.kt
+write app/build.gradle.kts
+write panelhost/build.gradle.kts
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.*' --tests 'com.gt8d.launcher.media.MediaWatcherTest' --tests 'com.gt8d.launcher.config.*' --tests 'com.gt8d.launcher.sets.SetRunnerTest'
