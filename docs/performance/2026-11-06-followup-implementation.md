@@ -117,3 +117,40 @@ PC側の実装/レビュー/対象・統合テスト/比較APK準備を完了。
 - セット4→HOME→本体force-stop→HOMEでPID変更、番号4/設定ハッシュを保持。ホームで怪獣の歌詞・単語の塗り・背景、再生→停止を確認。最終怪獣PAUSED/209,573ms、歌詞ON、HOME、callback1。検証窓の同PID AndroidRuntimeエラーなし。実際の取得済み画面は確認後削除。
 - beta2の通常導入でもprofileWrittenFor_lastUpdateTime.datとprimary.profが更新。最後のARTはverify/reason=install。beta2では強制compileを実行せず、初回AOTを主張しない。
 - 原本は `/tmp/yluncher-followup-scenes/` の数値・対象ログのみ。検証用renderprobeアプリ、端末上のUsageEvents DEX、一時画像3枚を削除済み。実機の表示/操作感を利用者へ確認依頼し、回答まで司令塔の画面操作を停止。非画面操作の全体テスト/記録を継続する。
+
+## 第三段階の実機確認 (2026-11-06 夜、司令塔 Claude)
+
+接続 192.168.137.200:40725、display0 1920×1080/238dpi/30Hz、PC接続(実車60Hzではない)。開始時の実機は両 2.3.2-beta2 / 53。
+
+### 前奏の同版比較(対照 vs 候補、beta3 / 54)
+
+- 対照 `build/perf-next/control/`(5bb6874、app bc493c6b…)、候補 `build/perf-next/candidate/`(6535c74相当、app 2db786ff…)。中継は対照の panel を1回入れ、本体だけを毎回 install -r → `compile -m speed -f`。手順は Task192 の確定手順と同じ(Paper Flower を0へシーク→再生→約2〜5秒の窓)。スクリプトは Task192 のものを接続先と保存先だけ変えて使用。原本 `/tmp/yluncher-beta3-comparison/`。
+- 対照→候補を交互に3組、全試行 accepted(PLAYING・同曲・前面不変・位置単調)、Thermal Status 前後0。
+
+| 組 | 対照CPU | 候補CPU | 対照RT | 候補RT | 対照/候補 frames |
+|---|---|---|---|---|---|
+| 1 | 7.77 | 6.17 | 1.07 | 1.61 | 7 / 7 |
+| 2 | 8.87 | 6.50 | 1.88 | 1.69 | 7 / 7 |
+| 3 | 9.86 | 5.40 | 1.97 | 1.42 | 7 / 8 |
+
+- CPU中央値(1コア=100%)**8.87 → 6.17%、約30%減**。差2.70ポイントは対照の幅2.09ポイントを超え、3組とも候補が低い。描画フレーム数はほぼ同じで、減ったのは主スレッドの処理(主スレッド中央値5.11 → 2.95%)。窓は約3.5秒と短いので、率は目安として扱う。
+- 時計(217)と初回アイコン(218)は数値比較をしていない。時計は1分ごとの更新のため窓のCPUに現れない。
+
+### beta4 の導入と基本動作
+
+- 両 2.3.2-beta4 / 55 を本体→中継で install -r。実機 base.apk の SHA256 が候補(39407b84… / b30e92ab…)と一致。既定HOME・通知リスナーは保持。ユーザー補助は導入前から carsyso のみ(PiP判定は元々無効)で変化なし。
+- ホーム: 時計・日付、Apple の単語同期歌詞(Paper Flower)、最後のセット4の強調を確認。セット4(パネル|マップ)で分割、パネルの「アプリ」⇔「セット」切替の直後の画面でアイコンが揃っていることを確認(画面取得のタイミングで見えた範囲。目視の確認はユーザーに依頼)。HOME 復帰。
+
+### Task219/220 の実GPU画素比較: どちらも不採用
+
+- `build/perf-next/probes/renderprobe.apk`(9792e066…)を実機へ導入し、各1回実行。原本 `/tmp/yluncher-post-mask-run1.txt`・`/tmp/yluncher-edge-fade-run1.txt`。終了後にプローブはアンインストール。
+- **Task219 post_mask**: 663件中 **成功567 / 不一致96 / 未実行0**、hardware=1。最大差 **2/255**(許容1/255)、不一致の画素は1件あたり1〜6個。effect生成648回・uniform更新648回(更新ごとに生成=割り当てあり)。旧 text_shader(最大154/255)より大幅に近いが基準を満たさないため不採用。閾値・ケースは変えない。
+- **Task220 上下端フェード(bands)**: 216件中 **成功170 / 不一致46 / 未実行0**、最大差 **3/255**(45件は2/255)。差は主に中央帯(マスクなしの drawLayer 再生)に出る。cleanup・bitmap回収は全件済み。
+- **Task220 の負荷**: perf モードで full/bands を交互に3組、各約19.3秒(原本 `/tmp/yluncher-edge-fade-perf.json`)。プロセスCPU中央値 full 48.35% / bands 49.72%、RenderThread 18.40% / 20.62%、フレーム数・p90 は同等。**bands のほうが重く**、画素互換も不成立のため不採用。
+
+### Task221 実操作プロファイルの収録
+
+- 収録専用 `build/perf-next/profile-capture/app-capture.apk`(253682c、非R8、54)を `install -r -d` で導入(実機は root の adb shell のため版下げが通った)。ProfileInstaller へ `WRITE_SKIP_FILE` を送り(result=10)、`am force-stop` → `cmd package compile --reset` で cur プロファイルを空にしてから収録。
+- 操作(2周): HOME の冷えた起動 → 再生 → 歌詞表示の切替 → 次の曲/前の曲 → シーク → セット4(パネル|マップ)→ パネルのアプリ⇔セット切替×2 → パネルのHOME → セット1(YouTube|パネル)→ HOME → アプリ一覧 → 戻る。
+- SIGUSR1 で書き出し後 `pm dump-profiles --dump-classes-and-methods`。**20,706行**(クラス1,367、メソッド19,312。うち androidx.compose 10,713、アプリ自身 3,652、coroutines 1,549)。原本 `/tmp/yluncher-profile-capture/captured.txt`(a4469639…)。端末側の書き出しファイルは削除。
+- 収録後に beta4 本体を install -r で戻した(base.apk 39407b84… 一致、HOME・通知リスナー保持)。現行の手書き12行(ワイルドカード)と比べる採否判断はこれから。
