@@ -1,0 +1,2 @@
+write app/build.gradle.kts
+command /home/munde/tools/gradle-run.sh :app:assembleRelease
