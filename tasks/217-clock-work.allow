@@ -1,0 +1,8 @@
+write app/src/main/java/com/gt8d/launcher/ui/home/HomeClockHeader.kt
+write app/src/main/java/com/gt8d/launcher/ui/layout/FitClock.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelContent.kt
+create app/src/main/java/com/gt8d/launcher/ui/lifecycle/MinuteClock.kt
+create app/src/main/java/com/gt8d/launcher/ui/layout/ClockLayoutCache.kt
+create app/src/test/java/com/gt8d/launcher/ui/layout/ClockLayoutReuseTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/lifecycle/MinuteClockTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.HomeClockHeaderTest' --tests 'com.gt8d.launcher.ui.layout.FitClockTest' --tests 'com.gt8d.launcher.ui.layout.ClockLayoutReuseTest' --tests 'com.gt8d.launcher.ui.lifecycle.*' --tests 'com.gt8d.launcher.ui.panel.PanelContentTest'
