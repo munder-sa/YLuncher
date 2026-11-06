@@ -2,15 +2,15 @@
 
 最終更新: 2026-11-06 (JST)
 
-## beta2後の6候補: 3件実装・PC検証完了、実機接続待ち (2026-11-06)
+## beta2後の6候補: 3件実装・PC検証完了、実機検証は後日 (2026-11-06)
 
 - **担当はCodex暫定司令塔**。基点perf-followup / 510187e。ユーザーは6候補を進めること、beta2の操作感「問題なし」と実機比較、前奏の旧毎frame要求だけを新仕様へ更新することを明示承認。実機操作の許可はあるが、接続が失われたため今回の画面操作/インストールは0回。
 - **実装済み**: Task216前奏/間奏の境界更新（85件成功/a92a618）、Task217時計の計測再利用と分イベント更新（45件成功/4802768）、Task218画面別の初回アイコン準備（59件成功/166c343）。差分/allow/実行コマンドをレビューし、既存画素・点灯・停止再開の基準を維持した。[第二段階記録](performance/2026-11-06-followup-implementation.md#第二段階-beta2後の6候補-2026-11-06)参照。
 - **統合検証**: rootのui.* Debugを1回実行、6m53s/50クラス **1,083件成功、failure/error/skip0**。全XML/実行ログと個別試験はbuild/perf-next/tests。今回はRelease全テスト/アプリ全テストを実行していない。委譲・Gradleの実行中Taskなし。
 - **候補APK準備済み・未導入**: Task222の両2.3.2-beta3 / 54、版6535c74→1edd47f。release各1回、同署名/非debuggable、候補APKとrootのapp/panel/gradle差分なしを照合。build/perf-next/candidate。本体SHA256 2db786ff7ee6fe445a9a6782deed95706e7ff6b1560da0757fe3f74b197e6ece。比較対照はbeta2機能＋同じ版の専用5bb6874、build/perf-next/control。
 - **残る3候補の準備**: Task219 post_mask（f729db1）とTask220端フェード（0ed8310）はtools/renderprobeだけ。本体未配線、GPU実行0、画素基準1/255維持。統合プローブoffline build成功、build/perf-next/probes。Task221非R8収録専用253682cは58秒build成功、同署名/non-debuggable、build/perf-next/profile-capture。収録用のminify/shrink falseはrootへ取り込まず、本体appはtrueを維持。profileは未収録。
-- **接続待ち**: 192.168.137.200:40275は開始時device→closed/offline→一覧から消失。再connectは10061拒否、mdns空、同じIPの標準5555も拒否。最後のdevices一覧も空。新IP:ポートを利用者へ質問済み・未回答。最後に実機で確認済みなのは両2.3.2-beta2 / 53。新しい実機性能値、消費電力、実車60Hzは未測定。
-- **次の一手**: 接続先の回答後、端末/前面/表示モードを再確認→同版対照/候補を同条件で比較・場面確認→GPU画素比較と成立した方式の性能比較→非R8専用APKで実profile収録し最適化済み候補へ復元。描画候補の不成立を強制採用しない。正式化/main取り込み/push/Release公開はこの作業ではまだ行っていない。既存未追跡.mcp.json/Task170 md・allow、全実験worktreeを維持。
+- **実機検証は後日**: 192.168.137.200:40275は開始時device→closed/offline→一覧から消失。再connectは10061拒否、mdns空、同じIPの標準5555も拒否。最後のdevices一覧も空。その後ユーザーから「外出中でワイヤレスデバッグをオンにできない、検証は後回しでよい」と回答。接続先の即時回答待ちは解除し、再接続試行と実機作業を延期する。最後に実機で確認済みなのは両2.3.2-beta2 / 53。新しい実機性能値、消費電力、実車60Hzは未測定。
+- **次の一手**: 利用者が後日ワイヤレスデバッグを有効にし接続先を共有したら、端末/前面/表示モードを再確認→同版対照/候補を同条件で比較・場面確認→GPU画素比較と成立した方式の性能比較→非R8専用APKで実profile収録し最適化済み候補へ復元。描画候補の不成立を強制採用しない。正式化/main取り込み/push/Release公開はこの作業ではまだ行っていない。既存未追跡.mcp.json/Task170 md・allow、全実験worktreeを維持。延期の記録のみ更新し、追加ビルド/テスト/ADB操作は実施しない。
 
 ## beta2後の効率化候補の再調査 (2026-11-06)
 
