@@ -22,6 +22,19 @@ class UsageStatsForegroundEvents(
     private var skewMs = 0L
     private var loggedSkewMs = 0L
 
+    private data class Snapshot(
+        val sinceMs: Long,
+        val nowWall: Long,
+        val nowElapsed: Long,
+        val mark: Pair<String, Long>?,
+        val skewMs: Long,
+        val ownPkg: String,
+    ) {
+        val wallMinusElapsed = nowWall - nowElapsed
+        val begin = minOf(sinceMs, mark?.second ?: sinceMs) + wallMinusElapsed - 3000L
+        val end = nowWall + 1000L
+    }
+
     override fun available(): Boolean {
         return try {
             val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false
@@ -36,47 +49,72 @@ class UsageStatsForegroundEvents(
     }
 
     override fun resumedSince(sinceMs: Long): List<ResumeEvent> {
+        val result = prepareRead(sinceMs).read()
+        commitRead(result)
+        return result.resumed
+    }
+
+    override fun prepareRead(sinceMs: Long): ForegroundRead {
+        // Capture all mutable inputs on main. The worker never consults either
+        // OwnResumeClock or the current correction/clock/query hooks.
+        val directQuery = queryResumed
+        if (directQuery != null) return ForegroundRead {
+            readSafely { ForegroundReadResult(directQuery(sinceMs).toList()) }
+        }
+        val snapshot = readSafely {
+            Snapshot(
+                sinceMs, wallClock(), elapsedClock(),
+                OwnResumeClock.latest()?.takeIf { sinceMs - it.second <= MARK_WINDOW_MS },
+                skewMs, context.packageName,
+            )
+        }
+        val rawQuery = queryRawEvents
+        return ForegroundRead { readSafely { readSnapshot(snapshot, rawQuery) } }
+    }
+
+    private fun readSnapshot(snapshot: Snapshot, rawQuery: ((Long, Long) -> List<RawEvent>)?): ForegroundReadResult {
+        val events = rawQuery?.invoke(snapshot.begin, snapshot.end) ?: run {
+            val manager = context.getSystemService(UsageStatsManager::class.java)
+                ?: throw ForegroundEventsUnavailableException()
+            val usageEvents = manager.queryEvents(usageResumedQuery(snapshot.begin, snapshot.end))
+                ?: throw ForegroundEventsUnavailableException()
+            buildList {
+                val event = UsageEvents.Event()
+                while (usageEvents.hasNextEvent()) {
+                    usageEvents.getNextEvent(event)
+                    val pkg = event.packageName ?: continue
+                    add(RawEvent(pkg, event.className, event.eventType, event.timeStamp))
+                }
+            }
+        }
+        val candidate = snapshot.mark?.let { mark ->
+            events.asSequence()
+                .filter { it.type == UsageEvents.Event.ACTIVITY_RESUMED &&
+                    it.pkg == snapshot.ownPkg && it.className == mark.first }
+                .map { it.wallMs - snapshot.wallMinusElapsed - mark.second }
+                .filter { abs(it) <= 3000L }
+                .minByOrNull { abs(it) }
+        }
+        val correction = candidate ?: snapshot.skewMs
+        val resumed = events.filter { it.type == UsageEvents.Event.ACTIVITY_RESUMED }
+            .map { ResumeEvent(it.pkg, it.wallMs - snapshot.wallMinusElapsed - correction) }
+            .filter { it.timeMs >= snapshot.sinceMs }
+        return ForegroundReadResult(resumed, candidate)
+    }
+
+    override fun commitRead(result: ForegroundReadResult) {
+        // Only accepted results reach this main-thread state/log boundary.
+        val candidate = result.skewMs ?: return
+        skewMs = candidate
+        if (abs(skewMs - loggedSkewMs) >= 100L) {
+            DiagLog.d("Foreground", "skew=$skewMs")
+            loggedSkewMs = skewMs
+        }
+    }
+
+    private inline fun <T> readSafely(read: () -> T): T {
         return try {
-            if (queryResumed != null) return queryResumed.invoke(sinceMs)
-            val nowWall = wallClock()
-            val nowElapsed = elapsedClock()
-            val wallMinusElapsed = nowWall - nowElapsed
-            // 古い目印で問い合わせの範囲を広げすぎない(直前 60 秒以内だけ使い、無ければ前の補正値を使う)
-            val mark = OwnResumeClock.latest()?.takeIf { sinceMs - it.second <= MARK_WINDOW_MS }
-            val begin = minOf(sinceMs, mark?.second ?: sinceMs) + wallMinusElapsed - 3000L
-            val end = nowWall + 1000L
-            val events = queryRawEvents?.invoke(begin, end) ?: run {
-                val manager = context.getSystemService(UsageStatsManager::class.java)
-                    ?: throw ForegroundEventsUnavailableException()
-                val usageEvents = manager.queryEvents(usageResumedQuery(begin, end))
-                    ?: throw ForegroundEventsUnavailableException()
-                buildList {
-                    val event = UsageEvents.Event()
-                    while (usageEvents.hasNextEvent()) {
-                        usageEvents.getNextEvent(event)
-                        val pkg = event.packageName ?: continue
-                        add(RawEvent(pkg, event.className, event.eventType, event.timeStamp))
-                    }
-                }
-            }
-            if (mark != null) {
-                val candidate = events.asSequence()
-                    .filter { it.type == UsageEvents.Event.ACTIVITY_RESUMED &&
-                        it.pkg == context.packageName && it.className == mark.first }
-                    .map { it.wallMs - wallMinusElapsed - mark.second }
-                    .filter { abs(it) <= 3000L }
-                    .minByOrNull { abs(it) }
-                if (candidate != null) {
-                    skewMs = candidate
-                    if (abs(skewMs - loggedSkewMs) >= 100L) {
-                        DiagLog.d("Foreground", "skew=$skewMs")
-                        loggedSkewMs = skewMs
-                    }
-                }
-            }
-            events.filter { it.type == UsageEvents.Event.ACTIVITY_RESUMED }
-                .map { ResumeEvent(it.pkg, it.wallMs - wallMinusElapsed - skewMs) }
-                .filter { it.timeMs >= sinceMs }
+            read()
         } catch (error: ForegroundEventsUnavailableException) {
             throw error
         } catch (cause: Throwable) {

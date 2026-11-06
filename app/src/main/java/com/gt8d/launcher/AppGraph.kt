@@ -46,6 +46,7 @@ import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.edge.EdgeAction
 import com.gt8d.launcher.edge.EdgeStripService
 import com.gt8d.launcher.foreground.ForegroundWatcher
+import com.gt8d.launcher.foreground.AsyncForegroundRead
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
 import com.gt8d.launcher.foreground.WarmTracker
 import com.gt8d.launcher.safety.SafetyGuard
@@ -234,7 +235,8 @@ object AppGraph {
     }
 
     val watcher: ForegroundWatcher by lazy {
-        ForegroundWatcher(UsageStatsForegroundEvents(app))
+        // Prepare/commit on Main; only waitBoth's periodic read uses IO.
+        ForegroundWatcher(UsageStatsForegroundEvents(app), AsyncForegroundRead(applicationScope))
     }
 
     val warm: WarmTracker by lazy {
