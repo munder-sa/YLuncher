@@ -19,3 +19,7 @@
 - 上記2委譲のallow警告は既知の--tests引用符正規化差のみ。実行イベントのコマンドは指定文字列、成功後の再試験なし。
 - Task206 `/mnt/f/YLuncher/.codex-bak/20261106-091705/`: profileinstallerを1.3.1→1.4.1の1行だけ変更。ビルド/実機確認前で未確定。
 - 実機変更前の探索窓: `/tmp/yluncher-followup-baseline.json`。正式2.3.1 / PID19652でホーム再生中19.79秒CPU36.736%（単一core換算）、Apple画面でランチャー非表示19.69秒4.215%。両条件callback2件。これは各1窓の診断で、厳密な曲区間固定比較や削減率ではない。終了時に再生停止しHOMEへ戻した。
+- Task207 `/tmp/yluncher-last-index/.codex-bak/20261106-091651/`: 指定1回30件（既存14+新規16）、失敗error skip0。保存確認済み値とcacheを分離し、失敗時は同値でも再保存、同期順序とthread安全を確認。単一production writer、実機scenarioの外部書込後はアプリ再起動を確認。aeb13f0→d682919で取り込み。
+- Task204は新規fixtureの時計固定で3回とも29件中1失敗（既存26件は成功）。Task211でUsageHistoryの既定System時計をinternal注入境界にし、fixtureだけ120000msを明示。期待値/全イベント/旧API参照/アサーション無変更。1回29件成功、error skip0。ログ `/tmp/yluncher-usage-filter/.codex-bak/20261106-092222/`、d605c64→1224a4dで取り込み。Task205はこのworktreeから委譲開始。
+- Task210のJava→DEXは各コマンド1回成功。D8のAPI35警告は出たが、実機app_processでAPI35の呼出し成功を確認した。root/system contextのAppOps=allowed、OS設定変更なし。`adb.exe ... push F:/YLuncher/build/usageprobe/dex/classes.dex /data/local/tmp/yluncher-usage-probe.dex` → `shell 'CLASSPATH=/data/local/tmp/yluncher-usage-probe.dex app_process /system/bin UsageEventsProbe'` を各1回実行、終了0。
+- 同じ固定期間で旧/新を各3組比較。24時間:全1671件→RESUMED312件、7日:全7499件→RESUMED771件。6組とも種別/package/class/timeの順序付きdigestが一致、新経路の他種別0。query時間msは7日旧18.048646/17.779583/19.791875、新7.357031/7.172448/7.595209。解析（digest含む）は旧10.645104/7.892292/7.984114、新6.755052/6.803802/7.525938。rootの検証プロセスでの比較であり、全体CPU/実アプリの操作遅延率に換算しない。

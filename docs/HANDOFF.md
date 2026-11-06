@@ -6,6 +6,8 @@
 
 - ユーザーが「おけ、全て進めて」と承認。Codex暫定司令塔がmain b76b707を基点に7候補の実装/比較へ着手。[作業記録](performance/2026-11-06-followup-implementation.md)を作成。Task202の表示中監視/UI更新とTask203のキャッシュ整理を別worktreeへ委譲し、その間にイベント絞込み/非同期poll/GPU検証を設計する。
 - アプリ実装はcodex-run、Gradleは同時2本まで。実機は開始時2.3.1 / 51。既存未追跡3件と過去の実験は維持。候補の効果/互換は未確認であり、全件採用を事前に決めない。
+- 作業ブランチperf-followup。Task202 UIは382件成功/c7dc8e9、Task203キャッシュは31件/e99a2c8、Task207セット番号IOは30件/d682919を取り込み。Task204の時計fixture失敗はTask211で期待値を維持して修正、29件成功/1224a4d。Task210の実機API比較6組も一致、7日7499→771件、query中央値約18→7ms。詳細は作業記録。
+- Task205は `/tmp/yluncher-usage-filter` で非同期pollを委譲中（092459）、Task208は `/tmp/yluncher-gpu-proof` の独立GPUプローブを作成中（091122、ビルドは司令塔）。Task206のprofileinstaller1.4.1はrootに未コミット。Task209で先行分を2.3.2-beta1 / 52へ揃え比較ビルド予定。現時点の実機はまだ正式2.3.1 / 51。
 
 ## v2.3.1後の追加パフォーマンス候補調査 (2026-11-06)
 
