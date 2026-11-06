@@ -25,17 +25,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gt8d.launcher.ui.lifecycle.VisibleUiEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalContext
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.HiddenApps
-import com.gt8d.launcher.apps.dockAppsFor
-import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.media.MediaWatcher
 import com.gt8d.launcher.media.positionAt
 import com.gt8d.launcher.split.AndroidActivityLauncher
@@ -68,7 +68,7 @@ fun PanelScreen(
     val context = LocalContext.current
     val latestConfig by AppGraph.latestConfig.collectAsStateWithLifecycle()
     val catalog = AppGraph.appCatalogState
-    val apps by catalog.snapshot.collectAsStateWithLifecycle()
+    val apps by key(catalog) { catalog.snapshot.collectAsStateWithLifecycle() }
     val environment = rememberPanelEnvironment(catalog)
     val config = homeConfig ?: latestConfig ?: return
     var pending by rememberSaveable { mutableStateOf<PanelView?>(null) }
@@ -83,21 +83,28 @@ fun PanelScreen(
     val iconPage = rememberSaveable { mutableIntStateOf(0) }
     val frequent by AppGraph.frequentApps.collectAsStateWithLifecycle()
     val settings = apps.settings
-    val settingsApp = remember(settings, apps.appRevision) {
+    val settingsApp = remember(catalog, settings, apps.appRevision) {
         settings?.let { AppInfo(it.packageName, "設定", apps.info(it.packageName).icon, true) }
     }
-    val required = remember(config, now?.pkg, frequent, apps.installed, settings) {
-        (config.homeApps + config.panelApps + config.dockApps + config.idleApp +
-            config.screenSets.flatMap { listOfNotNull((it.left as? Slot.App)?.pkg, (it.right as? Slot.App)?.pkg) } +
-            frequent.orEmpty().map { it.pkg } + listOfNotNull(now?.pkg, settings?.packageName))
-            .filter { it.isNotBlank() }.toSet()
+    val view = pending ?: config.panelView
+    val iconPlan = remember(config, view, homeWide, now?.pkg, frequent, apps.installed, settings) {
+        initialIconPlan(config, view, homeWide, now?.pkg, frequent, apps.installed, settings?.packageName)
     }
-    LaunchedEffect(required) { catalog.request(required) }
-    var prepared by remember(catalog) { mutableStateOf(apps.ready && apps.infos.keys.containsAll(required)) }
-    LaunchedEffect(apps.ready, apps.infos.keys, required) {
-        if (apps.ready && apps.infos.keys.containsAll(required)) prepared = true
+    LaunchedEffect(catalog, iconPlan.foreground) { catalog.request(iconPlan.foreground) }
+    val foregroundReady = apps.ready && apps.infos.keys.containsAll(iconPlan.foreground)
+    var prepared by remember(catalog) { mutableStateOf(foregroundReady) }
+    LaunchedEffect(catalog, foregroundReady) {
+        if (foregroundReady) prepared = true
     }
     if (!apps.ready || !prepared) return
+
+    LaunchedEffect(catalog, iconPlan) {
+        // Frame callbacks precede drawing. Leave a whole frame for the visible content
+        // before starting background work, including when this is the first composition.
+        withFrameNanos { }
+        withFrameNanos { }
+        catalog.request(iconPlan.background)
+    }
 
     val appListGridState = rememberLazyGridState()
     val homeAppRowState = rememberLazyListState()
@@ -132,7 +139,7 @@ fun PanelScreen(
     }
 
     if (showAppList) {
-        LaunchedEffect(apps.entries) { catalog.request(apps.entries.map { it.pkg }.toSet()) }
+        LaunchedEffect(catalog, apps.entries) { catalog.request(apps.entries.map { it.pkg }.toSet()) }
         AppListScreen(
             registered = registered,
             onToggle = { pkg ->
@@ -177,16 +184,14 @@ fun PanelScreen(
     }
 
     val installedPkgs = environment.installedPkgs
-    val idleApp = remember(config.idleApp, installedPkgs, environment.appRevision) {
+    val idleApp = remember(catalog, config.idleApp, installedPkgs, environment.appRevision) {
         apps.info(config.idleApp)
     }
-    val panelApps = remember(config.panelApps, installedPkgs, environment.appRevision) {
+    val panelApps = remember(catalog, config.panelApps, installedPkgs, environment.appRevision) {
         config.panelApps.map { apps.info(it) }
     }
-    val dockApps = remember(config.dockMode, config.dockApps, frequent, installedPkgs,
-        settings?.packageName, environment.appRevision) {
-        dockAppsFor(config.dockMode, config.dockApps, frequent, installedPkgs,
-        setOfNotNull(settings?.packageName) + HiddenApps.packages).map { apps.info(it) }
+    val dockApps = remember(catalog, iconPlan.dockPackages, environment.appRevision) {
+        iconPlan.dockPackages.map { apps.info(it) }
     }
 
     val state = PanelState(
@@ -249,7 +254,7 @@ fun PanelScreen(
             onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet, homeAppRowState = homeAppRowState)
     } else {
         val currentIndex by AppGraph.runner.currentIndexFlow.collectAsStateWithLifecycle()
-        PanelContent(iconPage = iconPage, state = state.copy(view = pending ?: config.panelView,
+        PanelContent(iconPage = iconPage, state = state.copy(view = view,
             sets = config.screenSets, currentSetIndex = currentIndex,
             setAppInfo = { apps.info(it) }),
             actions = actions.copy(onSelectView = { view ->
