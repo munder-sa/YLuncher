@@ -1,0 +1,5 @@
+write app/src/main/java/com/gt8d/launcher/apps/UsageHistory.kt
+write app/src/main/java/com/gt8d/launcher/foreground/UsageStatsForegroundEvents.kt
+create app/src/main/java/com/gt8d/launcher/apps/UsageResumedQuery.kt
+create app/src/test/java/com/gt8d/launcher/apps/UsageEventFilterTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.apps.UsageHistoryTest' --tests 'com.gt8d.launcher.apps.UsageEventFilterTest' --tests 'com.gt8d.launcher.foreground.*'

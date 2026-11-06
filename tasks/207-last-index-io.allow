@@ -1,0 +1,4 @@
+write app/src/main/java/com/gt8d/launcher/config/ConfigRepository.kt
+create app/src/main/java/com/gt8d/launcher/config/LastSetIndexStore.kt
+create app/src/test/java/com/gt8d/launcher/config/LastSetIndexStoreTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.config.ConfigRepositoryTest' --tests 'com.gt8d.launcher.config.LastSetIndexStoreTest'

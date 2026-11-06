@@ -1,0 +1,5 @@
+create tools/renderprobe/settings.gradle.kts
+create tools/renderprobe/build.gradle.kts
+create tools/renderprobe/src/main/AndroidManifest.xml
+create tools/renderprobe/src/main/java/com/gt8d/launcher/renderprobe/ProbeActivity.kt
+create tools/renderprobe/src/main/java/com/gt8d/launcher/renderprobe/LyricWordBrush.kt
