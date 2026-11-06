@@ -1,0 +1,6 @@
+write tools/renderprobe/settings.gradle.kts
+write tools/renderprobe/build.gradle.kts
+write tools/renderprobe/src/main/AndroidManifest.xml
+write tools/renderprobe/src/main/java/com/gt8d/launcher/renderprobe/ProbeActivity.kt
+write tools/renderprobe/src/main/java/com/gt8d/launcher/renderprobe/LyricWordBrush.kt
+command /home/munde/tools/gradle-run.sh --offline -p tools/renderprobe -Pandroid.useAndroidX=true assembleDebug

@@ -8,6 +8,9 @@
 - アプリ実装はcodex-run、Gradleは同時2本まで。実機は開始時2.3.1 / 51。既存未追跡3件と過去の実験は維持。候補の効果/互換は未確認であり、全件採用を事前に決めない。
 - 作業ブランチperf-followup。Task202 UIは382件成功/c7dc8e9、Task203キャッシュは31件/e99a2c8、Task207セット番号IOは30件/d682919を取り込み。Task204の時計fixture失敗はTask211で期待値を維持して修正、29件成功/1224a4d。Task210の実機API比較6組も一致、7日7499→771件、query中央値約18→7ms。詳細は作業記録。
 - Task205は `/tmp/yluncher-usage-filter` で非同期pollを委譲中（092459）、Task208は `/tmp/yluncher-gpu-proof` の独立GPUプローブを作成中（091122、ビルドは司令塔）。Task206のprofileinstaller1.4.1はrootに未コミット。Task209で先行分を2.3.2-beta1 / 52へ揃え比較ビルド予定。現時点の実機はまだ正式2.3.1 / 51。
+- 続報: Task205は226件成功（初回6失敗を既存テスト無変更で修正）、51a39a4→23efeecへ取り込み。Task209は両52/beta1のrelease1回成功、実機同署名上書き/PID20177、HOME/通知/accessibility保持。beta1 APKは205取り込み前の7822858＋版/依存差分から作った先行比較物で、非同期pollは未含有。
+- beta1の非表示中20秒×3はCPU中央値4.213→0.198%（単一core、同曲/同前景）、callback HOME2→1/非表示2→0。途中選曲・別曲の試行は同曲比較から除外して保持。ProfileInstallerは通常起動でprofile書込成功、直後ART verifyのため自動AOT完了とはしない。比較用にspeed-profileへcompile済み。詳細/原本は作業記録。
+- GPU Task212はbuild成功だがwrapper生成物541件の除外指定漏れ。全件 .gradle13/build528 と照合し.codex.confを限定修正。実機run1はframe commit待ちが進まず司令塔がプローブだけ停止（画素結果なし）。AOSPのcallback採取がdraw前であることを確認、Task213で次frame要求を修正中（094142）。失敗/途中ログは保持。Task214で6項目統合の53/beta2を作り、全体検証へ進む。
 
 ## v2.3.1後の追加パフォーマンス候補調査 (2026-11-06)
 
