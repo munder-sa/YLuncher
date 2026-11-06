@@ -1,0 +1,6 @@
+create app/src/test/java/com/gt8d/launcher/config/LastSetIndexFixture.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/HomeActivityUiTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt
+write app/src/test/java/com/gt8d/launcher/settings/SettingsActivityTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.home.HomeActivityTest' --tests 'com.gt8d.launcher.ui.home.HomeActivityUiTest' --tests 'com.gt8d.launcher.ui.panel.PanelActivityTest' --tests 'com.gt8d.launcher.settings.SettingsActivityTest' :app:testReleaseUnitTest --tests 'com.gt8d.launcher.ui.home.HomeActivityTest' --tests 'com.gt8d.launcher.ui.home.HomeActivityUiTest' --tests 'com.gt8d.launcher.ui.panel.PanelActivityTest' --tests 'com.gt8d.launcher.settings.SettingsActivityTest'

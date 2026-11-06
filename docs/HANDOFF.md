@@ -2,7 +2,11 @@
 
 最終更新: 2026-11-06 (JST)
 
-## 追加7候補の実装開始 (2026-11-06)
+## 追加7候補の実装・実機検証（6件採用／1件不採用、2026-11-06）
+
+- **現在の状態**: Codex暫定司令塔。`perf-followup` で6件を実装し、両 **2.3.2-beta2 / 53** を実機へ適用済み。GPU Shader案は実機の画素互換不成立で不採用。非表示再生時CPU中央値4.213→0.198%を同曲20秒×3で確認（単一core換算、表示中や実車60Hzの改善率ではない）。
+- **自動検証完了**: 初回Release54失敗は旧保存フィールドへのtest fixture依存。0bd8dcaでsetup/cleanupだけ修正し対象Debug60/Release60成功、未実行Debug全件の補完も10m19sで成功。app各variant2,105件＋panelhost各5件、計**4,220件の合格を確認**。初回Release変更外2,045件と修正後60件を名前集合まで照合、failure/error/skip未解決0。原本/根拠XML/集計は `build/perf-followup/tests/`。両Debugビルド成功。委譲/Gradle実行中なし。
+- **次の一手**: 利用者へbeta2の見た目/操作感を確認依頼済み、**回答まで画面操作を停止**。回答後に必要な修正・正式化を進める。現在のmainは5a18dbf、作業はperf-followupに保持。新しいpush/Release公開は未実施。既存未追跡 `.mcp.json` / Task170 md・allowと過去の実験worktreeは維持。以下は作業経過。
 
 - ユーザーが「おけ、全て進めて」と承認。Codex暫定司令塔がmain b76b707を基点に7候補の実装/比較へ着手。[作業記録](performance/2026-11-06-followup-implementation.md)を作成。Task202の表示中監視/UI更新とTask203のキャッシュ整理を別worktreeへ委譲し、その間にイベント絞込み/非同期poll/GPU検証を設計する。
 - アプリ実装はcodex-run、Gradleは同時2本まで。実機は開始時2.3.1 / 51。既存未追跡3件と過去の実験は維持。候補の効果/互換は未確認であり、全件採用を事前に決めない。
@@ -11,6 +15,10 @@
 - 続報: Task205は226件成功（初回6失敗を既存テスト無変更で修正）、51a39a4→23efeecへ取り込み。Task209は両52/beta1のrelease1回成功、実機同署名上書き/PID20177、HOME/通知/accessibility保持。beta1 APKは205取り込み前の7822858＋版/依存差分から作った先行比較物で、非同期pollは未含有。
 - beta1の非表示中20秒×3はCPU中央値4.213→0.198%（単一core、同曲/同前景）、callback HOME2→1/非表示2→0。途中選曲・別曲の試行は同曲比較から除外して保持。ProfileInstallerは通常起動でprofile書込成功、直後ART verifyのため自動AOT完了とはしない。比較用にspeed-profileへcompile済み。詳細/原本は作業記録。
 - GPU Task212はbuild成功だがwrapper生成物541件の除外指定漏れ。全件 .gradle13/build528 と照合し.codex.confを限定修正。実機run1はframe commit待ちが進まず司令塔がプローブだけ停止（画素結果なし）。AOSPのcallback採取がdraw前であることを確認、Task213で次frame要求を修正中（094142）。失敗/途中ログは保持。Task214で6項目統合の53/beta2を作り、全体検証へ進む。
+- 最新: Task213の待機修正後、実GPU663件は303成功/360画素不一致、hardware1/未実行0/最大差154。互換不成立でShader案は不採用、本体描画は維持。プローブはbb935edとして独立toolsへ保存。残る6項目は両2.3.2-beta2 / 53に統合し実機へ同署名適用済み（Task214のrelease1回50秒）。
+- 統合の初回codex-verifyはRelease2105件中54失敗（旧lastSetFile反射を使うUI4クラスのfixture）。Task215でsetup/cleanupだけを改修、全assert/期待値を維持してDebug60/Release60成功。e1c6114→0bd8dca。初回XML/修正後XMLはbuild/perf-followup/testsに保存。対象外Release2051件は成功、未実行Debug全件/panelhost/Debugビルドを別コマンドで補完中（session42358、remaining.txt）。
+- beta2実機: 左/右パネルの初回と再表示、起動中キャンセル→HOME、起動中Next→セット2、Braveリンクを確認。PID15774→本体再起動後26830、番号4/設定JSON/HOME/通知/accessibility維持。最後は怪獣PAUSED209573ms・歌詞ON・HOME・callback1、取得画像3枚/検証APK/DEXは削除済み。実車60Hzは未確認。
+- 利用者へbeta2の歌詞とセット切替の見た目/操作感を質問済み。**回答まで画面操作を停止**。非画面操作の自動テスト/記録は継続。正式化/main取り込み/push/Release公開は今回まだ行っていない。詳細と採否は作業記録の先頭表を参照。
 
 ## v2.3.1後の追加パフォーマンス候補調査 (2026-11-06)
 
