@@ -162,3 +162,9 @@ PC側の実装/レビュー/対象・統合テスト/比較APK準備を完了。
 - 手順: install -r → HOME → 20秒待って ProfileInstaller の書き込み → `cmd package compile -r bg-dexopt`(両方 speed-profile を確認)→ 設定画面を前面 → 本体 force-stop → 4秒 → `am start -W` HomeActivity、を12回。YLuncher は HOME・通知リスナーのため force-stop 後すぐプロセスが再起動し、COLD は取れない。全回 WARM(プロセスあり・Activity 新規)。原本 `/tmp/yluncher-profile-compare/`。
 - 交互3組の TotalTime 中央値: 対照 187 / 174.5 / 178.5 ms、候補 174.5 / 172.5 / 171 ms。全体の中央値 **178.5 → 172.5 ms(約6ms、約3%)**。差は対照の組間の幅 12.5ms より小さく、効果は確認できない。
 - **決めたこと**: 手書きの12行を維持し、収録プロファイルは採用しない(効果が測れないものを採用しない方針)。比較後に実機を beta4 に戻した(base.apk 39407b84… 一致、HOME・通知リスナー保持)。
+
+### main 前の全テスト
+
+- 1回目(`test assembleDebug`、11m06s)は app Debug **2,162件中1件失敗**: `AppleMusicLyricsScreenTest.savedRestoreRequiresValidationAndRetryKeepsSessionCooldown`(ComposeTimeoutException)。Task223 で Session の再試行の待ちを単調時計にしたのに、設定画面のテストの Fixture が日時の `clock` だけを進めていた(Task223 の指定範囲に settings が入っていなかった)。Release は未実行のまま停止。ログ `build/perf-next/tests/beta4-full/full-run1-failed.txt`。
+- Task225(387ff85)で Fixture に `monotonicClock = { now }` を足した(組み立て1行のみ、テスト本体・期待値は不変)。指定範囲 41件成功。
+- 2回目(22m35s)**成功**: app Debug 2,162 / Release 2,162、panelhost Debug 5 / Release 5、failure/error/skip 0、両 Debug ビルド成功。計 **4,334件**。ログ `full-run2.txt`。Task225 はテストだけなので、実機の beta4 APK(1d968bb)の作り直しは要らない。
