@@ -1,0 +1,4 @@
+write app/src/main/java/com/gt8d/launcher/media/lyrics/AmllCache.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/LyricsCache.kt
+create app/src/test/java/com/gt8d/launcher/media/lyrics/CachePruningCostTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.AmllCacheTest' --tests 'com.gt8d.launcher.media.lyrics.LyricsCacheTest' --tests 'com.gt8d.launcher.media.lyrics.CachePruningCostTest'
