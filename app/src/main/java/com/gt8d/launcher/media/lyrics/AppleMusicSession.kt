@@ -1,5 +1,6 @@
 package com.gt8d.launcher.media.lyrics
 
+import android.os.SystemClock
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CopyableThrowable
@@ -33,6 +34,7 @@ class AppleMusicSession(
     private val persistenceScope: CoroutineScope? = null,
     io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val monotonicClock: () -> Long = SystemClock::elapsedRealtime,
 ) {
     init {
         require(credentialStore == null || persistenceScope != null) { "Apple Music persistence requires a scope" }
@@ -146,7 +148,7 @@ class AppleMusicSession(
             if (mutableState.value.status == AppleMusicStatus.CONNECTED ||
                 (readStarted && restoreCandidate == null)
             ) return null
-            val now = now()
+            val now = elapsedNow()
             retryAtMillis?.takeIf { it > now }?.let {
                 mutableState.value = mutableState.value.copy(retryAfterSec = remainingSeconds(it, now))
                 return null
@@ -288,7 +290,7 @@ class AppleMusicSession(
                     reset.previous
                 } else {
                     val failure = result as? AppleConnectResult.Unavailable
-                    val now = now()
+                    val now = elapsedNow()
                     val deadline = retryDeadline(now, maxOf(60L, failure?.retryAfterSec ?: 0L))
                     retryAtMillis = deadline
                     mutableState.value = AppleMusicConnection(
@@ -307,7 +309,7 @@ class AppleMusicSession(
             synchronized(lock) {
                 if (currentLocked(target)) {
                     userToken = null
-                    val now = now()
+                    val now = elapsedNow()
                     retryAtMillis = retryDeadline(now, 60L)
                     mutableState.value = AppleMusicConnection(
                         AppleMusicStatus.NEEDS_ATTENTION, target.generation, reason = AppleLyricsReason.INVALID,
@@ -417,6 +419,8 @@ class AppleMusicSession(
     private fun currentLocked(target: Epoch): Boolean = epoch === target && mutableState.value.generation == target.generation
 
     private fun now(): Long = try { clock().coerceAtLeast(0L) } catch (_: Exception) { 0L }
+
+    private fun elapsedNow(): Long = try { monotonicClock().coerceAtLeast(0L) } catch (_: Exception) { 0L }
 
     // All callers hold lock. Cancellation itself is deliberately outside the lock,
     // and never joins old jobs that may ignore cancellation.

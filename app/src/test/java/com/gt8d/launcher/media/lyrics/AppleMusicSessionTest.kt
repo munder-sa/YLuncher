@@ -15,6 +15,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -45,6 +46,59 @@ class AppleMusicSessionTest {
         assertTrue(fresh.connectCalls.isEmpty())
         assertTrue(fresh.fetchCalls.isEmpty())
         connection(f, AppleMusicStatus.CONNECTED, 1, "gb")
+    }
+
+    @Test fun restoreCooldownUsesMonotonicClockAcrossWallClockChanges() = runTest {
+        var wallTime = 10_000_000L
+        var elapsed = 10_000L
+        var reads = 0
+        var connects = 0
+        var saved: StoredAppleCredential? = null
+        val store = object : AppleCredentialStore {
+            override fun read(): AppleCredentialReadResult {
+                reads++
+                return AppleCredentialReadResult.Ready(
+                    StoredAppleCredential(TOKEN, "gb", AppleCredentialSource.MANUAL, wallTime),
+                )
+            }
+            override fun write(credential: StoredAppleCredential): Boolean { saved = credential; return true }
+            override fun clear(): Boolean { saved = null; return true }
+        }
+        val session = AppleMusicSession(
+            connectRequest = {
+                connects++
+                if (connects == 1) AppleConnectResult.Unavailable(AppleLyricsReason.WAIT, 60)
+                else AppleConnectResult.Ready("gb")
+            },
+            fetchRequest = { _, _, _ -> error("unexpected lyrics request") },
+            credentialStore = store, persistenceScope = this, io = StandardTestDispatcher(testScheduler),
+            clock = { wallTime }, monotonicClock = { elapsed },
+        )
+        checkNotNull(session.restoreIfNeeded()).join()
+        assertEquals(AppleMusicStatus.NEEDS_ATTENTION, session.state.value.status)
+        assertEquals(60L, session.state.value.retryAfterSec)
+
+        wallTime += 3_600_000L
+        assertNull(session.restoreIfNeeded())
+        assertEquals(60L, session.state.value.retryAfterSec)
+        assertEquals(1, connects)
+
+        wallTime = 6_400_000L
+        elapsed = 69_999L
+        assertNull(session.restoreIfNeeded())
+        assertEquals(1L, session.state.value.retryAfterSec)
+        assertEquals(1, connects)
+        elapsed = 70_000L
+        checkNotNull(session.restoreIfNeeded()).join()
+        assertEquals(AppleMusicStatus.CONNECTED, session.state.value.status)
+        assertNull(session.state.value.retryAfterSec)
+        assertEquals(2, connects)
+        assertEquals(1, reads)
+
+        session.connectFromWeb(TOKEN, 20_000_000L)
+        assertEquals(3, connects)
+        assertEquals(wallTime, checkNotNull(saved).verifiedAtEpochMillis)
+        assertEquals(20_000_000L, checkNotNull(saved).cookieExpiresAtEpochMillis)
     }
 
     @Test fun validatesAndConnectsWithoutFetchingLyrics() = runTest {

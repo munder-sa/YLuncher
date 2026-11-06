@@ -380,6 +380,69 @@ class AppleWebTokenProviderTest {
         assertEquals(3, invalidateDuringWait.calls.size)
     }
 
+    @Test fun cooldownUsesMonotonicClockAcrossWallClockChanges() = runTest {
+        for (code in listOf(429, 503)) {
+            val f = Fixture(this)
+            f.elapsed = 10_000L
+            val token = jwt(10_000)
+            f.respond(AppleLyricsHttpResponse(code, "", retryAfterSec = 60), ok(token))
+            unavailable(f.provider.get(), AppleWebTokenFailure.WAIT, 60)
+
+            f.now = NOW + 3_600_000L
+            unavailable(f.provider.get(), AppleWebTokenFailure.WAIT, 60)
+            assertEquals(1, f.calls.size)
+
+            f.now = NOW - 3_600_000L
+            f.elapsed = 69_999L
+            unavailable(f.provider.get(), AppleWebTokenFailure.WAIT, 1)
+            assertEquals(1, f.calls.size)
+            f.elapsed = 70_000L
+            assertEquals(token, ready(f.provider.get()).value)
+            assertEquals(2, f.calls.size)
+        }
+    }
+
+    @Test(timeout = 5_000) fun scansTwoMiBOfRepeatedPrefixWithoutDotsWithinFiveSeconds() = runTest {
+        val f = Fixture(this)
+        val token = jwt(2000)
+        val document = "eyJ".repeat((2 * 1024 * 1024 + 2) / 3)
+        f.respond(
+            ok("<script src='/first.js'></script><script src='/second.js'></script>"),
+            ok(document), ok(token),
+        )
+        assertEquals(token, ready(f.provider.get()).value)
+        assertEquals(listOf(PAGE, "$ROOT/first.js", "$ROOT/second.js"), f.calls.map { it.url })
+    }
+
+    @Test fun tokenScanPreservesGreedyNonOverlappingMatches() = runTest {
+        val token = jwt(2000)
+        val payloadAndSignature = token.substringAfter('.')
+        val documents = listOf(
+            "prefix$token" to token,
+            "eyJ$token" to "eyJ$token",
+            "eyJ.$payloadAndSignature $token" to token,
+            "eyJbad..$token" to token,
+            "eyJbad.bad!$token" to token,
+            "$token.extra" to token,
+            "eyJbad.$token" to null,
+            "eyJbad.payload.$token" to null,
+            "eyJbad.payload.$token $token" to token,
+            "é$token+" to token,
+        )
+        val previousPattern = Regex("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+")
+        for ((document, expected) in documents) {
+            // These inputs contain one fresh payload; overlapping matches can consume it.
+            val previous = previousPattern.findAll(document).map { it.value }
+                .firstOrNull { it.substringAfter('.') == payloadAndSignature }
+            assertEquals(expected, previous)
+            val f = Fixture(this)
+            f.respond(ok(document))
+            if (expected == null) unavailable(f.provider.get(), AppleWebTokenFailure.TOKEN_NOT_FOUND)
+            else assertEquals(expected, ready(f.provider.get()).value)
+            assertEquals(1, f.calls.size)
+        }
+    }
+
     @Test fun cancellationDoesNotPublishOrCache() = runTest {
         val token = jwt(2000)
         val waiting = Fixture(this)
@@ -464,6 +527,7 @@ class AppleWebTokenProviderTest {
 
     private class Fixture(scope: TestScope, val io: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler)) {
         var now = NOW
+        var elapsed: Long? = null
         val calls = mutableListOf<Request>()
         var answer: suspend (Request) -> AppleLyricsHttpResponse = { ok("") }
         val provider = AppleWebTokenProvider(AppleLyricsTransport { url, headers, maxBytes ->
@@ -471,7 +535,7 @@ class AppleWebTokenProviderTest {
             val request = Request(url, headers.toMap(), maxBytes)
             calls.add(request)
             answer(request)
-        }, { now }, io)
+        }, { now }, io, monotonicClock = { elapsed ?: now })
 
         fun respond(vararg responses: AppleLyricsHttpResponse) {
             val pending = ArrayDeque(responses.toList())

@@ -516,6 +516,7 @@ class AppleMusicRetentionTest {
             connectRequest = { connectCalls += it; connectAnswer(it) },
             fetchRequest = { _, storefront, token -> fetchCalls += storefront to token; fetchAnswer() },
             credentialStore = store, persistenceScope = scope, io = io, clock = { now },
+            monotonicClock = { now },
         )
     }
 

@@ -324,6 +324,31 @@ class AppleLyricsClientTest {
         assertEquals(2, concurrent.calls.size)
     }
 
+    @Test fun hostCooldownUsesMonotonicClockAcrossWallClockChanges() = runTest {
+        for (code in listOf(429, 503)) {
+            val f = Fixture(this)
+            f.elapsed = 10_000L
+            f.apiAnswer = { AppleLyricsHttpResponse(code, "", retryAfterSec = 60) }
+            unavailable(f.client.connect(USER_TOKEN), AppleLyricsReason.WAIT, 60)
+
+            f.now = NOW + 3_600_000L
+            unavailable(f.client.connect(USER_TOKEN), AppleLyricsReason.WAIT, 60)
+            result(f.client.fetch(request(), "gb", USER_TOKEN), LyricsState.Failed, AppleLyricsReason.WAIT, 60)
+            assertEquals(1, f.apiCalls.size)
+            assertEquals(1, f.publicCalls.size)
+
+            f.now = NOW - 3_600_000L
+            f.elapsed = 69_999L
+            unavailable(f.client.connect(USER_TOKEN), AppleLyricsReason.WAIT, 1)
+            assertEquals(1, f.apiCalls.size)
+            f.elapsed = 70_000L
+            f.apiAnswer = { ok(STORE_BODY) }
+            assertEquals("gb", ready(f.client.connect(USER_TOKEN)))
+            assertEquals(2, f.apiCalls.size)
+            assertEquals(1, f.publicCalls.size)
+        }
+    }
+
     @Test fun classifiesProviderAndNetworkFailures() = runTest {
         val providerFailures: List<Pair<AppleLyricsReason, suspend (Call) -> AppleLyricsHttpResponse>> = listOf(
             AppleLyricsReason.NETWORK to { throw IOException(SECRET) },
@@ -536,6 +561,7 @@ class AppleLyricsClientTest {
 
     private class Fixture(scope: TestScope, val io: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler)) {
         var now = NOW
+        var elapsed: Long? = null
         val calls = mutableListOf<Call>()
         val apiCalls get() = calls.filter { it.url.startsWith(API) }
         val publicCalls get() = calls.filter { !it.url.startsWith(API) }
@@ -549,8 +575,8 @@ class AppleLyricsClientTest {
             calls.add(call)
             if (url.startsWith(API)) apiAnswer(call) else publicAnswer(call)
         }
-        val tokens = AppleWebTokenProvider(transport, { now }, io)
-        val client = AppleLyricsClient(transport, tokens, { now }, io)
+        val tokens = AppleWebTokenProvider(transport, { now }, io, monotonicClock = { elapsed ?: now })
+        val client = AppleLyricsClient(transport, tokens, { now }, io, monotonicClock = { elapsed ?: now })
     }
 
     private class Call(val url: String, val headers: Map<String, String>, val maxBytes: Int)

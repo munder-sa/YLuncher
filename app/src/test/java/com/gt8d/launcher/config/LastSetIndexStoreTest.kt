@@ -82,17 +82,45 @@ class LastSetIndexStoreTest {
     }
 
     @Test fun failedRead_cachesDefaultButStillPersistsZero() {
-        for (failure in listOf(NumberFormatException("invalid"), IOException("unreadable"))) {
-            val io = MemoryIo(null).apply { readFailure = failure }
+        val io = MemoryIo(null).apply { readFailure = NumberFormatException("invalid") }
+        val store = LastSetIndexStore(io)
+        repeat(100) { assertEquals(0, store.lastSetIndex) }
+        assertEquals(1, io.reads)
+        repeat(100) { store.lastSetIndex = 0 }
+        assertEquals(listOf(0), io.writes)
+        assertEquals(0, store.lastSetIndex)
+        assertEquals(0, io.persisted)
+        assertEquals(1, io.reads)
+    }
+
+    @Test fun ioReadFailure_retriesUntilWrittenValueIsCached() {
+        for (value in listOf(0, 3)) {
+            val io = MemoryIo(null).apply { readFailure = IOException("unreadable") }
             val store = LastSetIndexStore(io)
-            repeat(100) { assertEquals(0, store.lastSetIndex) }
-            assertEquals(1, io.reads)
-            repeat(100) { store.lastSetIndex = 0 }
-            assertEquals(listOf(0), io.writes)
-            assertEquals(0, store.lastSetIndex)
-            assertEquals(0, io.persisted)
-            assertEquals(1, io.reads)
+            repeat(100) { index ->
+                assertEquals(0, store.lastSetIndex)
+                assertEquals(index + 1, io.reads)
+            }
+            repeat(100) { store.lastSetIndex = value }
+            assertEquals(listOf(value), io.writes)
+            assertEquals(value, io.persisted)
+            assertEquals(101, io.reads)
+            repeat(100) { assertEquals(value, store.lastSetIndex) }
+            assertEquals(101, io.reads)
         }
+    }
+
+    @Test fun transientReadFailure_reloadsOnNextGet() {
+        val io = MemoryIo(3).apply { readFailure = IOException("temporarily unreadable") }
+        val store = LastSetIndexStore(io)
+        assertEquals(0, store.lastSetIndex)
+        assertEquals(1, io.reads)
+        io.readFailure = null
+        assertEquals(3, store.lastSetIndex)
+        assertEquals(2, io.reads)
+        repeat(100) { assertEquals(3, store.lastSetIndex) }
+        assertEquals(2, io.reads)
+        assertTrue(io.writes.isEmpty())
     }
 
     @Test fun missingFile_zeroSetCreatesParentAndFile() {

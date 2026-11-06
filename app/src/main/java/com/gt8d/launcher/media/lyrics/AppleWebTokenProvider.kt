@@ -1,5 +1,6 @@
 package com.gt8d.launcher.media.lyrics
 
+import android.os.SystemClock
 import com.gt8d.launcher.media.lyrics.AppleConnectionTrace.Stage
 import java.math.BigInteger
 import java.net.URI
@@ -44,6 +45,7 @@ class AppleWebTokenProvider(
     private val clock: () -> Long = System::currentTimeMillis,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val diagnosticsEnabled: Boolean = false,
+    private val monotonicClock: () -> Long = SystemClock::elapsedRealtime,
 ) {
     private val mutex = Mutex()
     private var cached: AppleWebToken? = null
@@ -57,8 +59,9 @@ class AppleWebTokenProvider(
             cached?.takeIf { isFresh(it.expiresAtEpochSec, now) }?.let {
                 return@withLock AppleWebTokenResult.Ready(it)
             }
-            retryAtMillis?.takeIf { it > now }?.let {
-                return@withLock AppleWebTokenResult.Unavailable(AppleWebTokenFailure.WAIT, remainingSeconds(it, now))
+            val elapsed = monotonicClock()
+            retryAtMillis?.takeIf { it > elapsed }?.let {
+                return@withLock AppleWebTokenResult.Unavailable(AppleWebTokenFailure.WAIT, remainingSeconds(it, elapsed))
             }
             // Keep publication outside withContext: a cancelled return dispatch must not cache a result.
             val trace = if (diagnosticsEnabled) AppleConnectionTrace(AppleConnectionTrace.Operation.PUBLIC_REFRESH) else null
@@ -74,7 +77,7 @@ class AppleWebTokenProvider(
                         retryAtMillis = null
                     }
                     is AppleWebTokenResult.Unavailable -> {
-                        retryAtMillis = retryDeadline(clock(), maxOf(60L, result.retryAfterSec ?: 0L))
+                        retryAtMillis = retryDeadline(monotonicClock(), maxOf(60L, result.retryAfterSec ?: 0L))
                     }
                 }
                 when (result) {
@@ -173,11 +176,36 @@ class AppleWebTokenProvider(
     }
 
     private suspend fun findToken(document: String): AppleWebToken? {
+        val context = currentCoroutineContext()
         val seen = HashSet<String>()
         var best: AppleWebToken? = null
-        for (match in JWT.findAll(document)) {
-            currentCoroutineContext().ensureActive()
-            val value = match.value
+        var cursor = 0
+        while (cursor < document.length) {
+            if (cursor % 4096 == 0) context.ensureActive()
+            if (!document[cursor].isJwtChar()) {
+                cursor++
+                continue
+            }
+            var start = -1
+            while (cursor < document.length && document[cursor].isJwtChar()) {
+                if (cursor % 4096 == 0) context.ensureActive()
+                if (start < 0 && document.startsWith("eyJ", cursor)) start = cursor
+                cursor++
+            }
+            // All starts in this run share the same dots and following runs. If the
+            // first start fails, later starts cannot match either. Each run is scanned
+            // at most three times (as header, payload and signature), so this is O(n).
+            if (start < 0 || start + 3 >= cursor || document.getOrNull(cursor) != '.') continue
+            val payloadStart = cursor + 1
+            val payloadEnd = jwtSegmentEnd(document, payloadStart, context)
+            if (payloadEnd == payloadStart || document.getOrNull(payloadEnd) != '.') continue
+            val signatureStart = payloadEnd + 1
+            val end = jwtSegmentEnd(document, signatureStart, context)
+            if (end == signatureStart) continue
+            // Like Regex.findAll, consume the whole greedy match before looking again.
+            val value = document.substring(start, end)
+            cursor = end
+            context.ensureActive()
             if (!seen.add(value)) continue
             if (value.length <= MAX_TOKEN_BYTES) {
                 val expiry = tokenExpiry(value)
@@ -192,6 +220,15 @@ class AppleWebTokenProvider(
         }
         currentCoroutineContext().ensureActive()
         return best
+    }
+
+    private fun jwtSegmentEnd(document: String, start: Int, context: CoroutineContext): Int {
+        var end = start
+        while (end < document.length && document[end].isJwtChar()) {
+            if (end % 4096 == 0) context.ensureActive()
+            end++
+        }
+        return end
     }
 
     private fun tokenExpiry(value: String): Long? = try {
@@ -367,7 +404,6 @@ class AppleWebTokenProvider(
         const val MAX_TOKEN_BYTES = 16 * 1024
         val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
         val RAW_TEXT_TAGS = setOf("script", "style", "textarea", "title")
-        val JWT = Regex("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+")
         val POSITIVE_INTEGER = Regex("[1-9][0-9]*")
         val HTML_SPACE = Regex("[ \\t\\r\\n\\u000c]+")
         val THOUSAND: BigInteger = BigInteger.valueOf(1000L)
@@ -382,6 +418,7 @@ class AppleWebTokenProvider(
             .subtract(BigInteger.valueOf(now)).add(BigInteger.valueOf(999L)).divide(THOUSAND).toLong()
 
         fun Char.isHtmlSpace() = this in " \t\r\n\u000c"
+        fun Char.isJwtChar() = this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '_' || this == '-'
         fun Char.isTagNameChar() = this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '-' || this == ':'
     }
 }

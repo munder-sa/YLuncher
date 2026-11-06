@@ -63,6 +63,58 @@ class MediaWatcherTest {
         assertFalse(art.isRecycled)
     }
 
+    @Test fun initialMetadataFailureRecoversFullSnapshotOnPlaybackCallback() {
+        val art = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        val controller = Controller(apple, metadata("Recovered", "123", art), state(position = 42))
+        controller.metadataFailures = 1
+        val h = Harness()
+        h.cache.replaceControllers(listOf(controller))
+        assertNull(h.now)
+        assertEquals(1, controller.metadataReads)
+        assertEquals(0, controller.stateReads)
+
+        controller.callback.onPlaybackStateChanged(state(position = 7000, updatedAt = 5000, action = favorite))
+        assertEquals("Recovered", h.now!!.title)
+        assertEquals("Artist Recovered", h.now!!.artist)
+        assertEquals("Album Recovered", h.now!!.album)
+        assertEquals("Recovered", h.now!!.metaTitle)
+        assertEquals(180000L, h.now!!.durationMs)
+        assertSame(art, h.now!!.artwork)
+        assertEquals("123", h.now!!.lyricsIdentity.appleMusicId)
+        assertNotNull(h.now!!.lyricsRequest)
+        assertEquals(7000L, h.now!!.positionMs)
+        assertEquals(5000L, h.now!!.positionUpdatedAt)
+        assertTrue(h.now!!.playing)
+        assertTrue(h.now!!.hasFavorite)
+        assertSame(controller, h.cache.selectedController)
+        assertEquals(2, controller.metadataReads)
+        assertEquals(1, controller.stateReads)
+
+        controller.callback.onPlaybackStateChanged(state(position = 8000))
+        assertEquals("Recovered", h.now!!.title)
+        assertEquals(8000L, h.now!!.positionMs)
+        assertEquals(2, controller.metadataReads)
+        assertEquals(1, controller.stateReads)
+    }
+
+    @Test fun failedSnapshotRecoveryStillAppliesPlaybackCallback() {
+        val controller = Controller(apple, metadata("Song", "123"), state())
+        controller.metadataFailures = 2
+        val h = Harness()
+        h.cache.replaceControllers(listOf(controller))
+        assertNull(h.now)
+        controller.callback.onPlaybackStateChanged(state(position = 7000, updatedAt = 5000, action = favorite))
+        assertEquals("Label $apple", h.now!!.title)
+        assertNull(h.now!!.metaTitle)
+        assertNull(h.now!!.lyricsRequest)
+        assertEquals(7000L, h.now!!.positionMs)
+        assertEquals(5000L, h.now!!.positionUpdatedAt)
+        assertTrue(h.now!!.playing)
+        assertTrue(h.now!!.hasFavorite)
+        assertEquals(2, controller.metadataReads)
+        assertEquals(0, controller.stateReads)
+    }
+
     @Test fun metadataAndNullCallbacksReplaceOnlyMetadataIncludingLyricsAndArtwork() {
         val firstArt = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         val nextArt = Bitmap.createBitmap(3, 3, Bitmap.Config.ARGB_8888)
@@ -398,6 +450,7 @@ class MediaWatcherTest {
         var metadata: MediaMetadata?,
         var state: PlaybackState?,
     ) {
+        var metadataFailures = 0
         var metadataReads = 0
         var stateReads = 0
         lateinit var callback: MediaController.Callback
@@ -410,6 +463,10 @@ class MediaWatcherTest {
         override fun packageName(controller: Controller) = controller.pkg
         override fun metadata(controller: Controller): MediaMetadata? {
             controller.metadataReads++
+            if (controller.metadataFailures > 0) {
+                controller.metadataFailures--
+                throw IllegalStateException("temporary metadata read failure")
+            }
             return controller.metadata
         }
         override fun playbackState(controller: Controller): PlaybackState? {

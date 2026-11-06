@@ -31,11 +31,18 @@ internal class LastSetIndexStore(private val io: LastSetIndexIo) : LastIndexStor
             io.write(value)
             cachedValue = value
             persistedValue = value
+            loaded = true
         }
 
     private fun loadIfNeeded() {
         if (loaded) return
-        persistedValue = runCatching { io.read() }.getOrNull()
+        persistedValue = try {
+            io.read()
+        } catch (_: NumberFormatException) {
+            null
+        } catch (_: Exception) {
+            return
+        }
         cachedValue = persistedValue ?: 0
         loaded = true
     }

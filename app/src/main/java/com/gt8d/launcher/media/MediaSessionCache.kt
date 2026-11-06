@@ -6,7 +6,7 @@ import android.media.session.PlaybackState
 import android.util.Log
 import com.gt8d.launcher.diag.DiagLog
 
-/** Controller I/O is confined to collection changes; callbacks supply all later changes. */
+/** Callbacks update cached fields; controller I/O is repeated only to recover a missing snapshot. */
 internal class MediaSessionCache<C : Any>(
     private val access: Access<C>,
     private val onChanged: (NowPlaying?) -> Unit,
@@ -67,8 +67,7 @@ internal class MediaSessionCache<C : Any>(
                 Log.w("GT8D", "Failed to register MediaController callback for ${entry.pkg}", e)
             }
             try {
-                entry.snapshot = withMetadata(entry, emptySnapshot(entry), access.metadata(controller))
-                    .withPlaybackState(access.playbackState(controller))
+                entry.snapshot = readSnapshot(entry, controller)
             } catch (e: Exception) {
                 Log.w("GT8D", "Failed to read media snapshot for ${entry.pkg}", e)
             }
@@ -123,13 +122,23 @@ internal class MediaSessionCache<C : Any>(
     private inline fun update(entry: Entry, change: (SessionSnapshot) -> SessionSnapshot) {
         if (!entry.active) return
         try {
-            entry.snapshot = change(entry.snapshot ?: emptySnapshot(entry))
+            val snapshot = entry.snapshot ?: try {
+                readSnapshot(entry, checkNotNull(entry.controller))
+            } catch (e: Exception) {
+                Log.w("GT8D", "Failed to recover media snapshot for ${entry.pkg}", e)
+                emptySnapshot(entry)
+            }
+            entry.snapshot = change(snapshot)
         } catch (e: Exception) {
             entry.snapshot = null
             Log.w("GT8D", "Failed to update media snapshot for ${entry.pkg}", e)
         }
         publish()
     }
+
+    private fun readSnapshot(entry: Entry, controller: C) =
+        withMetadata(entry, emptySnapshot(entry), access.metadata(controller))
+            .withPlaybackState(access.playbackState(controller))
 
     private fun publish() {
         val picked = pickSession(entries.mapNotNull { it.snapshot }, lastActivePkg)

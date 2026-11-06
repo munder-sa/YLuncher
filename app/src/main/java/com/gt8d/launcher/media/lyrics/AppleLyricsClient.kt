@@ -1,5 +1,6 @@
 package com.gt8d.launcher.media.lyrics
 
+import android.os.SystemClock
 import android.util.Xml
 import com.gt8d.launcher.media.lyrics.AppleConnectionTrace.Stage
 import java.io.IOException
@@ -50,6 +51,7 @@ class AppleLyricsClient(
     private val clock: () -> Long = System::currentTimeMillis,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val diagnosticsEnabled: Boolean = false,
+    private val monotonicClock: () -> Long = SystemClock::elapsedRealtime,
 ) {
     // Serialize provider/API access so a queued caller observes cooldown before either request.
     // Time spent waiting for this mutex is included in each caller's overall timeout.
@@ -116,7 +118,7 @@ class AppleLyricsClient(
         return requestMutex.withLock {
             trace?.mark(Stage.REQUEST_MUTEX_ACQUIRED)
             currentCoroutineContext().ensureActive()
-            val now = clock()
+            val now = monotonicClock()
             retryAtMillis?.takeIf { it > now }?.let {
                 return@withLock ApiResult.Unavailable(AppleLyricsReason.WAIT, remainingSeconds(it, now))
             }
@@ -162,7 +164,7 @@ class AppleLyricsClient(
                         currentCoroutineContext().ensureActive()
                     }
                     429, 503 -> {
-                        val receivedAt = clock()
+                        val receivedAt = monotonicClock()
                         val deadline = retryDeadline(receivedAt, maxOf(60L, response.retryAfterSec ?: 0L))
                         currentCoroutineContext().ensureActive()
                         retryAtMillis = deadline
