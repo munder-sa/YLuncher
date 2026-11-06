@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
+import android.graphics.RuntimeShader
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -72,6 +74,8 @@ import kotlin.math.roundToInt
 private const val TIMEOUT_SECONDS = 15L
 private const val TOLERANCE = 1
 private const val PROGRESS_INTERVAL = 25
+private const val TEXT_SHADER_MODE = "text_shader"
+private const val POST_MASK_MODE = "post_mask"
 private const val DRAW_TIMEOUT = "draw_and_two_frame_commits_timeout"
 private const val PIXEL_COPY_TIMEOUT = "pixel_copy_timeout"
 private const val DARK = 0xFF121212.toInt()
@@ -156,14 +160,25 @@ private fun ordinaryCases(): List<ProbeCase> = buildList {
 
 private class ProbeFailure(val errorId: String, detail: String = errorId) : IllegalStateException(detail)
 
+// Written only on the main thread; instrumentation reads snapshots for progress/results.
+internal class ProbeCounters {
+    @Volatile var uniformUpdates = 0
+    @Volatile var effectCreations = 0
+}
+
 private class FrameRequest(
     val case: ProbeCase,
     val candidate: Boolean,
     val owner: LyricWordBrush?,
     val updateUniforms: Boolean,
+    val postOwner: PostRenderWordMask?,
+    val recreateEffect: Boolean,
+    val counters: ProbeCounters,
 ) {
     val ready = CountDownLatch(1)
     val brush = owner?.textBrush()
+    var postEffect by mutableStateOf<RenderEffect?>(null)
+    var postPrepared = false
     var baseLayout: TextLayoutResult? = null
     var overlayLayout: TextLayoutResult? = null
     var rect: Rect? = null
@@ -186,6 +201,7 @@ private class FrameRequest(
 class ProbeActivity : ComponentActivity() {
     private var frame by mutableStateOf<FrameRequest?>(null)
     private val owners = mutableMapOf<String, LyricWordBrush>()
+    private val postOwners = mutableMapOf<String, PostRenderWordMask>()
     private lateinit var host: FrameLayout
     internal val destroyed = CountDownLatch(1)
 
@@ -260,10 +276,18 @@ class ProbeActivity : ComponentActivity() {
         }
     }
 
-    private fun present(case: ProbeCase, candidate: Boolean, ownerKey: String, update: Boolean): FrameRequest {
+    private fun present(
+        case: ProbeCase, candidate: Boolean, ownerKey: String, update: Boolean,
+        mode: String, recreateEffect: Boolean, counters: ProbeCounters,
+    ): FrameRequest {
         check(Looper.myLooper() == Looper.getMainLooper())
-        val owner = if (candidate) owners.getOrPut(ownerKey) { LyricWordBrush() } else null
-        return FrameRequest(case, candidate, owner, update).also {
+        val owner = if (candidate && mode == TEXT_SHADER_MODE) {
+            owners.getOrPut(ownerKey) { LyricWordBrush() }
+        } else null
+        val postOwner = if (candidate && mode == POST_MASK_MODE) {
+            postOwners.getOrPut(ownerKey) { PostRenderWordMask() }
+        } else null
+        return FrameRequest(case, candidate, owner, update, postOwner, recreateEffect, counters).also {
             // A dirty Compose child can re-record its display list without dispatchDraw
             // on its cached parent. Arm the first commit from the row's draw as well.
             it.afterContentDraw = {
@@ -281,14 +305,23 @@ class ProbeActivity : ComponentActivity() {
 
     // The runner is nested only to access the private request protocol; the public manifest
     // entry below is an ordinary Android Instrumentation, not an AndroidX test runner.
-    internal fun runner() = CaptureRunner(this)
+    internal fun runner(mode: String, counters: ProbeCounters) = CaptureRunner(this, mode, counters)
 
-    internal class CaptureRunner(private val activity: ProbeActivity) {
+    internal class CaptureRunner(
+        private val activity: ProbeActivity,
+        private val mode: String,
+        private val counters: ProbeCounters,
+    ) {
         private val main = Handler(Looper.getMainLooper())
 
-        private fun capture(case: ProbeCase, candidate: Boolean, ownerKey: String, update: Boolean): Shot {
+        private fun capture(
+            case: ProbeCase, candidate: Boolean, ownerKey: String, update: Boolean,
+            recreateEffect: Boolean = update,
+        ): Shot {
             check(Looper.myLooper() != Looper.getMainLooper())
-            val request = onMain { activity.present(case, candidate, ownerKey, update) }
+            val request = onMain {
+                activity.present(case, candidate, ownerKey, update, mode, recreateEffect, counters)
+            }
             await(request.ready, "draw_and_two_frame_commits case=${case.id}", DRAW_TIMEOUT)
             request.error?.let { throw it }
             check(request.viewHardware && request.composeHardware && request.committedFrames == 2)
@@ -329,7 +362,10 @@ class ProbeActivity : ComponentActivity() {
                         else "pixel_copy_failed", "pixel_copy_status=$status")
                 }
                 return Shot(bitmap, rect, layout, case.fill(layout),
-                    request.owner, request.owner?.updates ?: 0, request.committedFrames)
+                    request.postOwner ?: request.owner,
+                    request.postOwner?.shader ?: request.owner?.shader,
+                    request.postOwner?.updates ?: request.owner?.updates ?: 0,
+                    request.postEffect, request.postOwner?.effectCreations ?: 0, request.committedFrames)
             } catch (failure: Exception) {
                 synchronized(destinationLock) {
                     abandoned = true
@@ -345,6 +381,53 @@ class ProbeActivity : ComponentActivity() {
             val old = capture(case, false, ownerKey, true)
             try {
                 return old to capture(case, true, ownerKey, true)
+            } catch (failure: Exception) {
+                old.close()
+                throw failure
+            }
+        }
+
+        private fun postMaskUpdatePair(
+            case: ProbeCase, ownerKey: String, previous: Shot, row: JSONObject,
+        ): Pair<Shot, Shot> {
+            val old = capture(case, false, ownerKey, true)
+            try {
+                // Actually draw the retained effect after changing its owner's uniforms.
+                // This diagnostic has no assumed snapshot/live-uniform outcome.
+                val retained = capture(case, true, ownerKey, update = true, recreateEffect = false)
+                try {
+                    val fresh = capture(case, true, ownerKey, update = false, recreateEffect = true)
+                    try {
+                        val toReference = difference(old.bitmap, retained.bitmap)
+                        val toPrevious = difference(previous.bitmap, retained.bitmap)
+                        val toFresh = difference(fresh.bitmap, retained.bitmap)
+                        row.put("retainedEffect", JSONObject().apply {
+                            put("toReference", toReference.json())
+                            put("toPrevious", toPrevious.json())
+                            put("toFresh", toFresh.json())
+                            put("frames", retained.frames)
+                            put("uniformUpdates", retained.updates)
+                            put("effectCreations", retained.effectCreations)
+                        })
+                        row.requireResult(retained.owner === previous.owner && retained.shader === previous.shader,
+                            "retained_effect_owner_replaced")
+                        row.requireResult(retained.effect != null && retained.effect === previous.effect &&
+                            retained.effectCreations == previous.effectCreations, "retained_effect_replaced")
+                        row.requireResult(retained.updates == previous.updates + 1,
+                            "retained_effect_uniform_update_not_observed")
+                        row.requireResult(fresh.owner === retained.owner && fresh.shader === retained.shader &&
+                            fresh.updates == retained.updates, "effect_recreation_updated_shader")
+                        row.requireResult(fresh.effect != null && fresh.effect !== retained.effect &&
+                            fresh.effectCreations == retained.effectCreations + 1, "effect_not_recreated")
+                        row.requireResult(old.rect == retained.rect, "retained_effect_capture_rect_changed")
+                        row.requireResult(old.fill == retained.fill && sameGeometry(old.layout, retained.layout),
+                            "retained_effect_text_geometry_changed")
+                        return old to fresh
+                    } catch (failure: Exception) {
+                        fresh.close()
+                        throw failure
+                    }
+                } finally { retained.close() }
             } catch (failure: Exception) {
                 old.close()
                 throw failure
@@ -371,7 +454,7 @@ class ProbeActivity : ComponentActivity() {
                 FillRule.UTF16_INTERIOR, kind, fill, current = false)
             var baselineB: Shot? = null
             var previousA: Shot? = null
-            var ownerA: LyricWordBrush? = null
+            var ownerA: Any? = null
             try {
                 val seed = spec("owner_B_seed", 2.5f)
                 results.record(seed) { row ->
@@ -383,10 +466,12 @@ class ProbeActivity : ComponentActivity() {
                 for (fill in listOf(0f, 1.25f, 5.75f, sample.text.length.toFloat(), 0f)) {
                     val update = spec("owner_A_update", fill)
                     results.record(update) { row ->
-                        val (old, new) = pair(update, keyA)
+                        val previous = previousA
+                        val (old, new) = if (mode == POST_MASK_MODE && previous != null) {
+                            postMaskUpdatePair(update, keyA, previous, row)
+                        } else pair(update, keyA)
                         try {
                             evaluate(row, update, old, new)
-                            val previous = previousA
                             if (previous != null) {
                                 val change = difference(previous.bitmap, new.bitmap)
                                 row.put("changedPixels", change.differentPixels)
@@ -395,8 +480,11 @@ class ProbeActivity : ComponentActivity() {
                                 row.requireResult(new.updates > previous.updates, "uniform_update_not_observed")
                             }
                             baselineB?.let {
-                                row.requireResult(it.owner !== new.owner && it.owner?.shader !== new.owner?.shader,
+                                row.requireResult(it.owner !== new.owner && it.shader !== new.shader,
                                     "owners_share_shader")
+                                if (mode == POST_MASK_MODE) row.requireResult(
+                                    it.effect != null && new.effect != null && it.effect !== new.effect,
+                                    "owners_share_effect")
                             }
                             ownerA = new.owner
                             previousA = new
@@ -415,6 +503,9 @@ class ProbeActivity : ComponentActivity() {
                             evaluate(row, untouched, baseline, new)
                             row.requireResult(new.owner === baseline.owner, "owner_B_shader_replaced")
                             row.requireResult(new.updates == baseline.updates, "owner_B_was_updated")
+                            if (mode == POST_MASK_MODE) row.requireResult(
+                                new.effect != null && new.effect === baseline.effect &&
+                                    new.effectCreations == baseline.effectCreations, "owner_B_effect_recreated")
                         } finally { new.close() }
                     }
                 }
@@ -450,20 +541,29 @@ private fun ProofRow(request: FrameRequest) {
             textAlign = TextAlign.Start, maxLines = 2, overflow = TextOverflow.Ellipsis,
             onTextLayout = { request.baseLayout = it })
 
+        val postOwner = request.postOwner
+        val textShader = request.candidate && postOwner == null
         val group = Modifier.fillMaxWidth().graphicsLayer {
-            // Remove ONLY the current word-mask offscreen. A fading/old row still needs
-            // group alpha, including at emphasis=1. Never use ModulateAlpha.
-            compositingStrategy = if (!request.candidate || !case.current) {
+            // Only the legacy Text Shader candidate removes the current word-mask
+            // offscreen. The post-mask keeps the reference's group alpha and Offscreen.
+            compositingStrategy = if (!request.candidate || postOwner != null || !case.current) {
                 CompositingStrategy.Offscreen
             } else CompositingStrategy.Auto
             alpha = case.emphasis
+            if (postOwner != null) renderEffect = request.postEffect
         }
-        val paint = if (request.candidate) Modifier.drawWithContent {
+        val paint = if (postOwner != null) Modifier.drawWithContent {
+            if (!request.postPrepared) request.fail("post_mask_draw_before_effect")
+            else drawContent()
+        } else if (request.candidate) Modifier.drawWithContent {
             val layout = request.overlayLayout
             if (layout == null) request.fail("candidate_draw_before_text_layout")
             else {
                 try {
-                    if (request.updateUniforms) checkNotNull(request.owner).update(case.fill(layout), layout, density)
+                    if (request.updateUniforms) {
+                        checkNotNull(request.owner).update(case.fill(layout), layout, density)
+                        request.counters.uniformUpdates++
+                    }
                     drawContent()
                 } catch (failure: Exception) {
                     request.fail("candidate_draw", failure)
@@ -471,12 +571,30 @@ private fun ProofRow(request: FrameRequest) {
             }
         } else legacyMask(request)
         Text(sample.text, group.then(paint),
-            color = if (request.candidate) Color.Unspecified else Color.White,
-            style = if (request.candidate) LocalTextStyle.current.copy(brush = checkNotNull(request.brush))
+            color = if (textShader) Color.Unspecified else Color.White,
+            style = if (textShader) LocalTextStyle.current.copy(brush = checkNotNull(request.brush))
                 else LocalTextStyle.current,
             fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Start,
             maxLines = 2, overflow = TextOverflow.Ellipsis,
-            onTextLayout = { request.overlayLayout = it })
+            onTextLayout = { layout ->
+                request.overlayLayout = layout
+                if (postOwner != null && !request.postPrepared) {
+                    try {
+                        // Prepare once per capture, before its content draw. Publishing the
+                        // effect as state invalidates the layer; commit frames reuse it.
+                        if (request.updateUniforms) {
+                            postOwner.update(case.fill(layout), layout, density)
+                            request.counters.uniformUpdates++
+                        }
+                        request.postEffect = if (request.recreateEffect) {
+                            postOwner.createEffect().also { request.counters.effectCreations++ }
+                        } else checkNotNull(postOwner.effect) { "post_mask_effect_unavailable" }
+                        request.postPrepared = true
+                    } catch (failure: Exception) {
+                        request.fail("post_mask_prepare", failure)
+                    }
+                }
+            })
     }
 }
 
@@ -527,8 +645,11 @@ private class Shot(
     val rect: Rect,
     val layout: TextLayoutResult,
     val fill: Float,
-    val owner: LyricWordBrush?,
+    val owner: Any?,
+    val shader: RuntimeShader?,
     val updates: Int,
+    val effect: RenderEffect?,
+    val effectCreations: Int,
     val frames: Int,
 ) {
     fun close() = bitmap.recycle()
@@ -555,7 +676,16 @@ private data class Difference(
     val y: Int,
     val old: Int,
     val new: Int,
-)
+) {
+    fun json() = JSONObject().apply {
+        put("maxDelta", maximum)
+        put("differentPixels", differentPixels)
+        put("x", x)
+        put("y", y)
+        put("oldARGB", old.toLong() and 0xffffffffL)
+        put("newARGB", new.toLong() and 0xffffffffL)
+    }
+}
 
 private fun difference(old: Bitmap, new: Bitmap): Difference {
     check(old.width == new.width && old.height == new.height) { "bitmap_size_mismatch" }
@@ -598,12 +728,22 @@ private fun evaluate(row: JSONObject, case: ProbeCase, old: Shot, new: Shot) {
     row.put("lines", old.layout.lineCount)
     row.put("ellipsis", if (old.layout.isLineEllipsized(old.layout.lineCount - 1)) 1 else 0)
     row.put("shaderUpdates", new.updates)
+    row.put("candidateUniformUpdates", new.updates)
+    row.put("candidateEffectCreations", new.effectCreations)
     row.put("maxDelta", delta.maximum)
     row.put("differentPixels", delta.differentPixels)
     row.put("x", delta.x)
     row.put("y", delta.y)
     row.put("oldARGB", delta.old.toLong() and 0xffffffffL)
     row.put("newARGB", delta.new.toLong() and 0xffffffffL)
+    row.optJSONObject("retainedEffect")?.let { retained ->
+        // -1: even the recreated effect does not match the reference.
+        retained.put("recreationNeededForReference", when {
+            delta.maximum > TOLERANCE -> -1
+            retained.getJSONObject("toReference").getInt("maxDelta") > TOLERANCE -> 1
+            else -> 0
+        })
+    }
     row.requireResult(delta.maximum <= TOLERANCE, "pixel_mismatch")
     row.requireResult(old.rect == new.rect, "capture_rect_changed")
     row.requireResult(old.fill == new.fill && sameGeometry(old.layout, new.layout), "text_geometry_changed")
@@ -628,12 +768,16 @@ private fun evaluate(row: JSONObject, case: ProbeCase, old: Shot, new: Shot) {
     }
 }
 
-internal class ProbeResults(private val reportProgress: (Bundle) -> Unit) {
+internal class ProbeResults(private val mode: String, private val reportProgress: (Bundle) -> Unit) {
+    internal val counters = ProbeCounters()
     private val rows = mutableListOf<JSONObject>()
     private var previousTimeoutId: String? = null
     val count get() = rows.size
 
     internal fun progressBundle() = Bundle().apply {
+        putString("mode", mode)
+        putInt("candidateUniformUpdates", counters.uniformUpdates)
+        putInt("candidateEffectCreations", counters.effectCreations)
         val failed = rows.count { it.getInt("pass") == 0 }
         putInt("completed", rows.size)
         putInt("pass", rows.size - failed)
@@ -649,6 +793,7 @@ internal class ProbeResults(private val reportProgress: (Bundle) -> Unit) {
     }
 
     private fun initialRow(case: ProbeCase) = case.json().apply {
+        put("mode", mode)
         put("pass", 1)
         put("hardware", -1)
         put("maxDelta", -1)
@@ -677,6 +822,9 @@ internal class ProbeResults(private val reportProgress: (Bundle) -> Unit) {
         val failed = rows.filter { it.getInt("pass") == 0 }
         val worst = rows.maxByOrNull { it.getInt("maxDelta") }
         return Bundle().apply {
+            putString("mode", mode)
+            putInt("candidateUniformUpdates", counters.uniformUpdates)
+            putInt("candidateEffectCreations", counters.effectCreations)
             putInt("planned", ordinaryCases().size + DENSITIES.size * 11)
             putInt("count", rows.size)
             putInt("pass", rows.size - failed.size)
@@ -727,19 +875,23 @@ private fun <T> onMain(action: () -> T): T {
 
 /** Same-APK platform runner: adb shell am instrument -w .../.ProbeInstrumentation. */
 class ProbeInstrumentation : Instrumentation() {
+    private var mode = TEXT_SHADER_MODE
+
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
+        mode = arguments?.getString("mode") ?: TEXT_SHADER_MODE
         start()
     }
 
     override fun onStart() {
-        val results = ProbeResults { sendStatus(0, it) }
+        val results = ProbeResults(mode) { sendStatus(0, it) }
         var activity: ProbeActivity? = null
         var fatal: String? = null
         val launched = AtomicReference<ProbeActivity>()
         val stopStarting = AtomicBoolean(false)
         var activityDestroyed = false
         try {
+            require(mode == TEXT_SHADER_MODE || mode == POST_MASK_MODE) { "unknown_mode: $mode" }
             // startActivitySync itself can block; bound startup without blocking the main thread.
             val launch = FutureTask(Callable {
                 (startActivitySync(Intent(targetContext, ProbeActivity::class.java)
@@ -750,7 +902,7 @@ class ProbeInstrumentation : Instrumentation() {
             })
             Thread(launch, "renderprobe-start").apply { isDaemon = true; start() }
             activity = launch.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            activity.runner().execute(results)
+            activity.runner(mode, results.counters).execute(results)
         } catch (failure: Exception) {
             fatal = "${failure.javaClass.simpleName}: ${failure.message}"
         } finally {
