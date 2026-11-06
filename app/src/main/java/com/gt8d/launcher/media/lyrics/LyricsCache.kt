@@ -8,6 +8,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 class LyricsCache(private val dir: File, private val clock: () -> Long, private val maxFiles: Int = 300) {
+    /** Test observer for savedAt reads performed while pruning. */
+    internal var onPruneSavedAtRead: ((File) -> Unit)? = null
+
     fun get(q: LyricsQuery): LyricsState? {
         var file: File? = null
         return try {
@@ -69,14 +72,17 @@ class LyricsCache(private val dir: File, private val clock: () -> Long, private 
             File(dir, q.cacheKey + ".json").writeText(JsonObject(fields).toString(), Charsets.UTF_8)
             val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".json") } ?: return
             if (files.size > maxFiles) {
-                files.sortedBy { file ->
-                    try {
+                files.map { file ->
+                    val savedAt = try {
+                        onPruneSavedAtRead?.invoke(file)
                         val json = Json.parseToJsonElement(file.readText(Charsets.UTF_8)) as JsonObject
                         number(json["savedAt"])
                     } catch (_: Exception) {
                         file.lastModified()
                     }
-                }.take((files.size - maxFiles).coerceAtMost(files.size)).forEach { it.delete() }
+                    file to savedAt
+                }.sortedBy { it.second }
+                    .take((files.size - maxFiles).coerceAtMost(files.size)).forEach { it.first.delete() }
             }
         } catch (_: Exception) {
             // Cache failures must not prevent displaying fetched lyrics.

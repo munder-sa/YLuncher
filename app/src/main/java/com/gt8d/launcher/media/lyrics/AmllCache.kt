@@ -6,6 +6,9 @@ import kotlinx.serialization.json.*
 
 /** Pass files/lyrics/amll as dir; the legacy v3 directory is never scanned. Call on IO. */
 class AmllCache(private val dir: File, private val clock: () -> Long) {
+    /** Test observer for savedAt reads performed while pruning. */
+    internal var onPruneSavedAtRead: ((File) -> Unit)? = null
+
     @Synchronized fun get(request: LyricsRequest, indexGeneration: String?): AmllResult? {
         val file = File(dir, key(request) + ".json")
         return try {
@@ -88,10 +91,15 @@ class AmllCache(private val dir: File, private val clock: () -> Long) {
         val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.toList() ?: return
         var count = files.size
         var bytes = files.sumOf { it.length() }
-        for (file in files.sortedWith(compareBy<File> {
-            try { number((Json.parseToJsonElement(it.readText()) as JsonObject)["savedAt"]) }
-            catch (_: Exception) { Long.MIN_VALUE }
-        }.thenBy { it.name })) {
+        if (count <= 300 && bytes <= TOTAL_LIMIT) return
+        val oldestFirst = files.map { file ->
+            val savedAt = try {
+                onPruneSavedAtRead?.invoke(file)
+                number((Json.parseToJsonElement(file.readText()) as JsonObject)["savedAt"])
+            } catch (_: Exception) { Long.MIN_VALUE }
+            file to savedAt
+        }.sortedWith(compareBy<Pair<File, Long>> { it.second }.thenBy { it.first.name })
+        for ((file, _) in oldestFirst) {
             if (count <= 300 && bytes <= TOTAL_LIMIT) break
             val size = file.length()
             if (file.delete()) { count--; bytes -= size }
