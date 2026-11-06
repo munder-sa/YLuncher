@@ -1,4 +1,33 @@
-# 追加7候補の実装・比較
+# パフォーマンス改善の実装・比較
+
+## 第二段階: beta2後の6候補 (2026-11-06)
+
+ユーザーの「おけ、進めて」で[6候補](2026-11-06-runtime-cost.md#beta2後の効率化候補調査-2026-11-06)へ着手。基点perf-followup / 510187e。beta2の操作感は利用者が「問題なし。実機の比較作業へ進めてよい」と回答。前奏テストの旧毎フレーム増加要求を新仕様へ更新することも明示承認済み。新しい正式版/pushはこの時点で行わない。
+
+| Task | 現在の状態 | 確認範囲 |
+|---|---|---|
+| 216 前奏/間奏の境界更新 | 独立worktreeで実装中 | 旧画素/点灯結果は維持、毎frame要求だけ新仕様に更新 |
+| 217 時計 | 6ca3db6→4802768で取り込み | 対象45件成功（既存32＋新規13）、実機未確認 |
+| 218 初回アイコン | db72f8e→166c343で取り込み | 対象59件成功（既存44＋新規15）、実機の時間未測定 |
+| 219 描画後マスク | 13f5b9f→f729db1、独立プローブのみ | offline Debugビルド1回28秒成功、実GPU未実行 |
+| 220 上下端フェード | 独立worktreeでプローブ作成中 | 本体未配線、画素・性能未確認 |
+| 実収録プロファイル | 手動収録方式を確認 | 実機接続待ち、収録/本体変更なし |
+
+Task217は表示中の分/時刻変更/タイムゾーンbroadcastで更新し、STOP/dispose時に解除、STARTで最新へ同期。時計サイズの探索結果と有界128候補の寸法cacheを保持し、非関連compositionでは計測を省く。非同期font完了、fontScale/制約/時刻/日付変更も試験済み。サイズ探索の2sp刻み/overflow判定は維持。初回compileはテストでsealed interfaceを匿名継承して失敗し、AndroidFontの実非同期読込fixtureへ修正。次は新規6件が親領域の境界設定で失敗、高さ/余白だけを直して45件成功。既存テスト変更なし。成功後の再実行なし。
+
+Task218は実際の画面に使う候補だけを初回info待ちの対象とする。ページ/スクロール内の細分化はせず、表示画面の候補全体を準備する。全内容を消すpreparedリセットはcatalog交換時だけ。背景の要求は2frame待ち、少なくとも1描画機会を空ける。Deferredで非表示infoを止めても表示対象完了後に画面が出ること、config/view/now/catalog変更とクリック先を検証。初回58件中、新規14件がNative Graphics未指定による画像作成NPEで失敗。fixture修正と予約キャンセル1件追加後は59件成功。既存テスト変更なし。
+
+対象コマンドは[Task217](../../tasks/217-clock-work.md)・[Task218](../../tasks/218-initial-icons.md)のとおり。最終XMLと全Gradle実行の終了code/出力を `build/perf-next/tests/{217-clock,218-icons}/` に保存（runs.json、summary.json）。実行は各3回/2回、失敗を成功として集計しない。両codex-runの変更ファイルはallowと一致。command警告は--tests引用符の正規化差で、events.jsonl内の実行文字列が指定と一致することを確認した。
+
+Task219は通常Textを描いたRenderNode内容へRuntimeShaderを適用する別方式。旧text_shaderと663ケース/1成分差1/255を保存。新mode=post_maskでも同じケースを使い、保持したeffectのuniform更新後と再生成後を比較する追加取得を12回含む。全体のケース数は663のまま。effectを更新ごとに再生成するためallocationがあり、Offscreenも残る。ビルド成功は画素互換/性能成功を意味しない。コマンドは `/home/munde/tools/gradle-run.sh --offline -p tools/renderprobe -Pandroid.useAndroidX=true assembleDebug`、ログ `/tmp/yluncher-post-mask-build.txt`。
+
+Task220は1回recordした内容を上下端/中央の互いに重ならないclipで再生し、両端だけをsaveLayer/DstInする試験。3回の描画命令再生が増えるため、採用を先に決めない。全体合成/範囲限定/フェードなし診断を同じ内容で比較する。フェードなしは寄与診断専用。画素一致が成立した候補だけ本体へ検討する。
+
+実収録profileは[Android公式の手動生成](https://developer.android.com/topic/performance/baselineprofiles/manually-create-measure)に沿えばMacrobenchmark追加依存なしで可能。非debuggableかつ非R8の専用収録APKが必要で、現在の最適化済みbeta2からそのままソース名のprofileを生成できるとは扱わない。独立worktreeで収録用APK→プロファイル保存/抽出→最適化済み候補APKへの復元までを1工程とし、通常導入と強制compileの比較条件を分ける。未収録の架空ルールは追加しない。
+
+11時台の実機確認: `adb.exe devices -l` は最初192.168.137.200:40275 device、その後package/activity/idの読み取り時にclosed/offline。再connectは10061接続拒否、devices一覧とmdnsサービス一覧は空になった。利用者へ新接続先を質問済み。今回の画面操作・インストール・端末設定変更はまだ0回で、最後に導入確認済みなのは両2.3.2-beta2 / 53。接続復帰までPC上の作業を継続する。
+
+## 第一段階: 追加7候補
 
 2026-11-06。ユーザーの「おけ、全て進めて」により[追加候補](2026-11-06-runtime-cost.md#v231後の追加候補調査-2026-11-06)の7件を進める。司令塔Codex、基点main b76b707、実機正式2.3.1 / 51。実装はcodex-run、独立worktreeと明示allow、Gradle同時2本以下。
 

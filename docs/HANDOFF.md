@@ -8,6 +8,7 @@
 - 基点perf-followup / 510187e。前奏の境界更新、時計、初回アイコン、フェード範囲、描画後マスク、実収録profileを順に検証し、成立しない候補は採用しない。既存の成功済みテストを無理由に再実行しない。
 - 前奏の旧assert更新は利用者が「新仕様に合わせて更新する」と承認。Task216で境界間の更新なしと境界/再開時の更新を検証、既存画素基準を維持する。Task217時計・218アイコン・219描画後マスクを独立worktreeへ委譲。Task218は既存44＋新規15件の59件成功、レビュー待ち。Gradle同時2本以内。
 - ADB 192.168.137.200:40275は開始時deviceだったが、続く読取でoffline→一覧から消失。connectは10061接続拒否、mdns services空。新しい接続先を利用者へ質問済み、コード/PC上の検証は継続。実機の最後の確認済み版は両2.3.2-beta2 / 53、今回のインストール/画面操作はまだなし。
+- 続報: Task218は59件/166c343、Task217は45件/4802768としてレビュー・取り込み済み。XML/全Gradle出力はbuild/perf-next/tests。Task219独立post_maskプローブはf729db1、offline Debug build1回28秒成功、GPU未検証。Task216は/tmp/yluncher-interlude-boundaries（111205/session30300）、Task220は/tmp/yluncher-edge-fade-proof（111339/session11549）で委譲中。Task217/218/219は終了。詳細は[第二段階記録](performance/2026-11-06-followup-implementation.md#第二段階-beta2後の6候補-2026-11-06)。
 
 ## beta2後の効率化候補の再調査 (2026-11-06)
 
