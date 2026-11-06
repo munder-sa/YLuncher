@@ -148,6 +148,7 @@ internal class LyricsPaneObserver {
     var measures = 0
     var placements = 0
     var frameUpdates = 0
+    var interludeReservations = 0
     var motionFrames = 0
 }
 internal val LocalLyricsPaneObserver = staticCompositionLocalOf<LyricsPaneObserver?> { null }
@@ -433,18 +434,42 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                         delay(200)
                     } while (true)
                 }
-                val needsFrames = intro || state.lines.getOrNull(index)?.let {
-                    it.words.isNotEmpty() || it.text == "♪"
-                } == true
-                VisibleUiEffect(now, state.lines, index, needsFrames) {
-                    position.longValue = now.positionAt(clock())
-                    fill.floatValue = wordFillPosition(state.lines, index, position.longValue, now.durationMs)
-                    while (now.playing && needsFrames) {
+                val currentLine = state.lines.getOrNull(index)
+                val interlude = when {
+                    intro -> state.lines.firstOrNull()?.let { 0L to it.timeMs }
+                    currentLine?.text == "♪" -> currentLine.timeMs to lineEnd(state.lines, index, now.durationMs)
+                    else -> null
+                }
+                val wordFrames = interlude == null && currentLine?.words?.isNotEmpty() == true
+                VisibleUiEffect(now, state.lines, index, intro, interlude, wordFrames) {
+                    fun synchronizePosition() {
+                        position.longValue = now.positionAt(clock())
+                        fill.floatValue = wordFillPosition(state.lines, index, position.longValue, now.durationMs)
+                    }
+                    synchronizePosition()
+                    var latestPosition = position.longValue
+                    while (now.playing) {
+                        val plan = if (wordFrames) InterludeUpdatePlan.EveryFrame
+                            else interlude?.let { (start, end) ->
+                                planInterludeUpdate(start, end, latestPosition, now.speed, now.durationMs)
+                            } ?: InterludeUpdatePlan.Idle
+                        when (plan) {
+                            InterludeUpdatePlan.Idle -> break
+                            InterludeUpdatePlan.EveryFrame -> Unit
+                            is InterludeUpdatePlan.Boundary -> {
+                                observer?.let { it.interludeReservations++ }
+                                delay(plan.delayMs)
+                                latestPosition = now.positionAt(clock())
+                                // Float interpolation/clock rounding may wake us before the boundary.
+                                // Replan with at least 1 ms of delay without updating the draw state.
+                                if (latestPosition < plan.positionMs) continue
+                            }
+                        }
                         withFrameMillis {
                             observer?.let { it.frameUpdates++ }
-                            position.longValue = now.positionAt(clock())
-                            fill.floatValue = wordFillPosition(state.lines, index, position.longValue, now.durationMs)
+                            synchronizePosition()
                         }
+                        latestPosition = position.longValue
                     }
                 }
                 val startsBeforeFirst = remember(track, state.lines) {

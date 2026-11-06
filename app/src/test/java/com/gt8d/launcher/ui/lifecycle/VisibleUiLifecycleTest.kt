@@ -187,7 +187,7 @@ class VisibleUiLifecycleTest {
         }
         state(Lifecycle.State.STARTED)
         rule.mainClock.advanceTimeBy(400)
-        assertTrue(observer.frameUpdates > 0)
+        assertEquals(0, observer.frameUpdates)
         state(Lifecycle.State.CREATED)
         val stopped = reads
         time = 18_000 // Intro dots are no longer needed, but the first line has not started.

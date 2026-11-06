@@ -276,8 +276,15 @@ class LyricsPaneTest {
                 rule.mainClock.advanceTimeByFrame()
             }
             assertEquals(invalidations, watch.count(first))
-            assertTrue(observer.frameUpdates > frames)
+            assertEquals(frames, observer.frameUpdates)
             assertEquals(layout, listOf(observer.compositions, observer.measures, observer.placements))
+            rule.runOnIdle { clock += 920L }
+            rule.mainClock.advanceTimeBy(920, ignoreFrameDuration = true)
+            rule.mainClock.advanceTimeByFrame()
+            watch.draw()
+            assertEquals(frames + 1, observer.frameUpdates)
+            assertEquals(invalidations + 1, watch.count(first))
+            assertEquals(2, first.lit)
             rule.runOnIdle { now = now.copy(positionMs = 1500L, playing = false); Snapshot.sendApplyNotifications() }
             rule.mainClock.advanceTimeBy(64)
             watch.draw()
@@ -304,6 +311,7 @@ class LyricsPaneTest {
             rule.runOnIdle { now = now.copy(playing = true, positionUpdatedAt = clock); Snapshot.sendApplyNotifications() }
             rule.mainClock.advanceTimeBy(64)
             rule.runOnIdle { clock += 500L }
+            rule.mainClock.advanceTimeBy(500, ignoreFrameDuration = true)
             rule.mainClock.advanceTimeByFrame()
             watch.draw()
             assertEquals(1, second.lit)
