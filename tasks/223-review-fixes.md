@@ -12,7 +12,7 @@
 - 各クラスのコンストラクタに、単調時計の引数を1つ追加する(既定 `android.os.SystemClock::elapsedRealtime`)。**再試行の期限の作成・比較・残り秒数の計算だけ**をこの単調時計に切り替える。
 - JWT の期限判定(`isFresh` など)、保存する `verifiedAtEpochMillis`、Cookie の期限など、**日時として意味のある値は今までどおり `clock`**。
 - `AppGraph.kt` の生成箇所は、既定値で動くなら変更しない。
-- 既存テストが `clock` で再試行を操作している場合、テストの組み立て部分で同じ偽の時刻を新しい引数にも渡してよい(期待値・assert は変えない)。
+- 既存テストが `clock` で再試行を操作している場合、テストの組み立て部分で同じ偽の時刻を新しい引数にも渡してよい(期待値・assert は変えない)。`AppleMusicRetentionTest.kt` の `Fixture` も同様に、組み立て部分だけ変えてよい。
 - 新しいテスト(各クラスに最低1件): 再試行の待機中に `clock` だけを大きく戻しても(例: 1時間前)、単調時計で期限が過ぎれば再要求する。`clock` だけ進めても、単調時計で期限前なら待機のまま(残り秒数も単調時計で計算される)。
 
 ### 2. メディアの初回取得に失敗しても、後の通知で全情報を取り直す
@@ -28,6 +28,7 @@
 - ファイルが無い(null)・中身が数値でない(`NumberFormatException`)は、今までどおり 0 として読み込み済みにする。**それ以外の例外(I/O の失敗)は 0 を返すが読み込み済みにせず、次の取得で読み直す**。
 - 書き込み(setter)は今までどおり。読み込み失敗の状態で書いた値は、そのまま保存・キャッシュされる。
 - 新しいテスト(`LastSetIndexStoreTest.kt` に追加): 1回目の read が IOException → 0、2回目の取得で read が 3 を返す → 3。数値でない場合は再読しない(read の呼び出し回数で確認)。
+- **既存テスト `failedRead_cachesDefaultButStillPersistsZero` の扱い(司令塔の判断・ユーザー承認済みの仕様変更)**: このテストは「IOException でも0を固定する」旧仕様を検証している。`NumberFormatException` の場合の検証(読み取り1回・0の書き込み)は**そのまま残す**。`IOException` の場合だけ、新仕様に合わせて「取得のたびに読み直す(reads が取得回数だけ増える)・0 を返す・0 を書けば persisted が 0 になり、以後は読み直さない」を厳密に検証する形に変える。テストを2つに分けてもよい(名前は報告する)。それ以外の既存テストの期待値は変えない。
 
 ### 4. 歌詞用トークン探しを入力長に対して線形にする
 - 対象: `media/lyrics/AppleWebTokenProvider.kt` の `JWT` 正規表現と `findToken`。
@@ -49,6 +50,7 @@
 - `app/src/test/java/com/gt8d/launcher/media/lyrics/AppleMusicSessionTest.kt`
 - `app/src/test/java/com/gt8d/launcher/media/MediaWatcherTest.kt`
 - `app/src/test/java/com/gt8d/launcher/config/LastSetIndexStoreTest.kt`
+- `app/src/test/java/com/gt8d/launcher/media/lyrics/AppleMusicRetentionTest.kt`(時計の注入だけ)
 - `app/build.gradle.kts`
 - `panelhost/build.gradle.kts`
 
