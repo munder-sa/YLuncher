@@ -9,15 +9,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.gt8d.launcher.ui.layout.FitClock
-import com.gt8d.launcher.ui.lifecycle.VisibleUiEffect
+import com.gt8d.launcher.ui.layout.rememberClockLayoutCache
+import com.gt8d.launcher.ui.lifecycle.rememberMinuteTime
 import com.gt8d.launcher.ui.theme.Palette
-import kotlinx.coroutines.delay
 import java.time.LocalDateTime
-import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -27,36 +25,33 @@ fun HomeClockHeader(
     modifier: Modifier = Modifier,
     now: () -> LocalDateTime = { LocalDateTime.now() },
 ) {
-    var dateTime by remember { mutableStateOf(now().truncatedTo(ChronoUnit.MINUTES)) }
-    VisibleUiEffect(now) {
-        while (true) {
-            dateTime = now().truncatedTo(ChronoUnit.MINUTES)
-            delay(1_000L)
-        }
-    }
-    val measurer = rememberTextMeasurer()
+    val dateTime by rememberMinuteTime(now)
     val density = LocalDensity.current
     val dateStyle = LocalTextStyle.current.copy(fontSize = 32.sp, lineHeight = 40.sp, color = Palette.Muted)
     val time = dateTime.format(DateTimeFormatter.ofPattern("HH:mm", Locale.JAPAN))
     val date = dateTime.format(DateTimeFormatter.ofPattern("M月d日(E)", Locale.JAPAN))
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val heightPx = with(density) { maxClockHeight.toPx() }
-        // Use FitClock's width/height selection before reserving any space for the date.
-        var clockWidthPx = 0
-        var clockSp = 40f
-        for (size in 150 downTo 40 step 2) {
-            val style = TextStyle(fontSize = size.sp, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum")
-            val result = measurer.measure(
-                "00:00", style,
-                softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = constraints.maxWidth),
-            )
-            clockWidthPx = result.size.width
-            clockSp = size.toFloat()
-            val actual = measurer.measure(time, style, softWrap = false, maxLines = 1,
-                constraints = Constraints.fixedWidth(clockWidthPx))
-            if (!result.hasVisualOverflow && !actual.hasVisualOverflow && actual.size.height <= heightPx) break
+        val clockStyle = TextStyle(fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum")
+        val clockCache = rememberClockLayoutCache("header", clockStyle, constraints, maxClockHeight, 40f, 150f)
+        // Parent and child keep separate caches because their constraints differ.
+        val (clockWidthPx, clockSp) = remember(clockCache, time) {
+            var width = 0
+            var selectedSp = 40f
+            for (size in 150 downTo 40 step 2) {
+                val style = clockStyle.copy(fontSize = size.sp)
+                val result = clockCache.template(style, Constraints(maxWidth = constraints.maxWidth))
+                width = result.size.width
+                selectedSp = size.toFloat()
+                val actual = clockCache.measure(time, style, Constraints.fixedWidth(width))
+                if (!result.hasVisualOverflow && !actual.hasVisualOverflow && actual.size.height <= heightPx) break
+            }
+            width to selectedSp
         }
-        val dateWidth = measurer.measure(date, dateStyle, softWrap = false, maxLines = 1).size.width
+        val dateCache = rememberClockLayoutCache("date", dateStyle, constraints, maxClockHeight, 32f, 32f)
+        val dateWidth = remember(dateCache, date) {
+            dateCache.measure(date, dateStyle).size.width
+        }
         val clockWidth = with(density) { clockWidthPx.toDp() }
         val dateModifier = Modifier.width(with(density) { dateWidth.toDp() }).testTag("home_date")
         val fits = clockWidthPx + with(density) { 24.dp.toPx() } + dateWidth <= constraints.maxWidth

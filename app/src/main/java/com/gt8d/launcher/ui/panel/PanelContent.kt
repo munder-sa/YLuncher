@@ -39,11 +39,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import com.gt8d.launcher.split.PanelPlacement
-import com.gt8d.launcher.ui.lifecycle.VisibleUiEffect
+import com.gt8d.launcher.ui.lifecycle.rememberMinuteTime
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -56,8 +54,6 @@ import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.layout.FitClock
 import com.gt8d.launcher.ui.layout.OneLineText
-import kotlinx.coroutines.delay
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -106,13 +102,8 @@ fun PanelContent(
     iconPage: MutableIntState? = null,
 ) {
     val selectedIconPage = iconPage ?: remember { mutableIntStateOf(0) }
-    var clockText by remember { mutableStateOf(LocalTime.now().format(ClockFormatter)) }
-    VisibleUiEffect(Unit) {
-        while (true) {
-            clockText = LocalTime.now().format(ClockFormatter)
-            delay(10_000L)
-        }
-    }
+    val dateTime by rememberMinuteTime()
+    val clockText = dateTime.format(ClockFormatter)
     CompositionLocalProvider(
         LocalLayoutDirection provides
             if (state.placement == PanelPlacement.Left) LayoutDirection.Rtl else LayoutDirection.Ltr,
@@ -241,4 +232,4 @@ private val SetIcon = ImageVector.Builder(name = "SetIcon", defaultWidth = 24.dp
     }
 }.build()
 
-private val ClockFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
+private val ClockFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.JAPAN)
