@@ -27,23 +27,16 @@ class ConfigRepository(
     private val backupWriter: (File, String) -> Unit = { f, s -> f.writeText(s) },
     private val installed: () -> Set<String>,
 ) : LastIndexStore {
-    private val lastSetFile = File(file.parentFile, "last_set_index.txt")
+    private val lastSetIndexStore = LastSetIndexStore(File(file.parentFile, "last_set_index.txt"))
 
     private val dataStore: DataStore<LauncherConfig> = createDataStore()
 
     val config: Flow<LauncherConfig> = dataStore.data.map { it.resolve(installed()) }
 
     override var lastSetIndex: Int
-        get() = runCatching {
-            if (lastSetFile.exists()) {
-                lastSetFile.readText().trim().toInt()
-            } else {
-                0
-            }
-        }.getOrDefault(0)
+        get() = lastSetIndexStore.lastSetIndex
         set(value) {
-            lastSetFile.parentFile?.mkdirs()
-            lastSetFile.writeText(value.toString())
+            lastSetIndexStore.lastSetIndex = value
         }
 
     suspend fun update(f: (LauncherConfig) -> LauncherConfig) {
