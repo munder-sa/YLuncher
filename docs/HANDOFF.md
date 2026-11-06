@@ -2,9 +2,15 @@
 
 最終更新: 2026-11-06 (JST)
 
+## Claude が司令塔を受領 (2026-11-06)
+
+- **現在の担当: Claude**。ユーザーの復帰指示を受け、Claude が本書・Git・成果物を照合して受領した。Codex は実装・相談担当へ戻る。
+- 照合結果: HEAD fbe80dc(perf-followup)。Task216/217/218(a92a618/4802768/166c343)、beta3版 1edd47f、プローブ f729db1/0ed8310 はすべて HEAD に含まれる。versionName 2.3.2-beta3。候補 app.apk の SHA256 2db786ff… が記録と一致。codex-run/codex-verify/Gradle/adb の実行中処理なし(Codex 親セッションの常駐のみ)。worktree 一覧も下記の表どおり。
+- 方針は前任から変更なし: 実機検証(beta3 の比較・場面確認→GPU画素比較→プロファイル収録)はユーザーの接続可能時まで延期。追加実装は開始しない。main 取り込み・正式化・push・Release は未実施。
+
 ## Claude への引き継ぎ待ち (2026-11-06)
 
-- **現在の担当状態: Claude への引き継ぎ待ち**。ユーザーが「司令塔をClaude codeに戻します」と明示指示。Codex暫定司令塔は新規委譲・実装を停止し、この引き継ぎの保存後は司令塔作業を終了する。Claudeは `CLAUDE.md`・`AGENTS.md`・`tasks/RULES.md`・本書を読み、実際のGit/検証記録と照合してから担当を「Claude」に更新する。以後Codexは実装・相談担当へ戻る。以下の「Codex暫定司令塔」は交代前の履歴。
+- (受領済み・履歴)**当時の担当状態: Claude への引き継ぎ待ち**。ユーザーが「司令塔をClaude codeに戻します」と明示指示。Codex暫定司令塔は新規委譲・実装を停止し、この引き継ぎの保存後は司令塔作業を終了する。Claudeは `CLAUDE.md`・`AGENTS.md`・`tasks/RULES.md`・本書を読み、実際のGit/検証記録と照合してから担当を「Claude」に更新する。以後Codexは実装・相談担当へ戻る。以下の「Codex暫定司令塔」は交代前の履歴。
 - **Git**: 作業場所 `/mnt/f/YLuncher`、ブランチ `perf-followup`、引き継ぎ編集直前HEAD **48ed6ef**。今回の引き継ぎはこの後続の文書コミットとして保存する。ローカルmain **5a18dbf**、ローカルのorigin/main参照 **2e92e63**、正式タグ `v2.3.1-release` **8ec1267**。この交代時にはfetch/pushしておらず、リモート最新状態は再照会していない。2.3.2のmain取り込み・正式化・push・Release公開は未実施。
 - **未コミットの状態**: rootの追跡対象は編集前にclean。既存未追跡 `.mcp.json`、`tasks/170-apple-lyrics-web-probe.md`・`.allow` はそのまま保持。既存の実験worktreeにも下表の残存差分があるため、一括reset/clean/pruneはしない。この交代でアプリ/テスト/版を変更しない。
 - **実行中の処理**: ホスト側の `ps -eo pid,ppid,etime,comm,args` でcodex-run/codex-verify/Gradle実行系/adb.exeを照合し、該当なし（絞り込みの終了1は一致なし）。停止が必要な既存処理なし。Windows側の常駐プロセス全体を列挙した確認ではない。新たな委譲・ビルド・テスト・ADB操作は実行していない。
