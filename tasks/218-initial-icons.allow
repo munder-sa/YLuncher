@@ -1,0 +1,4 @@
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelScreen.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/InitialIconPlan.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/InitialIconPreparationTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.PanelScreenTest' --tests 'com.gt8d.launcher.ui.panel.InitialIconPreparationTest' --tests 'com.gt8d.launcher.apps.AppCatalogStateTest'
