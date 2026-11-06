@@ -154,3 +154,11 @@ PC側の実装/レビュー/対象・統合テスト/比較APK準備を完了。
 - 操作(2周): HOME の冷えた起動 → 再生 → 歌詞表示の切替 → 次の曲/前の曲 → シーク → セット4(パネル|マップ)→ パネルのアプリ⇔セット切替×2 → パネルのHOME → セット1(YouTube|パネル)→ HOME → アプリ一覧 → 戻る。
 - SIGUSR1 で書き出し後 `pm dump-profiles --dump-classes-and-methods`。**20,706行**(クラス1,367、メソッド19,312。うち androidx.compose 10,713、アプリ自身 3,652、coroutines 1,549)。原本 `/tmp/yluncher-profile-capture/captured.txt`(a4469639…)。端末側の書き出しファイルは削除。
 - 収録後に beta4 本体を install -r で戻した(base.apk 39407b84… 一致、HOME・通知リスナー保持)。現行の手書き12行(ワイルドカード)と比べる採否判断はこれから。
+
+### 収録プロファイルの比較(Task224): 不採用
+
+- 候補: beta4 のソース(21a98a5)で `baseline-prof.txt` を収録した20,706行に丸ごと置き換え、版は 2.3.2-beta4 / 55 のまま release ビルド(codex、59秒、profile の警告0件)。`build/perf-next/profile-candidate/app.apk`(ae3aaabaf…、APK内 baseline.prof 6,361 bytes。対照は 4,299 bytes)。ソースの置き換えは比較用で、ビルド後に元へ戻した。
+- 対照: `build/perf-next/candidate-beta4/app.apk`。
+- 手順: install -r → HOME → 20秒待って ProfileInstaller の書き込み → `cmd package compile -r bg-dexopt`(両方 speed-profile を確認)→ 設定画面を前面 → 本体 force-stop → 4秒 → `am start -W` HomeActivity、を12回。YLuncher は HOME・通知リスナーのため force-stop 後すぐプロセスが再起動し、COLD は取れない。全回 WARM(プロセスあり・Activity 新規)。原本 `/tmp/yluncher-profile-compare/`。
+- 交互3組の TotalTime 中央値: 対照 187 / 174.5 / 178.5 ms、候補 174.5 / 172.5 / 171 ms。全体の中央値 **178.5 → 172.5 ms(約6ms、約3%)**。差は対照の組間の幅 12.5ms より小さく、効果は確認できない。
+- **決めたこと**: 手書きの12行を維持し、収録プロファイルは採用しない(効果が測れないものを採用しない方針)。比較後に実機を beta4 に戻した(base.apk 39407b84… 一致、HOME・通知リスナー保持)。
