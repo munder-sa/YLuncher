@@ -682,7 +682,8 @@ class AppleMusicLyricsScreenTest {
         var calls = 0
         var answer: suspend () -> AppleConnectResult = { AppleConnectResult.Ready("jp") }
         val session = AppleMusicSession({ calls++; answer() },
-            { _, _, _ -> error("Settings must not request lyrics") }, store, scope, clock = { now })
+            { _, _, _ -> error("Settings must not request lyrics") }, store, scope, clock = { now },
+            monotonicClock = { now })
     }
 
     private class GatedStore : AppleCredentialStore {
