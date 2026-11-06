@@ -2,6 +2,14 @@
 
 最終更新: 2026-11-06 (JST)
 
+## 暫定期間のレビューと指摘4件の修正、2.3.2-beta4 (2026-11-06)
+
+- **担当: Claude**。ユーザーの依頼で、暫定司令塔の期間(v2.2.0-release 以降)の変更をレビューした。自分で Apple 認証・保存・通信と未リリースの負荷改善を読み、codex-ask 2本(Apple 関連/負荷改善)をセカンドオピニオンにした。委譲36回の記録に許可外のファイル変更として記録されたものはない。設計・実装とも全体に良好。
+- **修正した4件(ユーザー承認、Task223 / 1d968bb)**: (1) Apple の再試行待機(Client/WebTokenProvider/Session)を日時から単調時計 `monotonicClock`(既定 elapsedRealtime)へ。JWT 期限・保存日時は日時のまま。(2) MediaSessionCache の snapshot 欠落時、次の通知でメタデータ/再生状態を全部読み直す(v2.3.1 の差分更新の副作用)。(3) LastSetIndexStore の I/O 失敗を固定せず次の取得で再読(数値でない場合は従来どおり0で確定)。既存テスト `failedRead_cachesDefaultButStillPersistsZero` は旧仕様の IOException 部分だけを新テストへ分離。(4) JWT 探索を正規表現から線形走査へ(`.` の無い長い入力で2乗になる問題)。指定範囲のテスト 524件成功(codex実行)。
+- **記録だけにした指摘**: ログイン WebView のフォーム送信(POST)は shouldOverrideUrlLoading を通らない。表示は Apple のページだけなので実害は低いと判断。アイコンの後から読み込み(Task218)による切替直後のアイコンの一瞬の遅れは実機で見る。
+- **beta4**: 両 2.3.2-beta4 / 55 を release ビルド(1m24s)。`build/perf-next/candidate-beta4/`(app 39407b84…、panel b30e92ab…、source 1d968bb)。署名は beta3 候補と同じ・非debuggable。beta3 候補(54)は比較用に残す。比較対照 control は 54 のままなので、実機で 55 を入れた後に control を入れるときは版の逆行に注意(必要なら control を 55 で作り直す)。
+- **次の一手**: 帰宅後の実機で beta4 を対象に、既存の計画(同版対照との比較・場面確認→Task219/220 の GPU 比較→Task221 のプロファイル収録)を再開する。main に入れる前に全テスト(app+panelhost、Debug/Release)を1回。push・Release は承認後。
+
 ## Claude が司令塔を受領 (2026-11-06)
 
 - **現在の担当: Claude**。ユーザーの復帰指示を受け、Claude が本書・Git・成果物を照合して受領した。Codex は実装・相談担当へ戻る。
