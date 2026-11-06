@@ -2,6 +2,30 @@
 
 最終更新: 2026-11-06 (JST)
 
+## Claude への引き継ぎ待ち (2026-11-06)
+
+- **現在の担当状態: Claude への引き継ぎ待ち**。ユーザーが「司令塔をClaude codeに戻します」と明示指示。Codex暫定司令塔は新規委譲・実装を停止し、この引き継ぎの保存後は司令塔作業を終了する。Claudeは `CLAUDE.md`・`AGENTS.md`・`tasks/RULES.md`・本書を読み、実際のGit/検証記録と照合してから担当を「Claude」に更新する。以後Codexは実装・相談担当へ戻る。以下の「Codex暫定司令塔」は交代前の履歴。
+- **Git**: 作業場所 `/mnt/f/YLuncher`、ブランチ `perf-followup`、引き継ぎ編集直前HEAD **48ed6ef**。今回の引き継ぎはこの後続の文書コミットとして保存する。ローカルmain **5a18dbf**、ローカルのorigin/main参照 **2e92e63**、正式タグ `v2.3.1-release` **8ec1267**。この交代時にはfetch/pushしておらず、リモート最新状態は再照会していない。2.3.2のmain取り込み・正式化・push・Release公開は未実施。
+- **未コミットの状態**: rootの追跡対象は編集前にclean。既存未追跡 `.mcp.json`、`tasks/170-apple-lyrics-web-probe.md`・`.allow` はそのまま保持。既存の実験worktreeにも下表の残存差分があるため、一括reset/clean/pruneはしない。この交代でアプリ/テスト/版を変更しない。
+- **実行中の処理**: ホスト側の `ps -eo pid,ppid,etime,comm,args` でcodex-run/codex-verify/Gradle実行系/adb.exeを照合し、該当なし（絞り込みの終了1は一致なし）。停止が必要な既存処理なし。Windows側の常駐プロセス全体を列挙した確認ではない。新たな委譲・ビルド・テスト・ADB操作は実行していない。
+- **完了済み**: 前段6改善の両2.3.2-beta2 / 53は実機適用・場面確認済みで、ユーザーの操作感確認も「問題なし」。後段Task216/217/218の3改善は取り込み済み、UI統合 **1,083件成功（failure/error/skip 0）**。Task222の候補両 **2.3.2-beta3 / 54** と同版比較対照をreleaseビルド済み。最新段階のアプリ全体/Release全テストは未実行。実行コマンド・個別結果・判断は[作業記録の第二段階](performance/2026-11-06-followup-implementation.md#第二段階-beta2後の6候補-2026-11-06)に保存済みで、根拠なく成功試験を繰り返さない。
+- **成果物**: `build/perf-next/candidate/`（通常候補、ソース6535c74相当）、`control/`（beta2機能＋同版、5bb6874）、`probes/`（独立GPU比較）、`profile-capture/`（収録専用253682c）、`tests/`（ログ/XML）を実在確認。APKの各SHA256/ソース情報も同ディレクトリに保存。収録専用APKは非R8のため、通常候補とは区別する。収録用のminify/shrink falseを本体ブランチへ取り込まない。
+- **未完了と延期**: beta3の実機適用/性能比較、Task219/220の実GPU画素比較・採否、Task221の実操作プロファイル収録。Task219/220は独立プローブだけで、本体には未採用。実機の最後の確認済み版は両beta2 / 53。ユーザーは外出中でワイヤレスデバッグを有効にできず、**実機検証は後回しでよいと明示済み**。接続先の即時回答や再接続を求めず、後日の再開を待つ。今回の追加CPU削減率と実車60Hz動作は未確認。
+- **次の一手**: Claudeが引き継ぎ確認後に担当を更新。実機が後日接続可能になったら端末/表示条件を再確認し、同版対照と候補の比較・場面確認→GPU比較→プロファイル収録を再開する。収録後は最適化済み候補APKへ復元する。実機確認とユーザーの見た目/操作感確認を正式化前に行う。現時点では追加の実装を開始する必要はない。
+
+引き継ぎ時のworktree差分（`git worktree list --porcelain` と各worktreeの `git status --short` で照合）:
+
+| worktree | 保持する状態 |
+|---|---|
+| `/tmp/yluncher-gpu-proof` | `.codex.conf` 変更、Task212 md/allow未追跡 |
+| `/tmp/yluncher-index-fixture` | Task215 md/allow未追跡 |
+| `/tmp/yluncher-lyrics-shader` | 実験用LyricWordBrush.kt / LyricWordBrushTest.kt未追跡。旧失敗実験として保持 |
+| `/tmp/yluncher-usage-filter` | Task211 md/allow未追跡 |
+| `/tmp/yluncher-apple-token-web` | 登録は残存、ディレクトリは不存在（prunable）。この交代では整理しない |
+| その他の登録済みworktree | 追跡差分/未追跡なし。後段216〜222の独立worktreeを含め保持 |
+
+決めたこと: ユーザーの復帰指示に従い「Claude への引き継ぎ待ち」とし、受領後の担当更新はClaudeが行う。既存成果物と未コミット実験を保全し、実機検証の延期を引き継ぐ。交代時の確認は読み取りと文書差分確認だけとする。
+
 ## beta2後の6候補: 3件実装・PC検証完了、実機検証は後日 (2026-11-06)
 
 - **担当はCodex暫定司令塔**。基点perf-followup / 510187e。ユーザーは6候補を進めること、beta2の操作感「問題なし」と実機比較、前奏の旧毎frame要求だけを新仕様へ更新することを明示承認。実機操作の許可はあるが、接続が失われたため今回の画面操作/インストールは0回。
