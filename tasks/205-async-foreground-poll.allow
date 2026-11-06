@@ -1,0 +1,9 @@
+write app/src/main/java/com/gt8d/launcher/sets/SetRunner.kt
+write app/src/main/java/com/gt8d/launcher/foreground/ForegroundWatcher.kt
+write app/src/main/java/com/gt8d/launcher/foreground/UsageStatsForegroundEvents.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+create app/src/main/java/com/gt8d/launcher/foreground/AsyncForegroundRead.kt
+create app/src/test/java/com/gt8d/launcher/foreground/AsyncForegroundReadTest.kt
+create app/src/test/java/com/gt8d/launcher/foreground/UsageStatsSnapshotTest.kt
+create app/src/test/java/com/gt8d/launcher/sets/SetRunnerAsyncPollTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.sets.SetRunnerTest' --tests 'com.gt8d.launcher.sets.SetRunnerAsyncPollTest' --tests 'com.gt8d.launcher.foreground.*' --tests 'com.gt8d.launcher.split.StockLauncherWarmupTest' --tests 'com.gt8d.launcher.link.LinkEntryActivityTest'
