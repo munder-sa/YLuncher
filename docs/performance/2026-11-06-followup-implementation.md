@@ -6,16 +6,24 @@
 
 | Task | 現在の状態 | 確認範囲 |
 |---|---|---|
-| 216 前奏/間奏の境界更新 | 独立worktreeで実装中 | 旧画素/点灯結果は維持、毎frame要求だけ新仕様に更新 |
+| 216 前奏/間奏の境界更新 | 4e7c049→a92a618で取り込み | 対象85件成功（既存65＋新規20）、実機未確認 |
 | 217 時計 | 6ca3db6→4802768で取り込み | 対象45件成功（既存32＋新規13）、実機未確認 |
 | 218 初回アイコン | db72f8e→166c343で取り込み | 対象59件成功（既存44＋新規15）、実機の時間未測定 |
 | 219 描画後マスク | 13f5b9f→f729db1、独立プローブのみ | offline Debugビルド1回28秒成功、実GPU未実行 |
-| 220 上下端フェード | 独立worktreeでプローブ作成中 | 本体未配線、画素・性能未確認 |
-| 実収録プロファイル | 手動収録方式を確認 | 実機接続待ち、収録/本体変更なし |
+| 220 上下端フェード | aefa8e2→0ed8310、独立プローブのみ | 統合offline Debugビルド1回10秒成功、GPU未実行 |
+| 実収録プロファイル | Task221専用収録APKを準備 | 実機接続待ち、収録/profile変更なし |
 
 Task217は表示中の分/時刻変更/タイムゾーンbroadcastで更新し、STOP/dispose時に解除、STARTで最新へ同期。時計サイズの探索結果と有界128候補の寸法cacheを保持し、非関連compositionでは計測を省く。非同期font完了、fontScale/制約/時刻/日付変更も試験済み。サイズ探索の2sp刻み/overflow判定は維持。初回compileはテストでsealed interfaceを匿名継承して失敗し、AndroidFontの実非同期読込fixtureへ修正。次は新規6件が親領域の境界設定で失敗、高さ/余白だけを直して45件成功。既存テスト変更なし。成功後の再実行なし。
 
 Task218は実際の画面に使う候補だけを初回info待ちの対象とする。ページ/スクロール内の細分化はせず、表示画面の候補全体を準備する。全内容を消すpreparedリセットはcatalog交換時だけ。背景の要求は2frame待ち、少なくとも1描画機会を空ける。Deferredで非表示infoを止めても表示対象完了後に画面が出ること、config/view/now/catalog変更とクリック先を検証。初回58件中、新規14件がNative Graphics未指定による画像作成NPEで失敗。fixture修正と予約キャンセル1件追加後は59件成功。既存テスト変更なし。
+
+Task216は既存interludeLitDotsの計算を判定条件に、次に点灯数が変わる整数msを探索し速度換算して予約する。0速度/終端は休止、負/非有限速度は旧frame補間へfallback。単語塗り/行indexの200ms/introの200ms/行移動アニメは維持。対象85件を1回1m12sで成功。既存変更は承認済みの毎frame増加assert2箇所と、仮想再生時計とdelayの時間を合わせるfixtureだけ。境界で1回更新されることを既存試験にも追加、画素/点灯数/保持alphaは維持した。XML/出力はbuild/perf-next/tests/216-interlude。
+
+3件の統合後、`/home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.*'` を1回実行し、**6m53s、50クラス/1,083件成功、failure/error/skip0**。個別試験の再実行目的ではなく、PanelScreen/Home/時計/歌詞を合わせたUIの相互作用を確認した。アプリ全テスト・Release全テストはこの段階では実行していない。ログ `/tmp/yluncher-next-ui-integration.txt` と全XMLを `build/perf-next/tests/ui-integration/` へ保存、対象外クラス0を確認した。
+
+Task222の同版比較APKも準備。対照は機能基点075f919＋版差分の5bb6874、候補は3改善込みa92a618＋版差分の6535c74（UI統合成功後に1edd47fとしてrootへ取り込み）。両app/panelhostは2.3.2-beta3 / 54、release build各1回47秒/48秒成功。非debuggableと既存と同じ署名44d8c612…7f6dを確認した。`build/perf-next/{control,candidate}/` にAPK、SHA256SUMS.txt、source.jsonを保存。候補app SHA256は `2db786ff7ee6fe445a9a6782deed95706e7ff6b1560da0757fe3f74b197e6ece`、panelは `bf5ca15685adfc35c7efa7cd7629c9f6e0b728a52307fa9764a61c073192d440`。未インストール。
+
+Task221は候補と同じソース/版から専用worktreeのminify/shrinkだけfalseにし、app release1回58秒成功。専用branchの253682c、rootへ未取り込み。non-debuggable/同署名とDEX内の元のInterludeUpdatePlan descriptorを確認。44,256,120 bytes、SHA256 `0eeea215c25ca0f6ba1625fea325a0fa29dca23630a83a4263000a5c923accd3`。成果物は `build/perf-next/profile-capture/app-capture.apk` で、通常適用する候補APKとは別。プロファイルの実収録・抽出・採用判断は未実施。
 
 対象コマンドは[Task217](../../tasks/217-clock-work.md)・[Task218](../../tasks/218-initial-icons.md)のとおり。最終XMLと全Gradle実行の終了code/出力を `build/perf-next/tests/{217-clock,218-icons}/` に保存（runs.json、summary.json）。実行は各3回/2回、失敗を成功として集計しない。両codex-runの変更ファイルはallowと一致。command警告は--tests引用符の正規化差で、events.jsonl内の実行文字列が指定と一致することを確認した。
 
@@ -23,9 +31,13 @@ Task219は通常Textを描いたRenderNode内容へRuntimeShaderを適用する�
 
 Task220は1回recordした内容を上下端/中央の互いに重ならないclipで再生し、両端だけをsaveLayer/DstInする試験。3回の描画命令再生が増えるため、採用を先に決めない。全体合成/範囲限定/フェードなし診断を同じ内容で比較する。フェードなしは寄与診断専用。画素一致が成立した候補だけ本体へ検討する。
 
+Task220はManifest追加と新規プローブ/説明文書の3ファイルのみ。216ケースを定義し、元のword用663ケース/1成分差1/255は維持。2framecommit、ROIだけのPixelCopy、timeout時の遅延bitmap回収も照合。新描画コードの取り込み後に同じofflineコマンドで1回10秒成功、ログ `/tmp/yluncher-edge-fade-build.txt`。両プローブ入りAPKは `build/perf-next/probes/renderprobe.apk`、22,510,135 bytes、SHA256 `9792e0666aaf462fd240d5de81d8fbc1e2c5f93fd41bccface09282bbf14aeda`。実行0件のため「663＋216件合格」とは報告しない。プローブは本体から参照していない。
+
 実収録profileは[Android公式の手動生成](https://developer.android.com/topic/performance/baselineprofiles/manually-create-measure)に沿えばMacrobenchmark追加依存なしで可能。非debuggableかつ非R8の専用収録APKが必要で、現在の最適化済みbeta2からそのままソース名のprofileを生成できるとは扱わない。独立worktreeで収録用APK→プロファイル保存/抽出→最適化済み候補APKへの復元までを1工程とし、通常導入と強制compileの比較条件を分ける。未収録の架空ルールは追加しない。
 
 11時台の実機確認: `adb.exe devices -l` は最初192.168.137.200:40275 device、その後package/activity/idの読み取り時にclosed/offline。再connectは10061接続拒否、devices一覧とmdnsサービス一覧は空になった。利用者へ新接続先を質問済み。今回の画面操作・インストール・端末設定変更はまだ0回で、最後に導入確認済みなのは両2.3.2-beta2 / 53。接続復帰までPC上の作業を継続する。
+
+PC側の実装/レビュー/対象・統合テスト/比較APK準備を完了。実行中Taskなし。最後に標準ADBポート5555への接続も拒否され、devices一覧は空のまま。残る実機比較、プロファイル収録、候補の実機適用は接続先の回答待ち。今回の新しいCPU削減率は主張しない。決めたことは各Task・上記の実装/比較条件に記録し、正式化/push/公開はまだ行っていない。
 
 ## 第一段階: 追加7候補
 

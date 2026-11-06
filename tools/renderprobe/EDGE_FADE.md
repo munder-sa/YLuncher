@@ -4,8 +4,8 @@
 `EdgeFadeInstrumentation` を追加する。旧 `ProbeActivity` / `ProbeInstrumentation` の
 663ケース、`LyricWordBrush`、本体 `LyricsPane` は変更しない。
 
-この実装時点で **build 0回・test 0回・実機実行 0回**。コンパイル可否、画素一致、
-CPU / RenderThread負荷、実メモリ使用量は未確認。帯分割は未採用の仮説であり、
+実装担当によるbuildは0回。その後司令塔が **offline build 1回・10秒で成功**を確認した。
+実機実行はADB切断により0回で、画素一致、CPU / RenderThread負荷、実メモリ使用量は未確認。帯分割は未採用の仮説であり、
 プローブの合格だけで本体や実車60Hzの改善を示さない。
 
 ## 司令塔による実行
