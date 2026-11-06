@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -98,12 +98,12 @@ class HomeActivity : ComponentActivity() {
         setContent {
             LauncherTheme {
                 Box(Modifier.fillMaxSize().screenSemantics()) {
-                    val latestConfig by AppGraph.configForHome.collectAsState()
+                    val latestConfig by AppGraph.configForHome.collectAsStateWithLifecycle()
                     val catalog = AppGraph.appCatalogState
-                    val apps by catalog.snapshot.collectAsState()
+                    val apps by catalog.snapshot.collectAsStateWithLifecycle()
                     val config = latestConfig
-                    val bootPhase by AppGraph.boot.phase.collectAsState()
-                    val secondsLeft by AppGraph.boot.secondsLeft.collectAsState()
+                    val bootPhase by AppGraph.boot.phase.collectAsStateWithLifecycle()
+                    val secondsLeft by AppGraph.boot.secondsLeft.collectAsStateWithLifecycle()
 
                     Box(
                         modifier = Modifier

@@ -22,7 +22,8 @@ import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.layout.PanelLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.gt8d.launcher.ui.lifecycle.VisibleUiEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -65,9 +66,9 @@ fun PanelScreen(
     onLaunchApp: (String) -> Unit,
 ) {
     val context = LocalContext.current
-    val latestConfig by AppGraph.latestConfig.collectAsState()
+    val latestConfig by AppGraph.latestConfig.collectAsStateWithLifecycle()
     val catalog = AppGraph.appCatalogState
-    val apps by catalog.snapshot.collectAsState()
+    val apps by catalog.snapshot.collectAsStateWithLifecycle()
     val environment = rememberPanelEnvironment(catalog)
     val config = homeConfig ?: latestConfig ?: return
     var pending by rememberSaveable { mutableStateOf<PanelView?>(null) }
@@ -76,11 +77,11 @@ fun PanelScreen(
     LaunchedEffect(config.panelView, pending) {
         if (pending == config.panelView) pending = null
     }
-    val now by MediaWatcher.nowPlaying.collectAsState()
-    val lyrics by AppGraph.lyrics.state.collectAsState()
+    val now by MediaWatcher.nowPlaying.collectAsStateWithLifecycle()
+    val lyrics by AppGraph.lyrics.state.collectAsStateWithLifecycle()
     var showAppList by rememberSaveable { mutableStateOf(false) }
     val iconPage = rememberSaveable { mutableIntStateOf(0) }
-    val frequent by AppGraph.frequentApps.collectAsState()
+    val frequent by AppGraph.frequentApps.collectAsStateWithLifecycle()
     val settings = apps.settings
     val settingsApp = remember(settings, apps.appRevision) {
         settings?.let { AppInfo(it.packageName, "設定", apps.info(it.packageName).icon, true) }
@@ -163,10 +164,10 @@ fun PanelScreen(
         mutableLongStateOf(now?.positionAt(SystemClock.elapsedRealtime()) ?: 0L)
     }
 
-    LaunchedEffect(now) {
+    VisibleUiEffect(now) {
         val current = now ?: run {
             positionState.longValue = 0L
-            return@LaunchedEffect
+            return@VisibleUiEffect
         }
         positionState.longValue = current.positionAt(SystemClock.elapsedRealtime())
         while (current.playing) {
@@ -243,11 +244,11 @@ fun PanelScreen(
     )
 
     if (homeWide) {
-        val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
+        val currentIndex by AppGraph.runner.currentIndexFlow.collectAsStateWithLifecycle()
         HomeWideContent(state, actions, config, { apps.info(it) }, currentIndex,
             onOpen = { AppGraph.runner.open(it) }, onNewSet = onNewSet, homeAppRowState = homeAppRowState)
     } else {
-        val currentIndex by AppGraph.runner.currentIndexFlow.collectAsState()
+        val currentIndex by AppGraph.runner.currentIndexFlow.collectAsStateWithLifecycle()
         PanelContent(iconPage = iconPage, state = state.copy(view = pending ?: config.panelView,
             sets = config.screenSets, currentSetIndex = currentIndex,
             setAppInfo = { apps.info(it) }),

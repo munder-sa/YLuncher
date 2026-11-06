@@ -13,6 +13,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.gt8d.launcher.ui.layout.FitClock
+import com.gt8d.launcher.ui.lifecycle.VisibleUiEffect
 import com.gt8d.launcher.ui.theme.Palette
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
@@ -27,7 +28,7 @@ fun HomeClockHeader(
     now: () -> LocalDateTime = { LocalDateTime.now() },
 ) {
     var dateTime by remember { mutableStateOf(now().truncatedTo(ChronoUnit.MINUTES)) }
-    LaunchedEffect(now) {
+    VisibleUiEffect(now) {
         while (true) {
             dateTime = now().truncatedTo(ChronoUnit.MINUTES)
             delay(1_000L)

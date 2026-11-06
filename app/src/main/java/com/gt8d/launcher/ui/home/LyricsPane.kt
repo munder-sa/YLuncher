@@ -48,6 +48,7 @@ import com.gt8d.launcher.media.lyrics.LyricLine
 import com.gt8d.launcher.ui.theme.Palette
 import com.gt8d.launcher.ui.theme.LyricsVisualStyle
 import com.gt8d.launcher.ui.theme.lineTargetAlpha
+import com.gt8d.launcher.ui.lifecycle.VisibleUiEffect
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -422,9 +423,10 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 val index by key(track, state.lines) { rememberLyricIndex(now, state.lines, clock) }
                 val fill = remember(track, state.lines) { mutableFloatStateOf(0f) }
                 val position = remember(now, track, state.lines) { mutableLongStateOf(now.positionAt(clock())) }
-                val intro by produceState(false, now, state.lines, index) {
+                var intro by remember { mutableStateOf(false) }
+                VisibleUiEffect(now, state.lines, index) {
                     do {
-                        value = index < 0 && state.lines.firstOrNull()?.let {
+                        intro = index < 0 && state.lines.firstOrNull()?.let {
                             it.timeMs.toDouble() - now.positionAt(clock()) >= 5000
                         } == true
                         if (!now.playing || index >= 0) break
@@ -434,7 +436,7 @@ fun LyricsPane(state: LyricsState, now: NowPlaying, modifier: Modifier = Modifie
                 val needsFrames = intro || state.lines.getOrNull(index)?.let {
                     it.words.isNotEmpty() || it.text == "♪"
                 } == true
-                LaunchedEffect(now, state.lines, index, needsFrames) {
+                VisibleUiEffect(now, state.lines, index, needsFrames) {
                     position.longValue = now.positionAt(clock())
                     fill.floatValue = wordFillPosition(state.lines, index, position.longValue, now.durationMs)
                     while (now.playing && needsFrames) {

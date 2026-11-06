@@ -39,7 +39,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import com.gt8d.launcher.split.PanelPlacement
-import androidx.compose.runtime.LaunchedEffect
+import com.gt8d.launcher.ui.lifecycle.VisibleUiEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -107,7 +107,7 @@ fun PanelContent(
 ) {
     val selectedIconPage = iconPage ?: remember { mutableIntStateOf(0) }
     var clockText by remember { mutableStateOf(LocalTime.now().format(ClockFormatter)) }
-    LaunchedEffect(Unit) {
+    VisibleUiEffect(Unit) {
         while (true) {
             clockText = LocalTime.now().format(ClockFormatter)
             delay(10_000L)

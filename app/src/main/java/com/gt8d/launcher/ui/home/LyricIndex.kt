@@ -2,7 +2,7 @@ package com.gt8d.launcher.ui.home
 
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import com.gt8d.launcher.ui.lifecycle.VisibleUiEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -19,7 +19,7 @@ fun rememberLyricIndex(
     clock: () -> Long = { SystemClock.elapsedRealtime() },
 ): State<Int> {
     val index = remember { mutableIntStateOf(-1) }
-    LaunchedEffect(now, lines) {
+    VisibleUiEffect(now, lines) {
         index.intValue = LrcParser.currentIndex(lines, now.positionAt(clock()))
         while (now.playing) {
             delay(200)

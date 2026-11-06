@@ -59,39 +59,21 @@ fun rememberPanelEnvironment(catalog: AppCatalogState): PanelEnvironment {
             emptySet(), emptyList(), 0))
     }
     DisposableEffect(context, owner, catalog) {
-        fun refresh() {
+        fun refreshRadios() {
             val status = readDockStatus(context)
-            radios = radios.copy(dockStatus = status, missingPermissions = readMissingPermissions(context),
+            radios = radios.copy(dockStatus = status,
                 radioRevision = radios.radioRevision + if (status != radios.dockStatus) 1 else 0)
         }
+        fun refreshVisible() {
+            refreshRadios()
+            radios = radios.copy(missingPermissions = readMissingPermissions(context))
+        }
         catalog.resume()
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) { refresh(); catalog.resume() }
-        }
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) { refresh() }
-        }
-        val connectivity = context.getSystemService(ConnectivityManager::class.java)
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) = refresh()
-            override fun onLost(network: Network) = refresh()
-        }
-        val registered = runCatching {
-            connectivity?.registerDefaultNetworkCallback(callback, Handler(Looper.getMainLooper()))
-            connectivity != null
-        }.getOrDefault(false)
-        ContextCompat.registerReceiver(context, receiver, IntentFilter().apply {
-            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
-            addAction(WifiManager.RSSI_CHANGED_ACTION)
-            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
-            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
-        }, ContextCompat.RECEIVER_EXPORTED)
-        owner.lifecycle.addObserver(observer)
-        onDispose {
-            if (registered) connectivity?.unregisterNetworkCallback(callback)
-            owner.lifecycle.removeObserver(observer)
-            context.unregisterReceiver(receiver)
-        }
+        val dispose = observeVisibleRadios(context, owner.lifecycle,
+            onStart = ::refreshVisible,
+            onResume = { refreshVisible(); catalog.resume() },
+            onRadio = ::refreshRadios)
+        onDispose { dispose() }
     }
     val entries = remember(apps.entries, context.packageName) { buildAppList(apps.entries, context.packageName) }
     return radios.copy(installedPkgs = apps.installed,
@@ -155,61 +137,120 @@ fun rememberPanelEnvironment(catalog: AppCatalog): PanelEnvironment {
         var observing = false
         fun refreshRadios() {
             environment = environment.copy(
-                dockStatus = readDockStatus(context), missingPermissions = readMissingPermissions(context),
+                dockStatus = readDockStatus(context),
                 revision = environment.revision + 1,
             )
         }
-        val connectivity = context.getSystemService(ConnectivityManager::class.java)
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) = refreshRadios()
-            override fun onLost(network: Network) = refreshRadios()
-        }
-        val callbackRegistered = runCatching {
-            connectivity?.registerDefaultNetworkCallback(callback, Handler(Looper.getMainLooper()))
-            connectivity != null
-        }.getOrDefault(false)
-        val observer = LifecycleEventObserver { _, event ->
-            if (observing && event == Lifecycle.Event.ON_RESUME) {
-                catalog.invalidateAllIcons()
-                environment = readEnvironment(context, catalog, environment.revision + 1)
-            }
-        }
-        val radios = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action !in setOf(WifiManager.WIFI_STATE_CHANGED_ACTION, WifiManager.RSSI_CHANGED_ACTION,
-                        WifiManager.NETWORK_STATE_CHANGED_ACTION, BluetoothAdapter.ACTION_STATE_CHANGED)) return
-                refreshRadios()
-            }
-        }
         val packages = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
+                if (!observing) return
                 if (intent.action !in setOf(Intent.ACTION_PACKAGE_ADDED, Intent.ACTION_PACKAGE_REMOVED, Intent.ACTION_PACKAGE_CHANGED)) return
                 val pkg = intent.data?.takeIf { it.scheme == "package" }?.schemeSpecificPart ?: return
                 catalog.invalidatePackage(pkg)
                 environment = readEnvironment(context, catalog, environment.revision + 1)
             }
         }
-        ContextCompat.registerReceiver(context, radios, IntentFilter().apply {
-            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
-            addAction(WifiManager.RSSI_CHANGED_ACTION)
-            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
-            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
-        }, ContextCompat.RECEIVER_EXPORTED)
         ContextCompat.registerReceiver(context, packages, IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
             addAction(Intent.ACTION_PACKAGE_CHANGED)
             addDataScheme("package")
         }, ContextCompat.RECEIVER_EXPORTED)
-        owner.lifecycle.addObserver(observer)
+        val disposeRadios = observeVisibleRadios(context, owner.lifecycle,
+            onStart = {
+                refreshRadios()
+                environment = environment.copy(missingPermissions = readMissingPermissions(context))
+            },
+            onResume = {
+                if (observing) {
+                    catalog.invalidateAllIcons()
+                    environment = readEnvironment(context, catalog, environment.revision + 1)
+                }
+            },
+            onRadio = ::refreshRadios)
         observing = true
         environment = readEnvironment(context, catalog, environment.revision)
         onDispose {
-            if (callbackRegistered) connectivity?.unregisterNetworkCallback(callback)
-            owner.lifecycle.removeObserver(observer)
-            context.unregisterReceiver(radios)
+            observing = false
+            disposeRadios()
             context.unregisterReceiver(packages)
         }
     }
     return environment
 }
+
+/** One observer per environment; every visible interval owns fresh radio callbacks. */
+private fun observeVisibleRadios(
+    context: Context,
+    lifecycle: Lifecycle,
+    onStart: () -> Unit,
+    onResume: () -> Unit,
+    onRadio: () -> Unit,
+): () -> Unit {
+    var disposed = false
+    var active = false
+    var generation = 0L
+    var release: () -> Unit = {}
+
+    fun stop() {
+        if (!active) return
+        active = false
+        generation++ // Invalidate queued events before unregistering either source.
+        val unregister = release
+        release = {}
+        unregister()
+    }
+
+    fun start() {
+        if (disposed || active) return
+        active = true
+        val token = ++generation
+        fun refresh() {
+            if (!disposed && active && token == generation &&
+                lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) onRadio()
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action in radioActions) refresh()
+            }
+        }
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) = refresh()
+            override fun onLost(network: Network) = refresh()
+        }
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val callbackRegistered = runCatching {
+            connectivity?.registerDefaultNetworkCallback(callback, Handler(Looper.getMainLooper()))
+            connectivity != null
+        }.getOrDefault(false)
+        val receiverRegistered = runCatching {
+            ContextCompat.registerReceiver(context, receiver, IntentFilter().apply {
+                radioActions.forEach { addAction(it) }
+            }, ContextCompat.RECEIVER_EXPORTED)
+            true
+        }.getOrDefault(false)
+        release = {
+            if (callbackRegistered) runCatching { connectivity?.unregisterNetworkCallback(callback) }
+            if (receiverRegistered) runCatching { context.unregisterReceiver(receiver) }
+        }
+        onStart()
+    }
+
+    val observer = LifecycleEventObserver { _, event ->
+        when (event) {
+            Lifecycle.Event.ON_START -> start()
+            Lifecycle.Event.ON_RESUME -> if (!disposed && active) onResume()
+            Lifecycle.Event.ON_STOP, Lifecycle.Event.ON_DESTROY -> stop()
+            else -> Unit
+        }
+    }
+    lifecycle.addObserver(observer)
+    return {
+        disposed = true
+        lifecycle.removeObserver(observer)
+        stop()
+    }
+}
+
+private val radioActions = setOf(WifiManager.WIFI_STATE_CHANGED_ACTION, WifiManager.RSSI_CHANGED_ACTION,
+    WifiManager.NETWORK_STATE_CHANGED_ACTION, BluetoothAdapter.ACTION_STATE_CHANGED)
