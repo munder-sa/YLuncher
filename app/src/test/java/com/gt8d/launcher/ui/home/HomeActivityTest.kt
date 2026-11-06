@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.boot.BootPhase
+import com.gt8d.launcher.config.LastSetIndexFixture
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
@@ -49,9 +50,8 @@ class HomeActivityTest {
     private var controllerDestroyed = false
     // AppGraph の lazy repository は、別テストの Application の保存先を保持する。
     // 検証と後始末も、実際に repository が使うファイルに対して行う。
-    private val indexFile get() = AppGraph.config.javaClass.getDeclaredField("lastSetFile")
-        .apply { isAccessible = true }.get(AppGraph.config) as File
-    private var savedIndex: String? = null
+    private lateinit var lastSetIndexFixture: LastSetIndexFixture
+    private val indexFile get() = lastSetIndexFixture.indexFile
     private var savedFlow: StateFlow<LauncherConfig?>? = null
     private var savedHandled = false
     private var savedHome = false
@@ -71,7 +71,7 @@ class HomeActivityTest {
         SafetyGuard.clear(app)
         AppGraph.configFlowForHomeTest = configFlow
         AppGraph.bootHandled = false
-        savedIndex = indexFile.takeIf { it.exists() }?.readText()
+        lastSetIndexFixture = LastSetIndexFixture(AppGraph.config)
         AppGraph.config.lastSetIndex = 4
     }
 
@@ -85,7 +85,7 @@ class HomeActivityTest {
         AppGraph.homeResumed = savedHome
         AppGraph.homePausedAtMs = savedPausedAt
         savedSafety?.let { safetyFile.writeText(it) } ?: safetyFile.delete()
-        savedIndex?.let { indexFile.writeText(it) } ?: indexFile.delete()
+        lastSetIndexFixture.close()
     }
 
     private fun resumeLoading() {

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.config.Defaults
+import com.gt8d.launcher.config.LastSetIndexFixture
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.foreground.UsageStatsForegroundEvents
 import com.gt8d.launcher.sets.SetRunnerDeps
@@ -92,8 +93,7 @@ class PanelActivityTest {
     private val componentCalls = mutableListOf<Pair<ComponentName, Boolean>>()
     private var safetyContents: String? = null
     private var savedHandled = false
-    private lateinit var settingsIndexFile: java.io.File
-    private var savedSettingsIndex: String? = null
+    private lateinit var lastSetIndexFixture: LastSetIndexFixture
     private var snapshotObserver: androidx.compose.runtime.snapshots.ObserverHandle? = null
 
     @Before fun observeSnapshotWrites() {
@@ -112,9 +112,7 @@ class PanelActivityTest {
         safetyContents = safetyFile.takeIf { it.exists() }?.readText()
         com.gt8d.launcher.safety.SafetyGuard.clear(app)
         savedHandled = AppGraph.bootHandled
-        settingsIndexFile = AppGraph.config.javaClass.getDeclaredField("lastSetFile")
-            .apply { isAccessible = true }.get(AppGraph.config) as java.io.File
-        savedSettingsIndex = settingsIndexFile.takeIf { it.exists() }?.readText()
+        lastSetIndexFixture = LastSetIndexFixture(AppGraph.config)
         savedSplit = AppGraph.panelInSplit
         savedSplitPausedAt = AppGraph.panelSplitPausedAtMs
         savedConfig = runBlocking { AppGraph.config.config.first() }
@@ -145,7 +143,7 @@ class PanelActivityTest {
         val safetyFile = java.io.File(app.filesDir, "safety.json")
         safetyContents?.let { safetyFile.writeText(it) } ?: safetyFile.delete()
         AppGraph.bootHandled = savedHandled
-        savedSettingsIndex?.let { settingsIndexFile.writeText(it) } ?: settingsIndexFile.delete()
+        lastSetIndexFixture.close()
         AppGraph.panelSplitPausedAtMs = savedSplitPausedAt
         shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
             AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName, usageMode,

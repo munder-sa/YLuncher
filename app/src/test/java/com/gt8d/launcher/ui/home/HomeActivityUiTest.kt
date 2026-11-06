@@ -14,6 +14,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.config.Defaults
+import com.gt8d.launcher.config.LastSetIndexFixture
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
@@ -48,8 +49,7 @@ class HomeActivityUiTest {
     private var savedPausedAt: Long? = null
     private var safety: String? = null
     private lateinit var safetyFile: File
-    private var index: String? = null
-    private lateinit var indexFile: File
+    private lateinit var lastSetIndexFixture: LastSetIndexFixture
     private var usageMode = 0
 
     @Before fun prepare() {
@@ -65,9 +65,7 @@ class HomeActivityUiTest {
         safetyFile = File(app.filesDir, "safety.json")
         safety = safetyFile.takeIf { it.exists() }?.readText()
         SafetyGuard.clear(app)
-        indexFile = AppGraph.config.javaClass.getDeclaredField("lastSetFile")
-            .apply { isAccessible = true }.get(AppGraph.config) as File
-        index = indexFile.takeIf { it.exists() }?.readText()
+        lastSetIndexFixture = LastSetIndexFixture(AppGraph.config)
         val ops = app.getSystemService(AppOpsManager::class.java)
         usageMode = ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName)
         shadowOf(ops).setMode(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName, AppOpsManager.MODE_ERRORED)
@@ -101,7 +99,7 @@ class HomeActivityUiTest {
         AppGraph.homeResumed = savedHome
         AppGraph.homePausedAtMs = savedPausedAt
         safety?.let { safetyFile.writeText(it) } ?: safetyFile.delete()
-        index?.let { indexFile.writeText(it) } ?: indexFile.delete()
+        lastSetIndexFixture.close()
         shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
             AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName, usageMode,
         )

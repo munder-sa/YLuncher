@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.config.Defaults
+import com.gt8d.launcher.config.LastSetIndexFixture
 import com.gt8d.launcher.safety.SafetyGuard
 import com.gt8d.launcher.ui.home.HomeActivity
 import java.io.File
@@ -95,9 +96,7 @@ class SettingsActivityTest {
     }
     @Test fun forApp_reset_restoresDefaults_keepsLastSetIndex() = runBlocking {
         val saved = AppGraph.config.config.first()
-        val indexFile = AppGraph.config.javaClass.getDeclaredField("lastSetFile")
-            .apply { isAccessible = true }.get(AppGraph.config) as File
-        val index = indexFile.takeIf { it.exists() }?.readText()
+        val lastSetIndexFixture = LastSetIndexFixture(AppGraph.config)
         try {
             val defaults = Defaults.build(AppGraph.catalog.installed())
             AppGraph.config.update { defaults.copy(gesture = defaults.gesture.copy(glow = false), boot = defaults.boot.copy(waitForCar = true)) }
@@ -108,7 +107,7 @@ class SettingsActivityTest {
             assertEquals(defaults, result); assertEquals(3, AppGraph.config.lastSetIndex)
         } finally {
             AppGraph.config.update { saved }
-            index?.let { indexFile.writeText(it) } ?: indexFile.delete()
+            lastSetIndexFixture.close()
         }
     }
 }
