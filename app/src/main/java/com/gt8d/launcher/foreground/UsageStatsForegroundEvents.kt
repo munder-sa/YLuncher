@@ -6,6 +6,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Process
 import android.os.SystemClock
+import com.gt8d.launcher.apps.usageResumedQuery
 import com.gt8d.launcher.diag.DiagLog
 import kotlin.math.abs
 
@@ -47,7 +48,8 @@ class UsageStatsForegroundEvents(
             val events = queryRawEvents?.invoke(begin, end) ?: run {
                 val manager = context.getSystemService(UsageStatsManager::class.java)
                     ?: throw ForegroundEventsUnavailableException()
-                val usageEvents = manager.queryEvents(begin, end) ?: throw ForegroundEventsUnavailableException()
+                val usageEvents = manager.queryEvents(usageResumedQuery(begin, end))
+                    ?: throw ForegroundEventsUnavailableException()
                 buildList {
                     val event = UsageEvents.Event()
                     while (usageEvents.hasNextEvent()) {

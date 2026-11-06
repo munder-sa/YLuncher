@@ -12,6 +12,8 @@ class UsageHistory(
     private val context: Context,
     private val query: ((beginWallMs: Long, endWallMs: Long) -> List<UsageLaunch>)? = null,
 ) {
+    internal var wallClock: () -> Long = System::currentTimeMillis
+
     fun available(): Boolean = try {
         context.getSystemService(AppOpsManager::class.java)?.unsafeCheckOpNoThrow(
             AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName,
@@ -21,11 +23,11 @@ class UsageHistory(
     fun launchesSince(sinceWallMs: Long): List<UsageLaunch>? {
         return try {
             if (!available()) null else {
-                val end = System.currentTimeMillis()
+                val end = wallClock()
                 val launches = query?.invoke(sinceWallMs, end) ?: run {
                     val manager = context.getSystemService(UsageStatsManager::class.java)
                         ?: return null
-                    val events = manager.queryEvents(sinceWallMs, end) ?: return null
+                    val events = manager.queryEvents(usageResumedQuery(sinceWallMs, end)) ?: return null
                     buildList {
                         val event = UsageEvents.Event()
                         while (events.hasNextEvent()) {
