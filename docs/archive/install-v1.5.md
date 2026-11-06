@@ -1,3 +1,5 @@
+> **保管用の旧版の手順書です。** 現在の導入手順は [docs/install.md](../install.md)、版ごとの変更は [docs/CHANGELOG.md](../CHANGELOG.md) を参照してください。
+
 # YLuncher v1.5 導入手順（GT8D）
 
 ## 設定画面の開き方
@@ -62,4 +64,4 @@ bash scripts/device-scenarios.sh --with-ylauncher-home --only leftPanel_dividerS
 
 [v1.0 導入手順 §9「v1.5 から v1.0 に戻す」](install-v1.0.md#9-v15-から-v10-に戻す) に従い、**v1.0 を入れる前に** `config-v2-backup.json` を復元して停止し、v1.0 の APK を `install -r -d` で入れる。移行後に v1.5 で変えた設定と左パネルのセットは失われる。
 
-根拠：[v1.5 左パネル対応設計書](superpowers/specs/2026-10-31-v1.5-left-panel-design.md)、Task 074〜081 の実装（設定、画面セット編集、SetRunner、PanelSwapSaver、LinkRouter、`scripts/device-scenarios.sh`）。
+根拠：[v1.5 左パネル対応設計書](../superpowers/specs/2026-10-31-v1.5-left-panel-design.md)、Task 074〜081 の実装（設定、画面セット編集、SetRunner、PanelSwapSaver、LinkRouter、`scripts/device-scenarios.sh`）。

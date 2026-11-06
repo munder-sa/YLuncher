@@ -1,3 +1,5 @@
+> **保管用の旧版の手順書です。** 現在の導入手順は [docs/install.md](../install.md)、版ごとの変更は [docs/CHANGELOG.md](../CHANGELOG.md) を参照してください。
+
 # YLuncher v1.0 導入手順（GT8D）
 
 右側パネル構成を一から導入する手順。コマンドは利用者が実行するための例で、この手順書の作成時には実行していない。端末上の設定画面の細かい階層・表示名と、資料に実行記録がない adb コマンドの実機動作は未確認。
@@ -195,7 +197,7 @@
 
 ## 根拠
 
-- 端末・ネットワーク・構成：[設計書](superpowers/specs/2026-10-28-gt8d-launcher-design.md)、[実装計画](superpowers/plans/2026-10-28-gt8d-launcher.md)。
+- 端末・ネットワーク・構成：[設計書](../superpowers/specs/2026-10-28-gt8d-launcher-design.md)、[実装計画](../superpowers/plans/2026-10-28-gt8d-launcher.md)。
 - 権限と入口：`app/src/main/AndroidManifest.xml`、`app/src/debug/AndroidManifest.xml`、`panelhost/src/main/AndroidManifest.xml`。
 - 初回設定と案内：`settings/Permissions.kt`、`settings/PermissionsScreen.kt`、`settings/SettingsScreen.kt`、`ui/panel/PanelEnvironment.kt`、`ui/panel/PanelScreen.kt`（いずれも `app/src/main/java/com/gt8d/launcher/` 以下）。
 - 前面化・初期値・帯：同ディレクトリの `AppGraph.kt`、`foreground/UsageStatsForegroundEvents.kt`、`config/Defaults.kt`、`config/Model.kt`、`edge/EdgeStripService.kt`、`media/MediaWatcher.kt`、`ui/panel/MediaCard.kt`。

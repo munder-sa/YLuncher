@@ -49,7 +49,7 @@ YLuncher を既定のホームに設定します。
 adb shell cmd role add-role-holder android.app.role.HOME com.gt8d.launcher 0
 ```
 
-詳しくは [導入手順とv2.3.1の変更点](docs/install-v1.6.md#18-v2312026-11-06) を参照してください。
+詳しくは [導入手順](docs/install.md) を、版ごとの変更は [更新履歴](docs/CHANGELOG.md) を参照してください。
 
 ## よくある質問
 
@@ -130,6 +130,6 @@ bash scripts/device-scenarios.sh --only set_cancel_cold
 bash scripts/device-scenarios.sh --only set_cancel_thenOpen
 ```
 
-準備と確認内容は [v1.6 導入手順](docs/install-v1.6.md) を参照してください。紹介ページは [docs/site/index.html](docs/site/index.html) です。
+準備と確認内容は [導入手順 §8](docs/install.md#8-場面テスト開発用) を参照してください。紹介ページは [docs/site/index.html](docs/site/index.html) です。
 
 自分用のプロジェクトです。
