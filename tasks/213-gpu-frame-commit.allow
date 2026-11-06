@@ -1,0 +1,2 @@
+write tools/renderprobe/src/main/java/com/gt8d/launcher/renderprobe/ProbeActivity.kt
+command /home/munde/tools/gradle-run.sh --offline -p tools/renderprobe -Pandroid.useAndroidX=true assembleDebug

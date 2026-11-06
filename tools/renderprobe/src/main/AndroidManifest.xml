@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="false"
+        android:debuggable="true"
+        android:hardwareAccelerated="true"
+        android:label="YLuncher Render Probe"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity
+            android:name=".ProbeActivity"
+            android:colorMode="default"
+            android:exported="true"
+            android:hardwareAccelerated="true" />
+    </application>
+    <instrumentation
+        android:name=".ProbeInstrumentation"
+        android:label="GPU word pixel proof"
+        android:targetPackage="com.gt8d.launcher.renderprobe" />
+</manifest>
