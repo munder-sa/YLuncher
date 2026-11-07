@@ -1,6 +1,17 @@
 # YLuncher 共有引き継ぎ
 
-最終更新: 2026-11-06 (JST)
+最終更新: 2026-11-07 (JST)
+
+## 実機の接続: USB の adb (2026-11-07)
+
+- **以後の実機操作は USB の adb を優先する。** 2026-11-07 にユーザーが USB で adb を有効にする方法を見つけた。Windows の `adb.exe devices -l` で `12345678 device product:lito model:Lito_for_arm64` を確認した。指定は `adb.exe -s 12345678`(または `-d`)。Windows 上の機器は `USB\VID_05C6&PID_90DB`(Qualcomm の診断用 USB モード、ADB Interface)。
+- USB 設定は `diag,serial_cdev,rmnet,dpl,qdss,adb`(persist も同じ)。`ro.adb.secure=0` なので、許可画面は出ない。**シェルは root(uid=0, `u:r:su:s0`)**。端末の設定やシステム領域を書き換える操作は、司令塔の判断とユーザーの合意なしに行わない。
+- 再起動しても USB の adb は残る(ユーザーが確認済み)。このモードのあいだ、カーモードは使えない前提で扱う。
+- **カーモードへの戻し方**(ユーザーが確認済み。Windows の PowerShell で実行):
+  1. `adb.exe -d shell setprop persist.sdcarplay.reverse.disable.wireless 0`
+  2. `adb.exe -d shell getprop persist.sdcarplay.reverse.disable.wireless` で `0` と表示されることを確かめる
+  3. `adb.exe -d reboot`
+- 実機確認が終わったら、カーモードに戻すかどうかをユーザーに確認する。ワイヤレスデバッグ(192.168.137.x、再起動のたびに再有効化が必要)は予備の方法として残す。製品の機能は、これまでどおり adb なしで成り立つように設計する。
 
 ## v2.3.2 正式版の公開 (2026-11-06)
 
