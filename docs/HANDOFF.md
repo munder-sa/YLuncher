@@ -2,6 +2,12 @@
 
 最終更新: 2026-11-07 (JST)
 
+## USB の adb での性能と音飛びの確認 (2026-11-07)
+
+- **担当: Claude**。詳細は [記録](performance/2026-11-07-usb-audio-check.md)。Apple Music で再生しながら、A(ホームで歌詞を表示)・B(セット 2 の分割)・C(切り替え続ける)・D(8 コアを負荷で使い切る)の 4 場面を測った。**underrun と書き込みの遅れは、すべての場面で 0**。端末の CPU の負荷は、音飛びの原因にならない。
+- ランチャーは、歌詞を表示したホームで 1 コアの 7.2%。CPU を多く使うのは Apple Music(23〜39%)、マップ、切り替え時の system_server。裏の YouTube が、ときどき 1 コアの 9 割を使う。
+- 車での音の経路(投影サービス)と、通信(ロスレス+テザリング)による途切れは、今回の範囲外。アプリやコードの変更はない。
+
 ## 実機の接続: USB の adb (2026-11-07)
 
 - **以後の実機操作は USB の adb を優先する。** 2026-11-07 にユーザーが USB で adb を有効にする方法を見つけた。Windows の `adb.exe devices -l` で `12345678 device product:lito model:Lito_for_arm64` を確認した。指定は `adb.exe -s 12345678`(または `-d`)。Windows 上の機器は `USB\VID_05C6&PID_90DB`(Qualcomm の診断用 USB モード、ADB Interface)。
