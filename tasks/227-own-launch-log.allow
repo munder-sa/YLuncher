@@ -1,0 +1,4 @@
+create app/src/main/java/com/gt8d/launcher/apps/LaunchLog.kt
+create app/src/test/java/com/gt8d/launcher/apps/LaunchLogTest.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.apps.*'
