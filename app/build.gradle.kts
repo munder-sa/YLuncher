@@ -21,8 +21,8 @@ android {
         applicationId = "com.gt8d.launcher"
         minSdk = 35
         targetSdk = 35
-        versionCode = 58
-        versionName = "2.3.3-beta2"
+        versionCode = 59
+        versionName = "2.3.3"
     }
 
     signingConfigs {
