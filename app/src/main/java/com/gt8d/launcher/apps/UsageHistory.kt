@@ -8,6 +8,14 @@ import android.os.Process
 
 data class UsageLaunch(val pkg: String, val wallMs: Long)
 
+internal fun usageLaunchOf(pkg: String?, className: String?, timeStamp: Long, ownPkg: String): UsageLaunch? {
+    if (pkg == null) return null
+    val launchPkg = if (pkg == ownPkg && className == "com.gt8d.launcher.ui.home.HomeActivity") {
+        UsageHistory.HOME_MARKER
+    } else pkg
+    return UsageLaunch(launchPkg, timeStamp)
+}
+
 class UsageHistory(
     private val context: Context,
     private val query: ((beginWallMs: Long, endWallMs: Long) -> List<UsageLaunch>)? = null,
@@ -33,8 +41,10 @@ class UsageHistory(
                         while (events.hasNextEvent()) {
                             events.getNextEvent(event)
                             if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
-                                val pkg = event.packageName ?: continue
-                                add(UsageLaunch(pkg, event.timeStamp))
+                                val launch = usageLaunchOf(
+                                    event.packageName, event.className, event.timeStamp, context.packageName,
+                                ) ?: continue
+                                add(launch)
                             }
                         }
                     }
@@ -42,5 +52,9 @@ class UsageHistory(
                 launches.filter { it.wallMs >= sinceWallMs && it.wallMs <= end }.sortedBy { it.wallMs }
             }
         } catch (_: Throwable) { null }
+    }
+
+    companion object {
+        const val HOME_MARKER = "com.gt8d.launcher#home"
     }
 }

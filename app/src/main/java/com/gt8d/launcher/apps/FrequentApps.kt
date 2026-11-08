@@ -3,6 +3,8 @@ package com.gt8d.launcher.apps
 import com.gt8d.launcher.config.DockMode
 import com.gt8d.launcher.config.MAX_DOCK_APPS
 
+private const val HOME_REOPEN_DEBOUNCE_MS = 2_000L
+
 data class FrequentApp(val pkg: String, val count: Int)
 
 fun rankFrequent(
@@ -13,11 +15,24 @@ fun rankFrequent(
     val counts = mutableMapOf<String, Int>()
     val last = mutableMapOf<String, Long>()
     var previous: String? = null
-    // 追記の仕様: eligible 外を除いてから連続 RESUMED をまとめる。
-    for (launch in launches.sortedBy { it.wallMs }.filter { it.pkg in eligible }) {
-        if (previous != launch.pkg) counts[launch.pkg] = counts.getOrDefault(launch.pkg, 0) + 1
-        last[launch.pkg] = launch.wallMs
-        previous = launch.pkg
+    var beforeHome: String? = null
+    for (launch in launches.sortedBy { it.wallMs }) {
+        val pkg = launch.pkg
+        if (pkg == UsageHistory.HOME_MARKER) {
+            beforeHome = previous
+            previous = null
+            continue
+        }
+        if (pkg !in eligible) continue
+        if (pkg != previous) {
+            val lastResume = last[pkg]
+            val quickHomeReopen = pkg == beforeHome && lastResume != null &&
+                launch.wallMs - lastResume < HOME_REOPEN_DEBOUNCE_MS
+            if (!quickHomeReopen) counts[pkg] = counts.getOrDefault(pkg, 0) + 1
+        }
+        last[pkg] = launch.wallMs
+        previous = pkg
+        beforeHome = null
     }
     return counts.keys.sortedWith(compareByDescending<String> { counts.getValue(it) }
         .thenByDescending { last.getValue(it) }.thenBy { it })

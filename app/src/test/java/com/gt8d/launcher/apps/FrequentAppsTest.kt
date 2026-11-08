@@ -30,6 +30,55 @@ class FrequentAppsTest {
             listOf(launch("a", 1), launch("excluded", 2), launch("a", 3)), setOf("a")))
     }
 
+    @Test fun homeSeparatesRepeatedAppLaunches() {
+        assertEquals(listOf(FrequentApp("a", 3)), rankFrequent(
+            listOf(launch("a", 0), launch(UsageHistory.HOME_MARKER, 1000), launch("a", 5000),
+                launch(UsageHistory.HOME_MARKER, 6000), launch("a", 10000)), setOf("a")))
+    }
+
+    @Test fun homeReopenUnderTwoSecondsCountsOnce() {
+        assertEquals(listOf(FrequentApp("a", 1)), rankFrequent(
+            listOf(launch("a", 0), launch(UsageHistory.HOME_MARKER, 500), launch("a", 1500)), setOf("a")))
+    }
+
+    @Test fun homeReopenAtTwoSecondsCountsAgain() {
+        assertEquals(listOf(FrequentApp("a", 2)), rankFrequent(
+            listOf(launch("a", 0), launch(UsageHistory.HOME_MARKER, 500), launch("a", 2000)), setOf("a")))
+    }
+
+    @Test fun panelResumeDoesNotSeparateRepeatedAppLaunches() {
+        assertEquals(listOf(FrequentApp("a", 1)), rankFrequent(
+            listOf(launch("a", 0), launch("panel", 1000), launch("a", 5000)), setOf("a")))
+    }
+
+    @Test fun differentAppAfterHomeAllowsLaterLaunchToCount() {
+        assertEquals(listOf(FrequentApp("a", 2), FrequentApp("b", 1)), rankFrequent(
+            listOf(launch("a", 0), launch(UsageHistory.HOME_MARKER, 1000), launch("b", 3000),
+                launch("a", 3500)), setOf("a", "b")))
+        assertEquals(listOf(FrequentApp("a", 2), FrequentApp("b", 1)), rankFrequent(
+            listOf(launch("a", 0), launch(UsageHistory.HOME_MARKER, 500), launch("b", 1000),
+                launch("a", 1500)), setOf("a", "b")))
+    }
+
+    @Test fun homeMarkersAloneAndAtStartNeverBecomeCandidates() {
+        assertEquals(emptyList<FrequentApp>(), rankFrequent(
+            listOf(launch(UsageHistory.HOME_MARKER, 0), launch(UsageHistory.HOME_MARKER, 1000)), setOf("a")))
+        assertEquals(listOf(FrequentApp("a", 1)), rankFrequent(
+            listOf(launch(UsageHistory.HOME_MARKER, 0), launch("a", 1000)), setOf("a")))
+    }
+
+    @Test fun homeReopenUsesLatestResumeIncludingUncountedResumes() {
+        assertEquals(listOf(FrequentApp("a", 1)), rankFrequent(
+            listOf(launch("a", 0), launch("a", 3000), launch(UsageHistory.HOME_MARKER, 3500),
+                launch("a", 4500), launch(UsageHistory.HOME_MARKER, 5000), launch("a", 6000)), setOf("a")))
+    }
+
+    @Test fun uncountedHomeReopenUpdatesRankingTime() {
+        assertEquals(listOf(FrequentApp("z", 1), FrequentApp("a", 1)), rankFrequent(
+            listOf(launch("a", 0), launch("z", 0), launch(UsageHistory.HOME_MARKER, 500),
+                launch("z", 1500)), setOf("a", "z")))
+    }
+
     @Test fun countThenLastTimeThenNameAndLimit() {
         val launches = listOf(launch("a", 1), launch("b", 2), launch("a", 3),
             launch("z", 10), launch("d", 10), launch("c", 10), launch("b", 10), launch("e", 10))

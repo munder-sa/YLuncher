@@ -19,6 +19,24 @@ class UsageHistoryTest {
         shadowOf(app.getSystemService(AppOpsManager::class.java)).setMode(
             AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), app.packageName, mode)
     }
+    @Test fun ownHomeActivityBecomesHomeMarker() {
+        assertEquals(UsageLaunch(UsageHistory.HOME_MARKER, 1234), usageLaunchOf(
+            app.packageName, "com.gt8d.launcher.ui.home.HomeActivity", 1234, app.packageName))
+    }
+    @Test fun ownPanelActivityKeepsPackageName() {
+        assertEquals(UsageLaunch(app.packageName, 1234), usageLaunchOf(
+            app.packageName, "com.gt8d.launcher.ui.panel.PanelActivity", 1234, app.packageName))
+    }
+    @Test fun otherAppKeepsPackageNameEvenWithHomeClassName() {
+        assertEquals(UsageLaunch("other.app", 1234), usageLaunchOf(
+            "other.app", "com.gt8d.launcher.ui.home.HomeActivity", 1234, app.packageName))
+    }
+    @Test fun nullPackageProducesNoLaunch() {
+        assertNull(usageLaunchOf(null, "com.gt8d.launcher.ui.home.HomeActivity", 1234, app.packageName))
+    }
+    @Test fun nullClassNameKeepsPackageName() {
+        assertEquals(UsageLaunch(app.packageName, 1234), usageLaunchOf(app.packageName, null, 1234, app.packageName))
+    }
     @Test fun unavailableReturnsNullWithoutQuery() {
         permission(AppOpsManager.MODE_IGNORED)
         var queried = false
