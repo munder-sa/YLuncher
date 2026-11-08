@@ -1,0 +1,5 @@
+write app/src/main/java/com/gt8d/launcher/apps/UsageHistory.kt
+write app/src/main/java/com/gt8d/launcher/apps/FrequentApps.kt
+write app/src/test/java/com/gt8d/launcher/apps/FrequentAppsTest.kt
+write app/src/test/java/com/gt8d/launcher/apps/UsageHistoryTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.apps.*'
