@@ -27,6 +27,7 @@ import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.apps.AppCatalogState
 import com.gt8d.launcher.apps.FrequentApp
 import com.gt8d.launcher.apps.FrequentAppsRefresher
+import com.gt8d.launcher.apps.LaunchLog
 import com.gt8d.launcher.apps.UsageHistory
 import com.gt8d.launcher.apps.settingsComponent
 import com.gt8d.launcher.apps.HiddenApps
@@ -166,10 +167,11 @@ object AppGraph {
             val context = app
             frequentRefresherFactoryForTest?.invoke(context, ::publishFrequentApps) ?: run {
                 val history = UsageHistory(context)
+                val launchLog = LaunchLog(File(context.filesDir, "launch_log.tsv"))
                 val currentCatalog = AppCatalog(context)
                 FrequentAppsRefresher(
                     available = { history.available() },
-                    launchesSince = { history.launchesSince(it) },
+                    launchesSince = { since -> history.launchesSince(since)?.let { launchLog.merge(it, since) } },
                     eligible = {
                         val excluded = setOfNotNull(context.packageName, OwnPackages.PANEL_HOST,
                             settingsComponent(context.packageManager)?.packageName) + HiddenApps.packages
