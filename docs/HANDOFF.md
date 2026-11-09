@@ -2,6 +2,18 @@
 
 最終更新: 2026-11-08 (JST)
 
+## 車載モードでの端末全体の性能調査 (2026-11-10)
+
+- **担当: Claude**。ユーザーの依頼で、車載モード(`…disable.wireless=0`、車には未接続、ワイヤレス adb 192.168.137.200:42271、シェルは root)の実機を読み取りだけで調べた。端末の設定・アプリ・コードは変えていない。対処は提案のみで、実行はユーザーの判断待ち。
+- **事前コンパイルが効いていない**: `dumpsys package dexopt` で 239 件が `verify`(本体 2.3.3・中継・SystemUI・Apple Music・carsyso.main・Morphe・純正ランチャー)。`speed-profile` は 11 件だけ。裏のコンパイルのジョブは IDLE と DEADLINE(24時間)が満たされず、画面が常時点灯で毎回再起動するこの端末では走らない。v2.3.3 は導入後の compile を行っていない(2.3.1 のときは手動で speed-profile にした)。
+- **無線のデバッグログ**: `cnss_diag -q -f`(init.target.rc の class main)が `/data/vendor/wifi/wlan_logs` へ 20 秒で約 4MB 書く(ホストドライバーが D レベル、`gEnablefwlog=1`、wpa_supplicant も `-dd`)。cnss_diag は 1 コアの約 5%。
+- **待機中の負荷**: 設定画面を表示したままの 10 秒で、全体の約 12%(1 コア相当)。うち kernel+irq が約 6 割。アプリのフレーム描画は 0。
+- **起動直後**: 起動から約 5 分で 181 個のプロセスが立ち上がる(broadcast 71・service 58)。Prime Video・Apple TV・Netflix・Firefox・ES・ChatGPT などが WorkManager の受信で起動。load average は 8.8。
+- **表示は 30Hz の 1 モードだけ**(`persist.suding.reverse.fps=30`)。「車では 60Hz」は端末側の表示としては成り立たない。車に接続した状態では未確認。
+- ランチャー本体は PSS 37MB、待機中の描画 0。codex-ask(`.codex-bak/ask-20261110-082539-5844/answer.md`)でも、30Hz 前提で削れる常時処理は無く、残りは小〜中(非表示中の歌詞取得、初回の設定読み込み、カーテンの壁紙 1920×1080)。
+- その他: SELinux は Permissive、メモリ 8GB(空き約 4GB)・温度 44℃・ストレージ 18% で問題なし。
+- **次の一手(ユーザーの判断待ち)**: (1) 主要アプリを speed-profile でコンパイルして前後を測る (2) cnss_diag を止めて前後を測り、起動ごとに止める方法を決める (3) 使わないアプリの整理。
+
 ## 起動が不安定なため車載モードへ戻した (2026-11-08 夜)
 
 - ユーザーが「起動が不安定で原因がわかるまで」として、USB の adb から車載モードへ戻した(PC にはつないでいない)。以後、実機の adb は使えない前提。
