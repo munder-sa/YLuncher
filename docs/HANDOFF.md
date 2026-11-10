@@ -13,8 +13,8 @@
   - Task234(`enableEdgeToEdge`)は効果なし(実機で content は `0,36-` のまま)。Robolectric ではこの押し下げを再現できない(1 回目の委譲で確認)。
   - Task236(e9903e9 の親コミット): `enableEdgeToEdge` を戻し、`setContent` の直後で `android.R.id.content` の親の `fitsSystemWindows = false` + `requestApplyInsets()`。テスト 1 件追加(変更前は落ちることを確認)、PanelActivityTest 33 件成功。
   - 両 **2.3.4-beta3 / 62**(Task237、`build/releases/v2.3.4-beta3/`、本体 `60897003…00eb`、中継 `228e8a00…a0`)を実機へ。分割中のパネルの content が `0,0-1137,1080` になり、上端の色もパネルの背景になった(帯が消えた)。ホームは変化なし。
-  - 残り: パネルが右の分割では、システムの右上のアイコン(Wi-Fi・4G HD・電波)がドックのステータスのカードの上端に重なる。余白を足すかはユーザー判断待ち。
-- **次の一手**: 上の重なりの判断 → ユーザーの見た目・操作感の確認(DHU)→ main へ取り込み、全テストを 1 回、2.3.4 正式版。push・Release はユーザーの承認後。
+  - パネルが右の分割では、システムの右上のアイコン(Wi-Fi・4G HD・電波)がドックのステータスのカードの上端に重なった。分割中はステータスバーが強制表示(InsetsPolicy の forcedShowingTypes)でアプリからは隠せないため、ユーザー承認(「おｋ 消して」)のうえ端末の設定で消した: `adb shell settings put secure icon_blacklist wifi,mobile,airplane,battery`(wifi・mobile・airplane だけでは電池の「?」が出たので battery を追加)。ホーム・パネルが右の分割とも右上に何も出ないことを画面で確認。端末に保存され、再起動後も残る(未確認)。戻すときは `adb shell settings delete secure icon_blacklist`。アプリのコードは変えていない。
+- **次の一手**: ユーザーの見た目・操作感の確認(DHU)→ main へ取り込み、全テストを 1 回、2.3.4 正式版。push・Release はユーザーの承認後。
 
 ## 車載モードでの端末全体の性能調査 (2026-11-10)
 
