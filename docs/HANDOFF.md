@@ -31,6 +31,8 @@
   - 固まった時刻は不明(ログは 09:40 以降のみ)。候補: (a) 起動時間の測定で YLuncher を十数回 kill したこと(launcher3 は `android.intent.action.PROCESS_DIED` を受ける) (b) 起動直後から (c) ボールの停止。今日は DHU につなぐまで分割を試していない。コンパイルは、launcher3 が verify のまま・プロセスも同じだったので影響の形跡なし。
   - 復旧: `kill 3559` → launcher3 が再起動(pid 811、ロック待ち 0)。ユーザーが DHU で分割の復帰を確認。
   - **きれいな状態からの再試験**: ボール稼働中に `input tap 820 380`(セット 2)で分割 → `waitBoth ready`・`curtain hidden reason=Ready`・両タスクが multi-window。続けて `am stopservice com.sd.ball/.WindowService` で止めた状態でも、2 回とも同じく成功(launcher3 のロック待ち 0)。**ボールを止めても分割は開ける。** 見た目(分割の両側が正しく更新されるか)はユーザーの目視待ち。この時点でボールの窓は止めたまま。
+  - **ユーザーの目視(DHU)**: ボール停止中でも分割の左右は正しく表示された(「完璧」)。ただし**ボールを止めると「戻る」「ホーム」の操作ができなくなる**(投影側にその機能が無く、ボールが担っている)。このため `am startservice -n com.sd.ball/.WindowService` でボールを戻した(窓 2 枚を確認)。
+  - 結論: 点滅(200ms)だけを外から止める手段は無く、サービスごと止めると戻る・ホームを失う。投影中の負荷を約 3 割減らすには、YLuncher 側で戻る・ホームを代替してからボールを止める必要がある(未着手・ユーザー判断)。
   - 教訓: 純正ランチャーが固まると分割だけが出なくなる。切り分けは `debuggerd -j $(pidof com.android.launcher3) | grep "waiting to lock"`。測定で HOME のプロセスを繰り返し kill しない。
 - **次の一手(ユーザーの判断待ち)**: (0) com.sd.ball を一時的に止めて SurfaceFlinger の負荷の変化を測り、車で投影への影響を確かめる (1) cnss_diag を起動のたびに止める方法 (2) 画面合成が回り続ける原因の特定 (3) 使わないアプリの整理 (4) リリース手順に導入後の compile を足すか。
 
