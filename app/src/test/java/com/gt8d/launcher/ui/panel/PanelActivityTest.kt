@@ -45,6 +45,14 @@ class PanelActivityTest {
         assertEquals(android.app.Activity.RESULT_OK, shadowOf(controller!!.get()).resultCode)
     }
 
+    @Test fun contentRoot_doesNotFitSystemWindows() {
+        controller = Robolectric.buildActivity(PanelActivity::class.java).create().start().resume().visible()
+        val activity = controller!!.get()
+        val parent = activity.findViewById<View>(android.R.id.content).parent
+        assertTrue(parent is View)
+        assertFalse((parent as View).fitsSystemWindows)
+    }
+
     @Test fun launchRequest_usesPanelLaunchPath() {
         splitPanel()
         controller!!.get().launchApp = { pkg, adjacent -> appCalls.add(pkg to adjacent); false }
