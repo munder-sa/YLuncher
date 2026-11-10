@@ -18,7 +18,11 @@
   - 無線ログ: `stop vendor.cnss_diag` で停止。wlan_logs の増加は 20 秒で 1.5〜2.5MB → 0、ストレージへの書き込みは 2.3〜4.8MB → 約 0.9MB。**待機中の CPU は 90% → 89%(1コア換算)で変わらなかった**。Wi-Fi の接続は維持。再起動すると init が再び起動するため、効果は次の再起動まで。
   - 測定のためランチャーのプロセスを十数回 kill した(クラッシュ保護の記録には入らない方法)。最後は HOME 表示、通知リスナー接続を確認。
 - **待機中の負荷の残り**: surfaceflinger 8.8%・composer 4.7%・crtc_commit(アプリの描画が 0 でも画面合成が毎フレーム走っている)、sdsdk816 5.7%(受信待ちの2スレッド)、audioserver 2.9%、com.sd.ball 2.1%、`loopback1.sh`・`led.sh` のループ(プロセス生成が毎秒約 15)。いずれも純正側で、誰が画面を更新させているかは未特定。
-- **次の一手(ユーザーの判断待ち)**: (1) cnss_diag を起動のたびに止める方法 (2) 画面合成が回り続ける原因の特定 (3) 使わないアプリの整理 (4) リリース手順に導入後の compile を足すか。
+- **画面合成が回り続ける原因(同日、読み取りのみで特定)**: 純正のフローティングボール `com.sd.ball`(/system/app/FloatingBall、v1.2.5、uid 1000、persistent)。`WindowService.onCreate` が無条件に `addWindowViewWindow2()` を呼び、画面左上 (0,0) に 1×1 の窓(SurfaceFlinger のレイヤー #76)を置く。`mRefleshRunnable`(`WindowService$16.run`)が 200ms ごとに `mNaviRefleshView` の alpha を 0 と 0.2 で切り替え、自分を `postDelayed(200)` し直す。止めるのは `onDestroy` だけで、設定やプロパティによる切り替えは見つからない。
+  - 実測: レイヤー #76 のフレーム数が 21 秒で 100 増(毎秒約 4.8)。6 秒の atrace で、アプリ側の描画は com.sd.ball の doFrame 30 回だけ。SurfaceFlinger は PresentDisplay 88 回(毎秒約 15)、明るさのサンプリング(RegionSampling の captureSample)60 回(毎秒約 10、GPU での描画を伴う)。サンプリングの登録元は未特定。
+  - 名前(Reflesh)と動きから、画面を定期的に更新させ続けるための純正の仕掛けとみられる(投影の映像を途切れさせない目的かは未確認)。止めた場合の車への投影への影響は未検証。
+  - 調べ方: APK を 1MB ずつ取り出し(一括の転送は無線で途中停止した)、SHA-256 の一致を確かめて `dexdump -d` で読んだ。端末の状態は変えていない。
+- **次の一手(ユーザーの判断待ち)**: (0) com.sd.ball を一時的に止めて SurfaceFlinger の負荷の変化を測り、車で投影への影響を確かめる (1) cnss_diag を起動のたびに止める方法 (2) 画面合成が回り続ける原因の特定 (3) 使わないアプリの整理 (4) リリース手順に導入後の compile を足すか。
 
 ## 起動が不安定なため車載モードへ戻した (2026-11-08 夜)
 
