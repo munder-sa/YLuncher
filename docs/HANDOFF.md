@@ -2,7 +2,7 @@
 
 最終更新: 2026-11-08 (JST)
 
-## ドックのステータスを独立カードに、SIM の電波を表示 (2026-11-10)
+## v2.3.4: ドックのステータスを独立カードに、SIM の電波を表示 (2026-11-10)
 
 - **担当: Claude**。ユーザーの依頼(ステータスに SIM の電波を足す・大きくする・下の空きを使う)にモックの 4 案を出し、ユーザーが「C 案」(ステータスを別カード、2 段、30dp)と「分割時のドックも一緒に」を選んだ。モック: https://claude.ai/artifact/SwQHZ7G3VnZm5sj7QinpFr
 - ブランチ `dock-status-card`。Task232(d79f934): `Dock` を「ステータスのカード 88×80dp + 間 8dp + アプリのカード(中だけスクロール)」に。上段は SIM のバー(自前の ImageVector、4 本)+ 回線の種類(5G/4G/3G/2G。`TelephonyDisplayInfo` の NR_NSA/NR_ADVANCED も 5G)、下段は Wi-Fi・BT(20→30dp)。SIM なし・機内モード・圏外を出し分け、電話機能が無ければ上段を出さない。権限は `READ_BASIC_PHONE_STATE`(通常の権限)だけ。監視は `TelephonyCallback`(SignalStrengths + DisplayInfo)で、見えている間だけ(既存の `observeVisibleRadios` と同じ寿命)。`Dock` はホームと分割のパネルで共通なので両方に効く。
@@ -14,7 +14,8 @@
   - Task236(e9903e9 の親コミット): `enableEdgeToEdge` を戻し、`setContent` の直後で `android.R.id.content` の親の `fitsSystemWindows = false` + `requestApplyInsets()`。テスト 1 件追加(変更前は落ちることを確認)、PanelActivityTest 33 件成功。
   - 両 **2.3.4-beta3 / 62**(Task237、`build/releases/v2.3.4-beta3/`、本体 `60897003…00eb`、中継 `228e8a00…a0`)を実機へ。分割中のパネルの content が `0,0-1137,1080` になり、上端の色もパネルの背景になった(帯が消えた)。ホームは変化なし。
   - パネルが右の分割では、システムの右上のアイコン(Wi-Fi・4G HD・電波)がドックのステータスのカードの上端に重なった。分割中はステータスバーが強制表示(InsetsPolicy の forcedShowingTypes)でアプリからは隠せないため、ユーザー承認(「おｋ 消して」)のうえ端末の設定で消した: `adb shell settings put secure icon_blacklist clock,rotate,headset,wifi,mobile,airplane,battery`(wifi・mobile・airplane だけでは電池の「?」が出たので battery を追加。設定を書くと、メーカーの既定で隠れていた左上の時刻も出たので clock を足し、AOSP の既定の rotate・headset も残した)。ホーム・パネルが右の分割とも右上に何も出ないことを画面で確認。端末に保存され、再起動後も残る(未確認)。戻すときは `adb shell settings delete secure icon_blacklist`。アプリのコードは変えていない。
-- **次の一手**: ユーザーの見た目・操作感の確認(DHU)→ main へ取り込み、全テストを 1 回、2.3.4 正式版。push・Release はユーザーの承認後。
+- **v2.3.4 公開(2026-11-10 11:37 JST、ユーザー承認「Pushしてリリースしましょう」)**: dock-status-card を main へ fast-forward。全テスト(test assembleDebug、24分)で app Debug/Release 各2,224件+panelhost 各5件、計4,458件成功・失敗0。Task238 で 2.3.4 / 63(b0759b2)。両APKとも非debuggable、証明書 `44d8c612…7f6d` は従来と同じ。配布物 `build/releases/v2.3.4/`(本体 `f63baa78…af6`、中継 `a60b5de6…c80`)。実機へ入れ、base.apk のハッシュ一致を確認。main とタグ `v2.3.4-release` を atomic push(ls-remote で確認)。GitHub Release ID 439881171 は下書きで添付し、digest 3件の一致を確かめてから公開、latest と一致。WSL の名前解決が断続的に失敗したので、再試行で通した(設定は変えていない)。
+- **未解決(調査中)**: DHU への投影は、地図をドラッグし続けても映像のエンコードが約19fps(OMX-VENC の stats で 17.6〜20.0)。静止時は約5fps(ボールの点滅)。DHU の受け取り側(PC のデコード・返事の遅れ)か GT8D 側の上限かを切り分けるため、DHU の設定 `config/gt8d_720p.ini`(1280×720・30fps)と `config/gt8d_1080p60.ini`(1920×1080・60fps)を作った(DHU の SDK フォルダー内、リポジトリ外)。ユーザーの起動待ち。
 
 ## 車載モードでの端末全体の性能調査 (2026-11-10)
 
