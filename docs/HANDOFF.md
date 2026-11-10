@@ -9,7 +9,12 @@
 - テスト(codex 実行): `ui.panel.*` 203件・`ui.layout.*` 599件、すべて成功。既存テストの期待値は変えていない(`PanelEnvironmentTest` の `host()` に既定値つき引数を足しただけ)。
 - Task233(842ecea): 両 **2.3.4-beta1 / 60** を release ビルド(1分32秒)。`build/releases/v2.3.4-beta1/`(本体 `79e154c1…8935`、中継 `cbcfd536…0d4a`)。実機へ install -r 済み、`READ_BASIC_PHONE_STATE` は granted、HOME・通知リスナー・ユーザー補助は維持。本体は speed-profile に compile。
 - **実機の確認(画面を撮って確認)**: ホーム・分割(セット 4、パネルが左)とも、ステータスのカードに「3 本・5G」と Wi-Fi・BT が表示された。KDDI の LTE+NR_NSA が 5G として読めている(許可画面なしで回線の種類が読めることを確認)。入れ直し直後の初回の分割だけ 4.1 秒かかって「開くのに時間がかかっています」が出たが、続く 2 回は 1.2 秒・0.5 秒で正常(`waitBoth ready`)。
-- **次の一手**: ユーザーの見た目・操作感の確認(DHU)。問題なければ main へ取り込み、全テストを 1 回、2.3.4 正式版。push・Release はユーザーの承認後。
+- **分割中のパネルの上の帯(同日、ユーザー報告)**: 高さ 36px・`#303030`(Theme.Material のウィンドウの背景)。原因は、分割中 WindowManager がステータスバーを強制的に消費させる種類にし(AOSP `InsetsPolicy.updateSystemBars`、実機の InsetsState でも `statusBars … flags=FORCE_CONSUMING`)、標準の枠(`screen_simple.xml` の `fitsSystemWindows="true"` の LinearLayout)がそれを上の padding にしていたこと。AppCompat の枠の YouTube などは上まで描けている。
+  - Task234(`enableEdgeToEdge`)は効果なし(実機で content は `0,36-` のまま)。Robolectric ではこの押し下げを再現できない(1 回目の委譲で確認)。
+  - Task236(e9903e9 の親コミット): `enableEdgeToEdge` を戻し、`setContent` の直後で `android.R.id.content` の親の `fitsSystemWindows = false` + `requestApplyInsets()`。テスト 1 件追加(変更前は落ちることを確認)、PanelActivityTest 33 件成功。
+  - 両 **2.3.4-beta3 / 62**(Task237、`build/releases/v2.3.4-beta3/`、本体 `60897003…00eb`、中継 `228e8a00…a0`)を実機へ。分割中のパネルの content が `0,0-1137,1080` になり、上端の色もパネルの背景になった(帯が消えた)。ホームは変化なし。
+  - 残り: パネルが右の分割では、システムの右上のアイコン(Wi-Fi・4G HD・電波)がドックのステータスのカードの上端に重なる。余白を足すかはユーザー判断待ち。
+- **次の一手**: 上の重なりの判断 → ユーザーの見た目・操作感の確認(DHU)→ main へ取り込み、全テストを 1 回、2.3.4 正式版。push・Release はユーザーの承認後。
 
 ## 車載モードでの端末全体の性能調査 (2026-11-10)
 
