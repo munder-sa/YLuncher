@@ -19,17 +19,15 @@
   (`import androidx.activity.SystemBarStyle`・`import androidx.activity.enableEdgeToEdge`。依存の追加は不要。activity-compose 1.9.3 に含まれる。)
 - それ以外の処理・レイアウト・余白は変えない。
 
-## テスト(`PanelActivityTest.kt` に 1 件追加。既存のテストは変えない)
-- `edgeToEdge_contentNotPushedBelowStatusBar`: `Robolectric.buildActivity(PanelActivity::class.java).create().start().resume().visible()` の後、decor に上 36px のステータスバーの insets(`WindowInsets.Builder().setInsets(WindowInsets.Type.statusBars(), Insets.of(0, 36, 0, 0))` など)を `dispatchApplyWindowInsets` で渡し、measure・layout してから、`findViewById<View>(android.R.id.content)` の上端(`top`)が 0 であること。
-- **同じ手順で、`enableEdgeToEdge` を入れる前のコードでは上端が 36 になる(テストが落ちる)ことを先に確かめる**。Robolectric で insets を渡しても入れる前から 0 になる(差が出ない)場合は、テストの書き方を推測で変えずに止めて、3 点セットで報告する。
+## テスト
+- **テストは追加しない**(司令塔の判断)。1 回目の委譲で、Robolectric では分割時の押し下げが再現できず、変更前から `content.top == 0` になって差が出ないことを確かめた。この変更の確認は実機で司令塔が行う。
+- 既存の `PanelActivityTest` を 1 回流し、既存の動作を壊していないことだけを確かめる。既存のテストは変えない。
 
 ## 作る・変えるファイル(これ以外は変えない)
 - `app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt`
-- `app/src/test/java/com/gt8d/launcher/ui/panel/PanelActivityTest.kt`
 
 ## 使ってよいコマンド
     /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.PanelActivityTest'
-    /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.*'
 
 ## 報告
-- 実行したコマンドと結果(件数・失敗数)。「入れる前は落ちる」を確かめた結果。変更の要約、「決めたこと」。
+- 実行したコマンドと結果(件数・失敗数)。変更の要約、「決めたこと」。
