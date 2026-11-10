@@ -26,8 +26,12 @@
   - 投影中(ホームを表示して静止)の負荷: 全体で 1 コアの約 145%(未接続時は約 90%)。sdAutoReverse 13.3%、surfaceflinger 12.1%、sdsdk816 6.2%、composer 4.8%、media.codec 3.0%。com.sd.ball の 1×1 の窓は投影中も毎秒約 5 回の再描画を続けている。
 - **ボールの窓の停止試験(同日、ユーザー承認「ボールを止めて」、DHU へ投影中)**: `am force-stop com.sd.ball` は効かず(プロセスが残る)。`am stopservice com.sd.ball/.WindowService` で窓 2 枚が消え、点滅が止まった(プロセスと MainSDKService は残る)。再起動で元に戻る。carsyso.main が起動元なので、途中で再び起動される可能性はある。
   - 投影中・ホーム静止の 15 秒平均(前 → 後): 全体 133% → 96〜103%(1 コア換算)、surfaceflinger 12.0 → 1.0%、composer 4.7 → 1.2%、media.codec 2.9% → 上位から消えた、sdAutoReverse 12.8 → 10.4%、com.sd.ball 2.0% → 0。msm_drm の割り込みは毎秒 38 のまま。
-  - **結果: そのままでは止められない。** ユーザーの DHU での確認で、ホームと単独アプリは正常だが、**分割が表示されなくなった**(カーテンに「開くのに時間がかかっています」が出たまま、画面が出ない)。`am startservice -n com.sd.ball/.WindowService` で起動し直し、窓 2 枚と点滅が戻ったことを確認した(起動元の表示は com.android.shell になった。再起動すれば純正の起動に戻る)。
-  - 分割がなぜこの窓に依存するかは未調査。分割は純正ランチャーの仮想ディスプレイ(ActivityViewVirtualDisplay、60Hz)を使うので、点滅による強制的な画面更新がその表示に要る、という仮説はあるが未確認。
+  - 直後にユーザーが DHU で「分割が表示されない」(カーテンに「開くのに時間がかかっています」)と報告。ボールのサービスを起動し直しても直らなかった。
+  - **分割が出なかった原因は純正ランチャーのデッドロック(ボールではない)**: `debuggerd -j` で、com.android.launcher3(pid 3559、起動時からのプロセス)の main が `Launcher$21.onReceive → LauncherModel.getFactoryShortCutSize → BgDataModel.getAllHotItems` で BgDataModel のロック待ち、`launcher-loader` がそのロックを持ったまま `LoaderTask.loadWorkspaceImpl → LauncherIcons.<init> → MainThreadInitializedObject.get` で main の処理待ち、という相互待ちを確認。分割の合図 `com.android.intent.ext.main.split.two.screen`(SplitActivity が送る)は launcher3 に届いていたが処理されなかった。
+  - 固まった時刻は不明(ログは 09:40 以降のみ)。候補: (a) 起動時間の測定で YLuncher を十数回 kill したこと(launcher3 は `android.intent.action.PROCESS_DIED` を受ける) (b) 起動直後から (c) ボールの停止。今日は DHU につなぐまで分割を試していない。コンパイルは、launcher3 が verify のまま・プロセスも同じだったので影響の形跡なし。
+  - 復旧: `kill 3559` → launcher3 が再起動(pid 811、ロック待ち 0)。ユーザーが DHU で分割の復帰を確認。
+  - **きれいな状態からの再試験**: ボール稼働中に `input tap 820 380`(セット 2)で分割 → `waitBoth ready`・`curtain hidden reason=Ready`・両タスクが multi-window。続けて `am stopservice com.sd.ball/.WindowService` で止めた状態でも、2 回とも同じく成功(launcher3 のロック待ち 0)。**ボールを止めても分割は開ける。** 見た目(分割の両側が正しく更新されるか)はユーザーの目視待ち。この時点でボールの窓は止めたまま。
+  - 教訓: 純正ランチャーが固まると分割だけが出なくなる。切り分けは `debuggerd -j $(pidof com.android.launcher3) | grep "waiting to lock"`。測定で HOME のプロセスを繰り返し kill しない。
 - **次の一手(ユーザーの判断待ち)**: (0) com.sd.ball を一時的に止めて SurfaceFlinger の負荷の変化を測り、車で投影への影響を確かめる (1) cnss_diag を起動のたびに止める方法 (2) 画面合成が回り続ける原因の特定 (3) 使わないアプリの整理 (4) リリース手順に導入後の compile を足すか。
 
 ## 起動が不安定なため車載モードへ戻した (2026-11-08 夜)
