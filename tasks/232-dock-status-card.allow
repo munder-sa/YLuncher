@@ -1,0 +1,11 @@
+write app/src/main/java/com/gt8d/launcher/ui/panel/Dock.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelModels.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelEnvironment.kt
+write app/src/main/AndroidManifest.xml
+create app/src/main/java/com/gt8d/launcher/ui/panel/CellIndicator.kt
+create app/src/main/java/com/gt8d/launcher/ui/panel/CellSignalIcon.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/DockTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/panel/PanelEnvironmentTest.kt
+create app/src/test/java/com/gt8d/launcher/ui/panel/CellIndicatorTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.panel.*'
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.ui.layout.*'
