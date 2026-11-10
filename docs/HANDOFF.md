@@ -22,6 +22,8 @@
   - 実測: レイヤー #76 のフレーム数が 21 秒で 100 増(毎秒約 4.8)。6 秒の atrace で、アプリ側の描画は com.sd.ball の doFrame 30 回だけ。SurfaceFlinger は PresentDisplay 88 回(毎秒約 15)、明るさのサンプリング(RegionSampling の captureSample)60 回(毎秒約 10、GPU での描画を伴う)。サンプリングの登録元は未特定。
   - 名前(Reflesh)と動きから、画面を定期的に更新させ続けるための純正の仕掛けとみられる(投影の映像を途切れさせない目的かは未確認)。止めた場合の車への投影への影響は未検証。
   - 調べ方: APK を 1MB ずつ取り出し(一括の転送は無線で途中停止した)、SHA-256 の一致を確かめて `dexdump -d` で読んだ。端末の状態は変えていない。
+- **実車なしで投影を再現できた(同日)**: Windows 本体の Android Auto Desktop Head Unit 2.0(`Sdk\extras\google\auto\desktop-head-unit.exe --usb -c config\default_1080p.ini`)に、GT8D の車載モードの画面が投影された(ユーザーが画面を確認)。GT8D は MTP 機器 `18D1:4EE1` として待ち受け、切り替え後は `18D1:2D00`。両方に Zadig で WinUSB が必要(4EE1 は「Replace Driver」)。VM(VirtualBox・WSL2)では切り替え後の再接続を拾えなかった。ワイヤレス adb は併用できる。
+  - 投影中(ホームを表示して静止)の負荷: 全体で 1 コアの約 145%(未接続時は約 90%)。sdAutoReverse 13.3%、surfaceflinger 12.1%、sdsdk816 6.2%、composer 4.8%、media.codec 3.0%。com.sd.ball の 1×1 の窓は投影中も毎秒約 5 回の再描画を続けている。
 - **保留(ユーザー判断、2026-11-10)**: com.sd.ball を止める試験は、実車が使えるようになってから行う。それまで端末は現状のまま(cnss_diag の停止は次の再起動で元に戻る)。
 - **次の一手(ユーザーの判断待ち)**: (0) com.sd.ball を一時的に止めて SurfaceFlinger の負荷の変化を測り、車で投影への影響を確かめる (1) cnss_diag を起動のたびに止める方法 (2) 画面合成が回り続ける原因の特定 (3) 使わないアプリの整理 (4) リリース手順に導入後の compile を足すか。
 
