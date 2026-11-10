@@ -24,6 +24,9 @@
   - 調べ方: APK を 1MB ずつ取り出し(一括の転送は無線で途中停止した)、SHA-256 の一致を確かめて `dexdump -d` で読んだ。端末の状態は変えていない。
 - **実車なしで投影を再現できた(同日)**: Windows 本体の Android Auto Desktop Head Unit 2.0(`Sdk\extras\google\auto\desktop-head-unit.exe --usb -c config\default_1080p.ini`)に、GT8D の車載モードの画面が投影された(ユーザーが画面を確認)。GT8D は MTP 機器 `18D1:4EE1` として待ち受け、切り替え後は `18D1:2D00`。両方に Zadig で WinUSB が必要(4EE1 は「Replace Driver」)。VM(VirtualBox・WSL2)では切り替え後の再接続を拾えなかった。ワイヤレス adb は併用できる。
   - 投影中(ホームを表示して静止)の負荷: 全体で 1 コアの約 145%(未接続時は約 90%)。sdAutoReverse 13.3%、surfaceflinger 12.1%、sdsdk816 6.2%、composer 4.8%、media.codec 3.0%。com.sd.ball の 1×1 の窓は投影中も毎秒約 5 回の再描画を続けている。
+- **ボールの窓の停止試験(同日、ユーザー承認「ボールを止めて」、DHU へ投影中)**: `am force-stop com.sd.ball` は効かず(プロセスが残る)。`am stopservice com.sd.ball/.WindowService` で窓 2 枚が消え、点滅が止まった(プロセスと MainSDKService は残る)。再起動で元に戻る。carsyso.main が起動元なので、途中で再び起動される可能性はある。
+  - 投影中・ホーム静止の 15 秒平均(前 → 後): 全体 133% → 96〜103%(1 コア換算)、surfaceflinger 12.0 → 1.0%、composer 4.7 → 1.2%、media.codec 2.9% → 上位から消えた、sdAutoReverse 12.8 → 10.4%、com.sd.ball 2.0% → 0。msm_drm の割り込みは毎秒 38 のまま。
+  - 投影は接続を保っている(`sys.suding.reverse.connect=1`)。画面の更新が正常かどうかの目視はユーザーに確認中。
 - **保留(ユーザー判断、2026-11-10)**: com.sd.ball を止める試験は、実車が使えるようになってから行う。それまで端末は現状のまま(cnss_diag の停止は次の再起動で元に戻る)。
 - **次の一手(ユーザーの判断待ち)**: (0) com.sd.ball を一時的に止めて SurfaceFlinger の負荷の変化を測り、車で投影への影響を確かめる (1) cnss_diag を起動のたびに止める方法 (2) 画面合成が回り続ける原因の特定 (3) 使わないアプリの整理 (4) リリース手順に導入後の compile を足すか。
 
