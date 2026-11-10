@@ -29,6 +29,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import com.gt8d.launcher.apps.AppCatalog
@@ -83,7 +84,7 @@ class PanelEnvironmentTest {
         }
     }
     @get:Rule(order = 1) val rule = createComposeRule()
-    private fun host() {
+    private fun host(initiallyStarted: Boolean = true) {
         val context = object : ContextWrapper(app) {
             override fun registerReceiver(receiver: BroadcastReceiver?, filter: IntentFilter, permission: String?, scheduler: Handler?, flags: Int): Intent? {
                 if (receiver != null) registered.add(receiver)
@@ -100,7 +101,9 @@ class PanelEnvironmentTest {
         }
         rule.setContent {
             if (visible.value) {
-                owner = androidx.compose.runtime.remember { PanelTestLifecycle().also { it.resume() } }
+                owner = androidx.compose.runtime.remember {
+                    PanelTestLifecycle().also { if (initiallyStarted) it.resume() else it.stop() }
+                }
                 CompositionLocalProvider(LocalContext provides context, LocalLifecycleOwner provides owner) {
                     result = rememberPanelEnvironment(shared)
                 }
@@ -247,6 +250,112 @@ class PanelEnvironmentTest {
             observer.dispose()
         }
     }
+    @Test fun environment_cellReader_populatesDockStatus() {
+        val original = CellReader.read
+        try {
+            CellReader.read = { CellIndicator.Signal(3, "5G") }
+            host()
+            rule.runOnIdle { assertEquals(CellIndicator.Signal(3, "5G"), result.dockStatus.cell) }
+        } finally {
+            CellReader.read = original
+        }
+    }
+
+    @Test fun environment_cellObservation_onlyRunsWhileStartedAndReleasesOnDispose() {
+        val originalRead = CellReader.read
+        val originalObserve = CellReader.observe
+        val callbacks = mutableListOf<() -> Unit>()
+        val released = mutableListOf<Int>()
+        var cellReads = 0
+        try {
+            CellReader.read = { cellReads++; CellIndicator.Signal(3, "5G") }
+            CellReader.observe = { _, onChange ->
+                val index = callbacks.size
+                callbacks.add(onChange)
+                val release: () -> Unit = { released.add(index) }
+                release
+            }
+            host(initiallyStarted = false)
+            assertTrue(callbacks.isEmpty())
+            rule.runOnIdle { owner.registry.currentState = Lifecycle.State.STARTED }
+            assertEquals(1, callbacks.size)
+            assertTrue(released.isEmpty())
+            rule.runOnIdle { owner.resume() }
+            assertEquals(1, callbacks.size)
+            rule.runOnIdle { owner.stop() }
+            assertEquals(listOf(0), released)
+            val stoppedReads = cellReads
+            rule.runOnIdle { callbacks[0]() }
+            assertEquals(stoppedReads, cellReads)
+            rule.runOnIdle { owner.registry.currentState = Lifecycle.State.STARTED }
+            assertEquals(2, callbacks.size)
+            assertEquals(listOf(0), released)
+            val restartedReads = cellReads
+            rule.runOnIdle { callbacks[0]() }
+            assertEquals(restartedReads, cellReads)
+            rule.runOnIdle { visible.value = false }
+            rule.waitForIdle()
+            assertEquals(listOf(0, 1), released)
+            val disposedReads = cellReads
+            rule.runOnIdle { callbacks[1](); owner.stop(); owner.resume() }
+            assertEquals(disposedReads, cellReads)
+            assertEquals(2, callbacks.size)
+        } finally {
+            CellReader.read = originalRead
+            CellReader.observe = originalObserve
+        }
+    }
+
+    @Test fun environment_cellChange_refreshesAndOnlyChangedValuesIncrementRadioRevision() {
+        val originalRead = CellReader.read
+        val originalObserve = CellReader.observe
+        var cell: CellIndicator = CellIndicator.Signal(3, "5G")
+        lateinit var onChange: () -> Unit
+        var cellReads = 0
+        try {
+            CellReader.read = { cellReads++; cell }
+            CellReader.observe = { _, callback -> onChange = callback; {} }
+            host()
+            val before = result.radioRevision
+            val appsBefore = result.appRevision
+            val readsBefore = cellReads
+            rule.runOnIdle { cell = CellIndicator.Signal(1, "4G"); onChange() }
+            rule.runOnIdle {
+                assertEquals(CellIndicator.Signal(1, "4G"), result.dockStatus.cell)
+                assertEquals(before + 1, result.radioRevision)
+                assertEquals(appsBefore, result.appRevision)
+                assertEquals(readsBefore + 1, cellReads)
+            }
+            rule.runOnIdle { cell = CellIndicator.Signal(1, "4G"); repeat(3) { onChange() } }
+            rule.runOnIdle {
+                assertEquals(before + 1, result.radioRevision)
+                assertEquals(appsBefore, result.appRevision)
+                assertEquals(readsBefore + 4, cellReads)
+            }
+        } finally {
+            CellReader.read = originalRead
+            CellReader.observe = originalObserve
+        }
+    }
+
+    @Test fun environment_airplaneBroadcast_refreshesCell() {
+        val original = CellReader.read
+        var cell: CellIndicator = CellIndicator.Signal(3, "5G")
+        try {
+            CellReader.read = { cell }
+            host()
+            val before = result.radioRevision
+            rule.runOnIdle { cell = CellIndicator.Airplane }
+            broadcast(Intent.ACTION_AIRPLANE_MODE_CHANGED)
+            rule.runOnIdle {
+                assertEquals(CellIndicator.Airplane, result.dockStatus.cell)
+                assertEquals(before + 1, result.radioRevision)
+            }
+        } finally {
+            CellReader.read = original
+        }
+    }
+
     @Test fun environment_wifiRssiBroadcast_refreshesBars() {
         val original = WifiReader.read
         var wifi: WifiIndicator = WifiIndicator.Connected(4)

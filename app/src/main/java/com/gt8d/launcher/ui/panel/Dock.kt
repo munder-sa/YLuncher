@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
@@ -17,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AirplanemodeActive
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -32,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,11 +47,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.gt8d.launcher.config.MAX_DOCK_APPS
 import com.gt8d.launcher.ui.theme.Dims
 import com.gt8d.launcher.ui.theme.Palette
 
 val WifiBars = SemanticsPropertyKey<Int>("WifiBars")
+val CellBars = SemanticsPropertyKey<Int>("CellBars")
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -64,122 +70,174 @@ fun Dock(
     settingsApp: AppInfo? = null,
     onSettings: () -> Unit = {},
 ) {
-    Surface(
-        color = Palette.Background1,
-        shape = RoundedCornerShape(16.dp),
+    Column(
         modifier = Modifier.width(88.dp).testTag("dock"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .width(88.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+        Surface(
+            color = Palette.Background1,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.width(88.dp).height(80.dp).testTag("dock_status"),
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.sizeIn(minWidth = Dims.MinTouch, minHeight = 36.dp),
+            DockStatusCard(status)
+        }
+        Surface(
+            color = Palette.Background1,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.width(88.dp).weight(1f, fill = false).testTag("dock_apps"),
+        ) {
+            Column(
+                modifier = Modifier.width(88.dp).verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                val bars = (status.wifi as? WifiIndicator.Connected)?.bars ?: -1
-                Icon(
-                    imageVector = when (status.wifi) {
-                        WifiIndicator.Off -> Icons.Default.SignalWifiOff
-                        WifiIndicator.Disconnected -> Icons.Default.SignalWifi0Bar
-                        is WifiIndicator.Connected -> when (bars) {
-                            0 -> Icons.Default.SignalWifi0Bar
-                            1 -> Icons.Default.NetworkWifi1Bar
-                            2 -> Icons.Default.NetworkWifi2Bar
-                            3 -> Icons.Default.NetworkWifi3Bar
-                            else -> Icons.Default.SignalWifi4Bar
-                        }
-                    },
-                    contentDescription = when (status.wifi) {
-                        WifiIndicator.Off -> "Wi-Fi オフ"
-                        WifiIndicator.Disconnected -> "Wi-Fi 未接続"
-                        is WifiIndicator.Connected -> "Wi-Fi 強さ $bars/4"
-                    },
-                    tint = if (bars >= 0) Color.White else Color.White.copy(alpha = 0.35f),
-                    modifier = Modifier
-                        .size(20.dp)
-                        .testTag("dock_wifi")
-                        .semantics { this[WifiBars] = bars },
-                )
-                if (status.bluetoothOn != null) {
-                    Icon(
-                        imageVector = Icons.Default.Bluetooth,
-                        contentDescription = "Bluetooth",
-                        tint = if (status.bluetoothOn) Color.White else Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier
-                            .size(20.dp)
-                            .testTag("dock_bt"),
+                val visibleApps = dockApps.take(MAX_DOCK_APPS).filter { it.installed }
+                for (app in visibleApps) {
+                    DockAppButton(
+                        app = app,
+                        onLaunch = onLaunch,
                     )
                 }
-            }
 
-            val visibleApps = dockApps.take(MAX_DOCK_APPS).filter { it.installed }
-            for (app in visibleApps) {
-                DockAppButton(
-                    app = app,
-                    onLaunch = onLaunch,
-                )
-            }
-
-            if (settingsApp != null) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                        .clickable(onClick = onSettings)
-                        .semantics { contentDescription = "設定" }.testTag("dock_settings"),
-                ) {
-                    if (settingsApp.icon != null) {
-                        Image(settingsApp.icon, null, Modifier.size(64.dp))
-                    } else {
-                        Icon(Icons.Default.Settings, null, Modifier.size(32.dp)
-                            .testTag("dock_settings_fallback"), tint = Color.White)
+                if (settingsApp != null) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                            .clickable(onClick = onSettings)
+                            .semantics { contentDescription = "設定" }.testTag("dock_settings"),
+                    ) {
+                        if (settingsApp.icon != null) {
+                            Image(settingsApp.icon, null, Modifier.size(64.dp))
+                        } else {
+                            Icon(Icons.Default.Settings, null, Modifier.size(32.dp)
+                                .testTag("dock_settings_fallback"), tint = Color.White)
+                        }
                     }
                 }
-            }
 
-            DockIconButton(
-                icon = Icons.Default.Home,
-                contentDescription = "ホーム",
-                tag = "dock_home",
-                onClick = onHome,
-            )
-
-            DockIconButton(
-                icon = SetAddIcon,
-                contentDescription = "セットを追加",
-                tag = "dock_split",
-                onClick = onSplit,
-            )
-
-            if (showCar) {
                 DockIconButton(
-                    icon = Icons.Default.DirectionsCar,
-                    contentDescription = "車",
-                    tag = "dock_car",
-                    onClick = onCar,
+                    icon = Icons.Default.Home,
+                    contentDescription = "ホーム",
+                    tag = "dock_home",
+                    onClick = onHome,
+                )
+
+                DockIconButton(
+                    icon = SetAddIcon,
+                    contentDescription = "セットを追加",
+                    tag = "dock_split",
+                    onClick = onSplit,
+                )
+
+                if (showCar) {
+                    DockIconButton(
+                        icon = Icons.Default.DirectionsCar,
+                        contentDescription = "車",
+                        tag = "dock_car",
+                        onClick = onCar,
+                    )
+                }
+
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
+                        .combinedClickable(
+                            onClick = onAppList,
+                            onLongClick = onAppListLongPress,
+                        )
+                        .testTag("dock_applist"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Apps,
+                        contentDescription = "アプリ一覧",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DockStatusCard(status: DockStatus) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (status.cell != CellIndicator.Unavailable) {
+            Row(
+                modifier = Modifier.height(36.dp).testTag("dock_cell_row"),
+                horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DockCell(status.cell)
+            }
+        }
+        Row(
+            modifier = Modifier.height(36.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val bars = (status.wifi as? WifiIndicator.Connected)?.bars ?: -1
+            Icon(
+                imageVector = when (status.wifi) {
+                    WifiIndicator.Off -> Icons.Default.SignalWifiOff
+                    WifiIndicator.Disconnected -> Icons.Default.SignalWifi0Bar
+                    is WifiIndicator.Connected -> when (bars) {
+                        0 -> Icons.Default.SignalWifi0Bar
+                        1 -> Icons.Default.NetworkWifi1Bar
+                        2 -> Icons.Default.NetworkWifi2Bar
+                        3 -> Icons.Default.NetworkWifi3Bar
+                        else -> Icons.Default.SignalWifi4Bar
+                    }
+                },
+                contentDescription = when (status.wifi) {
+                    WifiIndicator.Off -> "Wi-Fi オフ"
+                    WifiIndicator.Disconnected -> "Wi-Fi 未接続"
+                    is WifiIndicator.Connected -> "Wi-Fi 強さ $bars/4"
+                },
+                tint = if (bars >= 0) Color.White else Color.White.copy(alpha = 0.35f),
+                modifier = Modifier.size(30.dp).testTag("dock_wifi")
+                    .semantics { this[WifiBars] = bars },
+            )
+            if (status.bluetoothOn != null) {
+                Icon(
+                    imageVector = Icons.Default.Bluetooth,
+                    contentDescription = "Bluetooth",
+                    tint = if (status.bluetoothOn) Color.White else Color.White.copy(alpha = 0.35f),
+                    modifier = Modifier.size(30.dp).testTag("dock_bt"),
                 )
             }
+        }
+    }
+}
 
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .sizeIn(minWidth = Dims.MinTouch, minHeight = Dims.MinTouch)
-                    .combinedClickable(
-                        onClick = onAppList,
-                        onLongClick = onAppListLongPress,
-                    )
-                    .testTag("dock_applist"),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Apps,
-                    contentDescription = "アプリ一覧",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp),
-                )
+@Composable
+private fun DockCell(cell: CellIndicator) {
+    val bars = (cell as? CellIndicator.Signal)?.bars ?: -1
+    val modifier = Modifier.size(30.dp).testTag("dock_cell").semantics { this[CellBars] = bars }
+    when (cell) {
+        CellIndicator.Unavailable -> Unit
+        CellIndicator.Airplane -> Icon(Icons.Default.AirplanemodeActive, "機内モード", modifier, tint = Color.White)
+        CellIndicator.NoSim, is CellIndicator.Signal -> {
+            val slashed = cell == CellIndicator.NoSim
+            val iconBars = if (slashed) 0 else bars
+            val description = when {
+                slashed -> "SIM なし"
+                bars == 0 -> "モバイル通信 圏外"
+                else -> "モバイル通信 強さ $bars/4" + ((cell as? CellIndicator.Signal)?.label?.let { " $it" } ?: "")
+            }
+            Image(
+                imageVector = remember(iconBars, slashed) { cellSignalIcon(iconBars, slashed) },
+                contentDescription = description,
+                modifier = modifier,
+            )
+            if (cell is CellIndicator.Signal && cell.label != null) {
+                Text(cell.label, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                    color = Color.White, modifier = Modifier.testTag("dock_cell_label"))
             }
         }
     }

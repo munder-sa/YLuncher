@@ -1,0 +1,6 @@
+create tasks/170-apple-lyrics-web-probe.md
+create tasks/170-apple-lyrics-web-probe.allow
+create scripts/apple-lyrics-probe.py
+command python scripts/apple-lyrics-probe.py --self-test
+command python scripts/apple-lyrics-probe.py --public-only --song-id 1537460612 --storefront jp
+command python scripts/apple-lyrics-probe.py --interactive --song-id 1537460612 --storefront jp

@@ -6,19 +6,30 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
@@ -101,6 +112,106 @@ class DockTest {
 
     @get:Rule(order = 1)
     val rule = createComposeRule()
+
+    private fun hostStatus(status: DockStatus) {
+        rule.setContent {
+            LauncherTheme { Dock(status, emptyList(), false, {}, {}, {}, {}, {}, {}) }
+        }
+    }
+
+    @Test fun dock_statusCard_hasFixedSizeAndGap() {
+        hostStatus(DockStatus(true, true, cell = CellIndicator.Signal(3, "5G")))
+        val status = rule.onNodeWithTag("dock_status").assertIsDisplayed().getBoundsInRoot()
+        val apps = rule.onNodeWithTag("dock_apps").getBoundsInRoot()
+        assertEquals(88.dp, status.width)
+        assertEquals(80.dp, status.height)
+        assertEquals(8.dp, apps.top - status.bottom)
+    }
+
+    @Test fun dock_cellSignal_hasBarsDescriptionLabelAndSize() {
+        hostStatus(DockStatus(true, true, cell = CellIndicator.Signal(3, "5G")))
+        val cell = rule.onNodeWithTag("dock_cell").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(CellBars, 3))
+            .assertContentDescriptionEquals("モバイル通信 強さ 3/4 5G").getBoundsInRoot()
+        rule.onNodeWithTag("dock_cell_label").assertTextEquals("5G")
+        assertEquals(30.dp, cell.width)
+        assertEquals(30.dp, cell.height)
+    }
+
+    @Test fun dock_cellOutOfService_hasNoLabel() {
+        hostStatus(DockStatus(true, null, cell = CellIndicator.Signal(0, null)))
+        rule.onNodeWithTag("dock_cell").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(CellBars, 0))
+            .assertContentDescriptionEquals("モバイル通信 圏外")
+        rule.onNodeWithTag("dock_cell_label").assertDoesNotExist()
+    }
+
+    @Test fun dock_cellNoSim_hasDescriptionAndSentinelBars() {
+        hostStatus(DockStatus(true, null, cell = CellIndicator.NoSim))
+        rule.onNodeWithTag("dock_cell").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(CellBars, -1))
+            .assertContentDescriptionEquals("SIM なし")
+        rule.onNodeWithTag("dock_cell_label").assertDoesNotExist()
+    }
+
+    @Test fun dock_cellAirplane_hasDescriptionAndSentinelBars() {
+        hostStatus(DockStatus(true, null, cell = CellIndicator.Airplane))
+        rule.onNodeWithTag("dock_cell").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(CellBars, -1))
+            .assertContentDescriptionEquals("機内モード")
+        rule.onNodeWithTag("dock_cell_label").assertDoesNotExist()
+    }
+
+    @Test fun dock_cellUnavailable_hidesRowAndCentersWifi() {
+        hostStatus(DockStatus(true, null))
+        rule.onNodeWithTag("dock_cell_row").assertDoesNotExist()
+        val wifi = rule.onNodeWithTag("dock_wifi").assertIsDisplayed().getBoundsInRoot()
+        val status = rule.onNodeWithTag("dock_status").getBoundsInRoot()
+        assertEquals((status.top + status.bottom) / 2, (wifi.top + wifi.bottom) / 2)
+    }
+
+    @Test fun dock_wifiAndBluetooth_areThirtyDpBelowCell() {
+        hostStatus(DockStatus(true, true, cell = CellIndicator.Signal(3, "5G")))
+        val cell = rule.onNodeWithTag("dock_cell").getBoundsInRoot()
+        val wifi = rule.onNodeWithTag("dock_wifi").assertIsDisplayed().getBoundsInRoot()
+        val bt = rule.onNodeWithTag("dock_bt").assertIsDisplayed().getBoundsInRoot()
+        for (bounds in listOf(wifi, bt)) {
+            assertEquals(30.dp, bounds.width)
+            assertEquals(30.dp, bounds.height)
+            assertTrue(bounds.top > cell.bottom)
+        }
+        assertEquals(8.dp, bt.left - wifi.right)
+    }
+
+    @Test fun dock_shortParent_scrollsAppsWhileStatusStaysVisible() {
+        rule.setContent {
+            LauncherTheme {
+                Box(Modifier.width(88.dp).height(400.dp).testTag("dock_test_parent")) {
+                    Dock(DockStatus(true, true, cell = CellIndicator.Signal(3, "5G")),
+                        (1..4).map { AppInfo("a$it", "App $it", null, true) }, true,
+                        {}, {}, {}, {}, {}, {}, settingsApp = AppInfo("settings", "設定", null, true))
+                }
+            }
+        }
+        val parent = rule.onNodeWithTag("dock_test_parent").getBoundsInRoot()
+        val before = rule.onNodeWithTag("dock_status").assertIsDisplayed().getBoundsInRoot()
+        assertEquals(80.dp, before.height)
+        assertEquals(88.dp, before.width)
+        assertTrue(before.top >= parent.top && before.bottom <= parent.bottom)
+        val scroll = rule.onAllNodes(hasScrollAction() and hasAnyAncestor(hasTestTag("dock_apps")),
+            useUnmergedTree = true).fetchSemanticsNodes().single()
+            .config[SemanticsProperties.VerticalScrollAxisRange]
+        assertEquals(0f, scroll.value(), 0f)
+        assertTrue(scroll.maxValue() > 0f)
+        rule.onNodeWithTag("dock_applist").performScrollTo().assertIsDisplayed()
+        assertTrue(scroll.value() > 0f)
+        val after = rule.onNodeWithTag("dock_status").assertIsDisplayed().getBoundsInRoot()
+        assertEquals(before, after)
+        val apps = rule.onNodeWithTag("dock_apps").getBoundsInRoot()
+        assertEquals(8.dp, apps.top - after.bottom)
+        val appList = rule.onNodeWithTag("dock_applist").getBoundsInRoot()
+        assertTrue(appList.top >= apps.top && appList.bottom <= apps.bottom)
+    }
 
     @Test
     fun dock_wifiReflectsStrengthAndConnection() {

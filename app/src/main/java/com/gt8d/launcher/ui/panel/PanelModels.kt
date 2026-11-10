@@ -15,4 +15,5 @@ data class DockStatus(
     val wifiOn: Boolean,
     val bluetoothOn: Boolean?,
     val wifi: WifiIndicator = if (wifiOn) WifiIndicator.Connected(4) else WifiIndicator.Off,
+    val cell: CellIndicator = CellIndicator.Unavailable,
 )

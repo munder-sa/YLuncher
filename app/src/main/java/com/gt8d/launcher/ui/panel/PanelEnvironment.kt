@@ -16,6 +16,11 @@ import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.telephony.SignalStrength
+import android.telephony.SubscriptionManager
+import android.telephony.TelephonyCallback
+import android.telephony.TelephonyDisplayInfo
+import android.telephony.TelephonyManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
@@ -85,6 +90,73 @@ internal object WifiReader {
     var read: (Context) -> WifiIndicator = ::readWifiFromSystem
 }
 
+internal object CellReader {
+    var read: (Context) -> CellIndicator = ::readCellFromSystem
+    /** 監視を始め、やめる関数を返す。onChange は main スレッドで呼ぶ。 */
+    var observe: (Context, () -> Unit) -> (() -> Unit) = ::observeCellFromSystem
+}
+
+private var cellOverrideType = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
+
+private fun cellTelephonyManager(context: Context): TelephonyManager? = runCatching {
+    val hasTelephony = runCatching {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+    }.getOrDefault(false)
+    if (!hasTelephony) return@runCatching null
+    val manager = runCatching { context.getSystemService(TelephonyManager::class.java) }.getOrNull()
+        ?: return@runCatching null
+    val subscriptionId = runCatching { SubscriptionManager.getDefaultDataSubscriptionId() }
+        .getOrDefault(SubscriptionManager.INVALID_SUBSCRIPTION_ID)
+    if (subscriptionId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+        runCatching { manager.createForSubscriptionId(subscriptionId) }.getOrNull()
+    } else manager
+}.getOrNull()
+
+private fun readCellFromSystem(context: Context): CellIndicator = runCatching {
+    val manager = cellTelephonyManager(context) ?: return@runCatching CellIndicator.Unavailable
+    val airplane = runCatching {
+        Settings.Global.getInt(context.contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) == 1
+    }.getOrDefault(false)
+    val simReady = runCatching { manager.simState == TelephonyManager.SIM_STATE_READY }.getOrDefault(false)
+    val level = runCatching { manager.signalStrength?.level }.getOrNull()
+    val networkType = runCatching { manager.dataNetworkType }.getOrDefault(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    cellIndicatorOf(true, airplane, simReady, level, networkType, cellOverrideType)
+}.getOrDefault(CellIndicator.Unavailable)
+
+private fun observeCellFromSystem(context: Context, onChange: () -> Unit): () -> Unit {
+    val manager = cellTelephonyManager(context)
+        ?: return { cellOverrideType = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE }
+    var active = true
+    val combined = object : TelephonyCallback(), TelephonyCallback.SignalStrengthsListener,
+        TelephonyCallback.DisplayInfoListener {
+        override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
+            if (active) onChange()
+        }
+        override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) {
+            if (!active) return
+            cellOverrideType = telephonyDisplayInfo.overrideNetworkType
+            onChange()
+        }
+    }
+    val registered = if (runCatching {
+        manager.registerTelephonyCallback(ContextCompat.getMainExecutor(context), combined)
+    }.isSuccess) combined else {
+        val signalOnly = object : TelephonyCallback(), TelephonyCallback.SignalStrengthsListener {
+            override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
+                if (active) onChange()
+            }
+        }
+        if (runCatching {
+            manager.registerTelephonyCallback(ContextCompat.getMainExecutor(context), signalOnly)
+        }.isSuccess) signalOnly else null
+    }
+    return {
+        active = false
+        if (registered != null) runCatching { manager.unregisterTelephonyCallback(registered) }
+        cellOverrideType = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
+    }
+}
+
 private fun readWifiFromSystem(context: Context): WifiIndicator {
     val wifiManager = runCatching { context.getSystemService(WifiManager::class.java) }.getOrNull()
     val enabled = runCatching {
@@ -108,7 +180,8 @@ private fun readDockStatus(context: Context): DockStatus {
     val bluetooth = if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
         runCatching { context.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled }.getOrNull()
     } else null
-    return DockStatus(wifiOn = wifi !is WifiIndicator.Off, bluetoothOn = bluetooth, wifi = wifi)
+    return DockStatus(wifiOn = wifi !is WifiIndicator.Off, bluetoothOn = bluetooth, wifi = wifi,
+        cell = CellReader.read(context))
 }
 
 private fun readMissingPermissions(context: Context): List<MissingPermission> {
@@ -195,7 +268,7 @@ private fun observeVisibleRadios(
     fun stop() {
         if (!active) return
         active = false
-        generation++ // Invalidate queued events before unregistering either source.
+        generation++ // Invalidate queued events before unregistering radio sources.
         val unregister = release
         release = {}
         unregister()
@@ -229,9 +302,11 @@ private fun observeVisibleRadios(
             }, ContextCompat.RECEIVER_EXPORTED)
             true
         }.getOrDefault(false)
+        val releaseCell = CellReader.observe(context) { refresh() }
         release = {
             if (callbackRegistered) runCatching { connectivity?.unregisterNetworkCallback(callback) }
             if (receiverRegistered) runCatching { context.unregisterReceiver(receiver) }
+            releaseCell()
         }
         onStart()
     }
@@ -253,4 +328,5 @@ private fun observeVisibleRadios(
 }
 
 private val radioActions = setOf(WifiManager.WIFI_STATE_CHANGED_ACTION, WifiManager.RSSI_CHANGED_ACTION,
-    WifiManager.NETWORK_STATE_CHANGED_ACTION, BluetoothAdapter.ACTION_STATE_CHANGED)
+    WifiManager.NETWORK_STATE_CHANGED_ACTION, BluetoothAdapter.ACTION_STATE_CHANGED,
+    Intent.ACTION_AIRPLANE_MODE_CHANGED)
