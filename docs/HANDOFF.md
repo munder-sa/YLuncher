@@ -2,6 +2,15 @@
 
 最終更新: 2026-11-08 (JST)
 
+## ドックのステータスを独立カードに、SIM の電波を表示 (2026-11-10)
+
+- **担当: Claude**。ユーザーの依頼(ステータスに SIM の電波を足す・大きくする・下の空きを使う)にモックの 4 案を出し、ユーザーが「C 案」(ステータスを別カード、2 段、30dp)と「分割時のドックも一緒に」を選んだ。モック: https://claude.ai/artifact/SwQHZ7G3VnZm5sj7QinpFr
+- ブランチ `dock-status-card`。Task232(d79f934): `Dock` を「ステータスのカード 88×80dp + 間 8dp + アプリのカード(中だけスクロール)」に。上段は SIM のバー(自前の ImageVector、4 本)+ 回線の種類(5G/4G/3G/2G。`TelephonyDisplayInfo` の NR_NSA/NR_ADVANCED も 5G)、下段は Wi-Fi・BT(20→30dp)。SIM なし・機内モード・圏外を出し分け、電話機能が無ければ上段を出さない。権限は `READ_BASIC_PHONE_STATE`(通常の権限)だけ。監視は `TelephonyCallback`(SignalStrengths + DisplayInfo)で、見えている間だけ(既存の `observeVisibleRadios` と同じ寿命)。`Dock` はホームと分割のパネルで共通なので両方に効く。
+- テスト(codex 実行): `ui.panel.*` 203件・`ui.layout.*` 599件、すべて成功。既存テストの期待値は変えていない(`PanelEnvironmentTest` の `host()` に既定値つき引数を足しただけ)。
+- Task233(842ecea): 両 **2.3.4-beta1 / 60** を release ビルド(1分32秒)。`build/releases/v2.3.4-beta1/`(本体 `79e154c1…8935`、中継 `cbcfd536…0d4a`)。実機へ install -r 済み、`READ_BASIC_PHONE_STATE` は granted、HOME・通知リスナー・ユーザー補助は維持。本体は speed-profile に compile。
+- **実機の確認(画面を撮って確認)**: ホーム・分割(セット 4、パネルが左)とも、ステータスのカードに「3 本・5G」と Wi-Fi・BT が表示された。KDDI の LTE+NR_NSA が 5G として読めている(許可画面なしで回線の種類が読めることを確認)。入れ直し直後の初回の分割だけ 4.1 秒かかって「開くのに時間がかかっています」が出たが、続く 2 回は 1.2 秒・0.5 秒で正常(`waitBoth ready`)。
+- **次の一手**: ユーザーの見た目・操作感の確認(DHU)。問題なければ main へ取り込み、全テストを 1 回、2.3.4 正式版。push・Release はユーザーの承認後。
+
 ## 車載モードでの端末全体の性能調査 (2026-11-10)
 
 - **担当: Claude**。ユーザーの依頼で、車載モード(`…disable.wireless=0`、車には未接続、ワイヤレス adb 192.168.137.200:42271、シェルは root)の実機を読み取りだけで調べた。端末の設定・アプリ・コードは変えていない。対処は提案のみで、実行はユーザーの判断待ち。
