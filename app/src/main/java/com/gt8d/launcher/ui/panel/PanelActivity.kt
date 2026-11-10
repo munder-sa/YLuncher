@@ -12,8 +12,10 @@ import com.gt8d.launcher.pip.AndroidPipDetector
 import com.gt8d.launcher.split.PanelPlacement
 import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
@@ -90,6 +92,10 @@ class PanelActivity : ComponentActivity() {
     private var safetyMode = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         // 中継が、自分で閉じたのかプロセスごと消えたのかを見分けるため。
         setResult(RESULT_OK)
