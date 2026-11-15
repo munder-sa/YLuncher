@@ -269,3 +269,28 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 - **負の経路(確認済み)**: 5555 未開放の状態でアプリを起動すると、ステータス `adb: NO (… port 5555 … ECONNREFUSED)`、結果枠 `id: FAILED (exit=-1, via 127.0.0.1:5555)`、全ボタン無効。UI(横向き・大ボタン・ステータス行・結果枠)は正常描画。画面 `/tmp/.../carprobe-241-loopback-closed.png`。
 - **正の経路(DHU 画面での確認待ち)**: ユーザー承認でクラシック 5555(loopback 限定)へ切り替え済み。ホストから届かないため、DHU を直接タップして確認する: ステータスが `adb: OK (uid=0 @127.0.0.1:5555)` になること、`Save Boot Log & Services`・`Run a0call status`・`native`・`toggle 800/3000ms` が通ること。`Finish & Disable ADB` は実車テスト完了時にユーザーが押す(今は 5555 を開いたまま)。
 - 待ち受け状態: `adb_wifi_enabled=0`、`persist.adb.tcp.port=5555`、classic adbd が `127.0.0.1:5555` で稼働(mDNS `_adb._tcp` 5555 で確認)、carprobe 0.1.0 導入済み、`a0call` は `/data/local/tmp/a0call`。
+
+### carprobe — 診断結果(2026-11-15 夜):loopback ADB はこの HW では不成立
+
+DHU で carprobe を開くと `127.0.0.1:5555` 自体が `ECONNREFUSED`。原因を実機で決定的に切り分けた。
+
+**(1) この端末の adbd は素の TCP `:5555` を LISTEN しない(構造的)。**
+- `com.carsyso.main` の `ACTION_EXECUTE_SH`(system、adbd とは別 cgroup)から、`settings put global adb_wifi_enabled 0; setprop persist/service.adb.tcp.port 5555; setprop ctl.restart adbd; sleep; ss -ltnp` を実行(adbd 再起動に耐える方法)。結果: **`adbd=running port=5555` なのに `:5555` の LISTEN は 0 件**(0.0.0.0 にも loopback にも無し)。多数のベンダーポート(50xxx 等)は開くが 5555 は開かない。
+- `adb_wifi=1`(ワイヤレスデバッグ)では TLS の一時ポートだけを LISTEN(`ss` で確認)。車載 USB モード(`sys.usb.config=none`/`autoMtp`)では adbd は USB FFS の `FUNCTIONFS_BIND` 待ちを延々リトライ。
+- つまり「`stop` でシェルが切れて再起動しなかっただけ」ではない。adbd は走っていても legacy の TCP ポート(`service.adb.tcp.port`)を開かないビルド/構成。carprobe の loopback ADB は繋ぐ先が存在しない。
+
+**(2) `ACTION_EXECUTE_SH` は root ではない。**
+- ブロードキャストで `id` を実行 → **`uid=1000(system)`、`u:r:system_app:s0`、SELinux Permissive**。
+- a0call は root の sdAutoReverse を ptrace するため、system(1000)では ptrace 不可(より上位の権限のプロセスは追跡できない)。
+- 昇格も不可: `/system/xbin` は `drwxr-x--- root shell`(0750)。system は group shell(2000)に属さずディレクトリに入れないため、setuid root の `/system/xbin/sdsu_no` に到達すらできない(`inaccessible`)。
+- usb-toggle が system で成立するのは、やることが setprop/settings/am/reboot など system 権限で足りる操作だから。a0call(root 必須)はこの枠に入らない。
+
+**結論**: この端末で「アプリから root」を得る手段は、host 駆動の adb(USB か ワイヤレス TLS、どちらも PC が要る)だけ。**車内(host 無し)では a0call を起動できない。** loopback 版 carprobe(`6e38286`)は実装は正しいが、この HW では無効。
+
+**有用な副産物**: `ACTION_EXECUTE_SH`(system)は adbd と別 cgroup なので、そこから `adb_wifi` の 0/1 切替+`ctl.restart adbd`+`ss` 採取を安全に実行でき、`adb_wifi=1` への自己復帰も効く(mDNS の tls-connect 再広告に数十秒)。adbd を触る実験はこの経路が安全。
+
+**car 対応の選択肢(a0call は root 必須・車内に host 無し)**:
+- A: 起動時に走る root サービス/デーモン(init か `/system`/`/vendor` の .rc = 既出の A1/A2 相当、要ユーザー承認・verified boot の remount)で a0call を自律実行、またはトリガーファイルを監視。carprobe はトリガー UI に縮小。
+- B: 車内に小さな host(予備 Android+adb、SBC 等)を持ち込み a0call を駆動。
+- C: ベンチ(DHU)確認のみに留める(ただし DHU はブラックアウトを再現しない)。
+- 追加調査の余地: root(uid=0)で動くベンダーのサービスで、外部からコマンド実行を受け付けるものが他に無いか(あれば A の代替になりうる)。
