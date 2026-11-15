@@ -4,6 +4,8 @@
 
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
 
+- **【クローズ】(2026-11-15、ユーザー指示)**: UI 未設置(純正画面への復帰は Dock の「Car」= `com.ds.backcar` で運用)。`VendorBridge.switchToCarScreen()` / `carHomeAvailable` は内部 API として保持(テスト済み、将来のカーテン等からの直接復帰用)。**有線 AA モード(`cp_aa=2000`)を実車持ち込みの基本方針**とする。DHU のクラスター設定での実測は、クラスター用シンクが申告されなかったため「無視する」ところまでは未確認(クラッシュ・異常なし)。未確認事項は実車でのサービス一覧の記録(spike の「クローズ記録」)。
+
 - **追記(Task 239)**: `VendorBridge.switchToCarScreen()` / `carHomeAvailable` を実装済み(コミット済み・未 push、呼び出し元は未設置)。通常アプリからの `AT#CB` 送信を実機で確認。小アプリ `:carback` は、プリインストールの「Car」(`com.ds.backcar`)と重複するため削除した。YLuncher 内のボタンは未決。詳細は spike の「実装」節。
 
 - **担当: Claude**。ユーザーの依頼(「code_artifact.md を読んで調査方針に従って調査。調査だけ」)で、方策書の Step 1〜4 を読み取りだけで実施。端末・アプリ・コードは変えていない。詳細は [記録](superpowers/spikes/meter-map-nav-bridge.md)。

@@ -133,6 +133,20 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 
 - **既存の「Car」アプリ(`com.ds.backcar/.MainActivity`、プリインストール)が同じ動作**(15:40 実測): 押すと MainService の `smart_box_carplay` バインダー経由で `AT#CB` → `VIDEO_FOCUS_REQUEST`(NATIVE)→ DHU が「Video focus is off.」。つまり `:carback` は純正の「Car」と機能が重複する(経路だけ違う: 純正はバインダー、こちらはブロードキャスト)。投影への復帰は DHU の `focus video on`(車側の操作)。
 
+## クローズ記録(2026-11-15、ユーザー指示)
+
+**方針(確定)**
+- UI への独自ボタンは設置しない。普段の純正画面への復帰は、Dock に固定したプリインストールの「Car」(`com.ds.backcar`)を使う(`com.ds.backcar` の分割リダイレクト除外は対応済み)。
+- Task 239 の `VendorBridge.switchToCarScreen()` / `carHomeAvailable` は revert せず、**内部 API として保持**する。将来、パネルを含まない 2 画面分割中(Google マップ + YouTube など)に、エッジスワイプ(カーテン)などから直接純正画面へ抜けたくなったときに使う。既存の `VendorBridgeTest`(3 件)でカバー済みで、追加実装は無い。呼び出し元(UI 配線)は未設置。
+- 実車へ持ち込むときの基本方針は **有線の Android Auto モード(`cp_aa=2000`)**。
+
+**`gt8d_cluster.ini` での DHU 実測の結論(2026-11-15 15:15、1 回)**
+- ini は `[display:Cluster]` + `displaytype = cluster` が有効な書式(`[display]` + `name` では、追加ディスプレイの節として読まれなかった可能性が高い。DHU のコンソールにエラーは出なかった)。
+- 接続は正常。`sdAutoReverse` はプライマリ(ch 2)だけで投影を始め、ハンドシェイクの異常やクラッシュは無かった(`VIDEO_FOCUS_PROJECTED` → `MEDIA_MESSAGE_START`、その後 `AT#CB` による NATIVE への切り替えと `focus video on` による復帰も正常)。
+- ただし、DHU はクラスター用の映像サービスを**申告しなかった**(申告は `DISPLAY_TYPE_MAIN` の 1 つだけ)。そのため「申告されたクラスター用シンクを `sdAutoReverse` が無視する」ところは、**実測では確認できていない**。静的解析(`VideoSink` は `display_id` が自分と同じサービスだけを受ける)からの見込みにとどまる。
+- 1 回目の起動(15:06 以前の別の接続)で、TLS 確立後に `Failed to read from transport - disconnect` で終了したことがあった。やり直しで接続できた。原因は未調査(DHU の初回起動時の取りこぼしと思われるが未確認)。
+- 実車での確認事項(未実施): 接続直後の `SdAAReverse` のサービス一覧に `DISPLAY_TYPE_CLUSTER` が出るか、出た場合に GT8D が開くか。
+
 ## 残っている確認
 
 1. **DHU をクラスター有効で起動し直す**(DHU を終了 → USB を抜き挿し → `desktop-head-unit.exe --usb -c config\gt8d_cluster.ini`)。DHU が申告するサービスと、デーモンがどのチャネルを開くかを `SdAAReverse` の記録で読む。
