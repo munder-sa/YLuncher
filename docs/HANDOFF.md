@@ -9,7 +9,7 @@
 - **純正画面への切り替えは `AT#CB`**(`com.suding.main.ACTION_EXECUTE_AT_CMD`、extra `extra_at_cmd`)。デーモンが映像のフォーカスを NATIVE で要求する。AIDL の `requestSwitchOriginalMpu` は実体が空。試し撃ちは未実施(ユーザーの了承待ち)。
 - **Google マップの右左折の連携は MainAiBox に実装済み**(`MapNotificationListenerService` → `AT#CW`/`AT#CX`)だが、受けるのは有線 CarPlay のデーモンだけ。実機では無効(設定 `setting_key_send_navi_info_to_car` 未設定、通知リスナー未許可)。
 - ブラックアウトの原因は未確定。仮説は「車がメーターの地図枠を投影側のクラスター表示に渡し、GT8D が何も送らない」。
-- **`AT#CB` の試し撃ち(ユーザー承認、12:24)**: デーモンが `VIDEO_FOCUS_REQUEST`(NATIVE)を送り、DHU が NATIVE を返して映像が止まった。切断なし(接続・USB・DHU とも維持)。`VendorBridge.switchToCarScreen()` の仕様案を記録に書いた。通常アプリからの送信と DHU の画面の見え方は未確認。試し撃ちの後、DHU は車側の画面のまま(戻すのは DHU の `focus video on`)。
+- **`AT#CB` の試し撃ち(ユーザー承認、12:24)**: デーモンが `VIDEO_FOCUS_REQUEST`(NATIVE)を送り、DHU が NATIVE を返して映像が止まった。切断なし(接続・USB・DHU とも維持)。`VendorBridge.switchToCarScreen()` の仕様案を記録に書いた。DHU の画面が車側の表示になることはユーザーが目視で確認。通常アプリからの送信は未確認。試し撃ちの後、DHU は車側の画面のまま(戻すのは DHU の `focus video on`)。
 - **クラスターの実測は未実施**: ユーザーの再接続の連絡後も、DHU は 11:40 起動の `gt8d_1080p60.ini` のままで、GT8D 側に新しい接続の記録が無かった。DHU の `instrumentcluster = true` はナビ状態のサービスだけで、メーター用の映像シンクは `[display]` + `displaytype = cluster` が要る(`gt8d_cluster.ini` を更新済み)。
 - 静的解析では、デーモンの映像シンクは display_id の一致するものだけを採用し、クラスター用のシンクには応じない見込み。CarPlay のブリッジは `altScreen`(メーターの地図対応)を自分から申告しており、CarPlay モードはブラックアウトを避けやすい構造ではない。右左折の連携は有線 CarPlay だけ。
 - **次の一手**: (1) DHU を終了 → USB 抜き挿し → `-c config\gt8d_cluster.ini` で起動し、記録を読む (2) 実車ではテザリング経由のワイヤレスデバッグでサービス一覧を取る (3) `switchToCarScreen()` の実装はユーザーの指示待ち。

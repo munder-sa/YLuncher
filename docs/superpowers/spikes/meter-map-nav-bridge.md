@@ -80,7 +80,7 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 | .655 | デーモンが `MEDIA_MESSAGE_STOP`、エンコーダーを片付け(`OMX-VENC: Component Deinit`) |
 
 - **切断なし**: 3 分後も `sys.suding.reverse.connect=1`、USB は `18D1:2D00` のまま、DHU のプロセスも応答あり。`sys.suding.rplay.ui` が `foreground` → `background` になった。ByeBye などの終了系メッセージは出ない(送るのは映像フォーカスの要求だけ)。
-- DHU の画面とコンソールの表示はこちらからは見えないため未確認(ユーザーの目視待ち)。DHU を投影に戻すのは DHU 側の `focus video on`。Box 側から投影へ戻す AT コマンドは無い(車側の操作で戻る)。
+- **DHU の画面は車側の表示に切り替わった(ユーザーが目視で確認)**。コンソールの出力は未確認。DHU を投影に戻すのは DHU 側の `focus video on`。Box 側から投影へ戻す AT コマンドは無い(車側の操作で戻る)。
 - 受け口は `MainService.onCreate` が 1 つの IntentFilter(`ACTION_EXECUTE_SH` と `ACTION_EXECUTE_AT_CMD`)で `registerReceiver(receiver, filter)` したもの。`ACTION_EXECUTE_SH` は通常アプリから届くことを `tools/gt8d-usb-toggle` で確認済みなので、`AT_CMD` も同じ条件で届く(今回の送信は adb の root シェルから。通常アプリからの送信は未実測)。
 
 ### `VendorBridge.switchToCarScreen()` の仕様(確定案)
@@ -117,7 +117,7 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 ## 残っている確認
 
 1. **DHU をクラスター有効で起動し直す**(DHU を終了 → USB を抜き挿し → `desktop-head-unit.exe --usb -c config\gt8d_cluster.ini`)。DHU が申告するサービスと、デーモンがどのチャネルを開くかを `SdAAReverse` の記録で読む。
-2. `AT#CB` は実施済み(上の追加確認)。DHU の画面の見え方はユーザーの目視待ち。
+2. `AT#CB` は実施済み(上の追加確認)。DHU が車側の表示になることをユーザーが確認。
 3. **実車での記録**: 接続直後の `SdAAReverse` のサービス一覧(車が何を申告するか。クラスター表示・ナビ状態・解像度)と、ブラックアウト時のメッセージ。車内のテザリング経由のワイヤレスデバッグで取る(ユーザーの方針。端末内に保存する仕組みは作らない)。
 
 ## 実装の見通し(判定)
