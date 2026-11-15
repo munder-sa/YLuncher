@@ -122,6 +122,8 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 - DHU の ini キー(exe から復元): `[display:名前]` の節に `displaytype`(main/auxiliary/cluster)・`resolution`・`dpi`・`realdpi`・`framerate`・`decoderdepth`・`dhudecoderdepth`・`startupfocus`・`viewingdistance`・`gridspacing`・`uitheme`・`navigation`・`widgettype`・`videoconfig`・`inputmode`。2 枚目のウィンドウが何かは未確認(クラスターのナビ表示用か、追加ディスプレイか)。
 - 注意: 15:15 の接続の記録は、端末の時計が 10-21 のまま(再起動直後で時刻同期前)なので、ログ上の日付は `10-21 21:26` になっている。
 
+- **案内中の実測(15:20〜15:21)**: Google マップでルート案内を開始(マップの案内通知が出ている状態)。DHU の 2 枚目のウィンドウ(`instrumentcluster` のナビ表示)は**真っ黒のまま**。GT8D のデーモンは ch 6(NavigationStatus)に**1 通も送っていない**(`ch:6` のログ 0 件)。案内音声だけは `send navi audio` で ch 4 に流れた。つまり Android Auto モードでは、案内を始めても、車へ右左折やメーター表示は一切送られない。ベンダーのナビ連携(`MapNotificationListenerService` → `AT#CW`/`AT#CX`)は無効(設定 null)のままで、これは有線 CarPlay 用の経路。
+
 ## 残っている確認
 
 1. **DHU をクラスター有効で起動し直す**(DHU を終了 → USB を抜き挿し → `desktop-head-unit.exe --usb -c config\gt8d_cluster.ini`)。DHU が申告するサービスと、デーモンがどのチャネルを開くかを `SdAAReverse` の記録で読む。
