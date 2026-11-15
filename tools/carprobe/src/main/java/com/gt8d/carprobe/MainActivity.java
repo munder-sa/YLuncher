@@ -349,7 +349,9 @@ public final class MainActivity extends Activity {
     private static void finishAdb() throws Exception {
         ensureSession();
         String[] commands = {
-                "setprop persist.adb.tcp.port \"\"",
+                // Clear the abstract-socket transport so adbd does not reopen @gt8d-ipv6-guard
+                // if it is restarted; the final ctl.stop adbd then stops the daemon itself.
+                "setprop service.adb.listen_addrs \"\"",
                 "settings put global adb_wifi_enabled 0",
                 "settings put global adb_enabled 0"
         };

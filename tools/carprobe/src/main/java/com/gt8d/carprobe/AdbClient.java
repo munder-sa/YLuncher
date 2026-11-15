@@ -256,7 +256,8 @@ public final class AdbClient {
     }
 
     private static boolean waitForSocket() throws IOException, InterruptedException {
-        for (int attempt = 0; attempt < 8; attempt++) {
+        // Up to ~3s: a cold-boot adbd restart can take a moment to open the abstract socket.
+        for (int attempt = 0; attempt < 15; attempt++) {
             checkInterrupted();
             try (LocalSocket socket = connect()) {
                 return true;
