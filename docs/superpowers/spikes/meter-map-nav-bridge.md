@@ -214,6 +214,7 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 - **DHU 側の観測(ユーザー)**: DHU のコンソールには、nav focus に関する行は何も出なかった(接続時の行だけ)。「Instrument cluster」ウィンドウは**変化なし(黒いまま)**。DHU は NAV フォーカスの受信を既定の出力に出さず、クラスターのウィンドウは `NavigationStatus`(右左折の情報)を描くものなので、NAV フォーカスの送出では変わらないのが自然。**DHU では「送出できること」までが実証で、「車がどう反応するか」は実車でしか確かめられない**。
 - GT8D のログには、DHU からの返信(ID 14)の記録も無い(GT8D に受信処理が無いため)。
 - **実車手順への注意(重要)**: 端末で `com.estrongs.android.pop`(ES ファイルエクスプローラー)が、ネットワークが無いときに 1 秒間に数千行のエラーを出し続け(30 秒で約 7 万行)、**logcat のリングバッファが数十秒で入れ替わる**。接続直後のサービス一覧(`SdAAReverse`)が、ADB をつないだ時点で既に消えている恐れがある。実車では、①接続前に `adb shell am force-stop com.estrongs.android.pop`、または ②Box を車につなぐ前から `adb logcat -v threadtime -s SdAAReverse:V > car_aa.txt` を流し続ける(車内 Wi-Fi のテザリングが先に立ち上がっている場合)、のどちらかを推奨。サービス一覧が欠けたら、車との接続を一度やり直して(USB を抜き挿し)再取得する。テザリング中はネットワークがあるので、エラーの連発は止まる見込み(未確認)。
+- **対応済み(ユーザー承認、2026-11-15 16:23)**: `pm uninstall --user 0 com.estrongs.android.pop`(ユーザー 0 から削除。実体は `/vendor/priv-app/ESFileExplorer/` にあり、`/vendor` は触っていない)。削除後、ログの連発は止まった。上の①②は不要になった(念のためサービス一覧は接続直後に取る)。戻すときは `adb shell cmd package install-existing --user 0 com.estrongs.android.pop`(うまくいかなければ工場出荷時の復元か OTA)。
 
 ### 実車テストの手順(接続後 5 分で白黒をつける)
 前提: 実車の USB に Box をつなぎ、車内 Wi-Fi のテザリング経由でワイヤレス ADB(`adb connect <IP>:<ポート>`)。**`logcat -c` は実行しない**(接続直後のサービス一覧が消える)。端末の時計が再起動直後はずれていることがあるので、日付で絞らない。
