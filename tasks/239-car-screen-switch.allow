@@ -1,0 +1,20 @@
+write settings.gradle.kts
+write app/src/main/AndroidManifest.xml
+write app/src/main/java/com/gt8d/launcher/split/ActivityLauncher.kt
+write app/src/main/java/com/gt8d/launcher/split/VendorBridge.kt
+write app/src/test/java/com/gt8d/launcher/split/VendorBridgeTest.kt
+write app/src/test/java/com/gt8d/launcher/split/AndroidActivityLauncherTest.kt
+create carback/build.gradle.kts
+create carback/src/main/AndroidManifest.xml
+create carback/src/main/java/com/gt8d/launcher/carback/CarBackActivity.kt
+create carback/src/main/java/com/gt8d/launcher/carback/CarScreenSwitch.kt
+create carback/src/main/res/values/strings.xml
+create carback/src/main/res/values/themes.xml
+create carback/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+create carback/src/main/res/drawable/ic_launcher_background.xml
+create carback/src/main/res/drawable/ic_launcher_foreground.xml
+create carback/src/main/res/drawable/ic_launcher_monochrome.xml
+create carback/src/test/java/com/gt8d/launcher/carback/CarScreenSwitchTest.kt
+command /home/munde/tools/gradle-run.sh :carback:testDebugUnitTest
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.split.VendorBridgeTest' --tests 'com.gt8d.launcher.split.AndroidActivityLauncherTest'
+command /home/munde/tools/gradle-run.sh :carback:assembleDebug
