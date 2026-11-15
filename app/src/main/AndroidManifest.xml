@@ -26,6 +26,7 @@
         </intent>
         <package android:name="com.gt8d.launcher.panel" />
         <package android:name="com.sd.factoryconfig" />
+        <package android:name="com.carsyso.main" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

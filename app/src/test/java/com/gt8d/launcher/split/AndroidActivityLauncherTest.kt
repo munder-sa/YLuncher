@@ -7,7 +7,9 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageInfo
 import androidx.test.core.app.ApplicationProvider
+import com.gt8d.launcher.diag.DiagLog
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -145,5 +147,55 @@ class AndroidActivityLauncherTest {
         }
         assertFalse(start(context))
         assertEquals(1, attempts)
+    }
+
+    @Test fun isInstalled_installedPackageWithoutLauncherActivity_returnsTrue() {
+        Shadows.shadowOf(app.packageManager).installPackage(PackageInfo().apply {
+            packageName = "com.carsyso.main"
+        })
+
+        assertTrue(AndroidActivityLauncher(app).isInstalled("com.carsyso.main"))
+    }
+
+    @Test fun isInstalled_missingPackage_returnsFalse() {
+        assertFalse(AndroidActivityLauncher(app).isInstalled("com.carsyso.main"))
+    }
+
+    @Test fun sendBroadcast_sendsExpectedCarScreenBroadcast() {
+        assertTrue(AndroidActivityLauncher(app).sendBroadcast(
+            "com.suding.main.ACTION_EXECUTE_AT_CMD",
+            "com.carsyso.main",
+            mapOf("extra_at_cmd" to "AT#CB"),
+        ))
+
+        val broadcasts = Shadows.shadowOf(app).broadcastIntents
+        assertEquals(1, broadcasts.size)
+        val intent = broadcasts.single()
+        assertEquals("com.suding.main.ACTION_EXECUTE_AT_CMD", intent.action)
+        assertEquals("com.carsyso.main", intent.`package`)
+        assertEquals(setOf("extra_at_cmd"), intent.extras!!.keySet())
+        assertEquals("AT#CB", intent.getStringExtra("extra_at_cmd"))
+    }
+
+    @Test fun sendBroadcast_exception_returnsFalseAndLogsFailure() {
+        var attempts = 0
+        val context = object : ContextWrapper(app) {
+            override fun sendBroadcast(intent: Intent) {
+                attempts++
+                throw SecurityException("broadcast denied")
+            }
+        }
+        DiagLog.clearForTest()
+
+        assertFalse(AndroidActivityLauncher(context).sendBroadcast(
+            "com.suding.main.ACTION_EXECUTE_AT_CMD",
+            "com.carsyso.main",
+            mapOf("extra_at_cmd" to "AT#CB"),
+        ))
+
+        assertEquals(1, attempts)
+        assertTrue(DiagLog.dump().any {
+            it.contains("[Vendor] sendBroadcast action=com.suding.main.ACTION_EXECUTE_AT_CMD pkg=com.carsyso.main exception: SecurityException: broadcast denied")
+        })
     }
 }

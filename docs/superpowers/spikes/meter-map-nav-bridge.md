@@ -124,6 +124,13 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 
 - **案内中の実測(15:20〜15:21)**: Google マップでルート案内を開始(マップの案内通知が出ている状態)。DHU の 2 枚目のウィンドウ(`instrumentcluster` のナビ表示)は**真っ黒のまま**。GT8D のデーモンは ch 6(NavigationStatus)に**1 通も送っていない**(`ch:6` のログ 0 件)。案内音声だけは `send navi audio` で ch 4 に流れた。つまり Android Auto モードでは、案内を始めても、車へ右左折やメーター表示は一切送られない。ベンダーのナビ連携(`MapNotificationListenerService` → `AT#CW`/`AT#CX`)は無効(設定 null)のままで、これは有線 CarPlay 用の経路。
 
+## 実装(Task 239、2026-11-15)
+
+- 小アプリ `:carback`(`com.gt8d.launcher.carback`、画面なし。アイコンを押すと `AT#CB` のブロードキャストを送って閉じる)と、`VendorBridge.switchToCarScreen()` / `carHomeAvailable` を実装。
+- **通常アプリからの送信を実機で確認(15:33)**: debug APK を入れ、Activity を起動 → デーモンが `VIDEO_FOCUS_REQUEST`(NATIVE)→ `VIDEO_FOCUS_NOTIFICATION`(NATIVE)→ `MEDIA_MESSAGE_STOP`。root シェルでなくても届く。
+- テスト: carback 3 件、app の `VendorBridgeTest`・`AndroidActivityLauncherTest` 23 件、すべて成功。
+- 未実施: ユーザーによるアイコン操作での見た目・操作感の確認、release の署名・版、YLuncher 内にボタンを付けるかの判断。
+
 ## 残っている確認
 
 1. **DHU をクラスター有効で起動し直す**(DHU を終了 → USB を抜き挿し → `desktop-head-unit.exe --usb -c config\gt8d_cluster.ini`)。DHU が申告するサービスと、デーモンがどのチャネルを開くかを `SdAAReverse` の記録で読む。

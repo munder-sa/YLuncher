@@ -9,6 +9,10 @@ class VendorBridge(private val launcher: ActivityLauncher) {
         const val SPLIT_CLS = "com.sd.factoryconfig.SplitActivity"
         const val EXTRA_PACKAGES = "split_shortcur_package"   // 綴りは原文のまま
         const val EXTRA_PERCENT = "split_percent"
+        const val CAR_PKG = "com.carsyso.main"
+        const val ACTION_AT_CMD = "com.suding.main.ACTION_EXECUTE_AT_CMD"
+        const val EXTRA_AT_CMD = "extra_at_cmd"
+        const val AT_CMD_BACK = "AT#CB"
     }
 
     fun splitAvailable(): Boolean {
@@ -42,11 +46,16 @@ class VendorBridge(private val launcher: ActivityLauncher) {
     }
 
     val carHomeAvailable: Boolean
-        get() = false
+        get() {
+            val available = launcher.isInstalled(CAR_PKG)
+            DiagLog.d("Vendor", "carHomeAvailable=$available")
+            return available
+        }
 
     fun switchToCarScreen(): Boolean {
-        DiagLog.d("Vendor", "switchToCarScreen: unavailable")
-        return false
+        val sent = launcher.sendBroadcast(ACTION_AT_CMD, CAR_PKG, mapOf(EXTRA_AT_CMD to AT_CMD_BACK))
+        DiagLog.d("Vendor", "switchToCarScreen sent=$sent")
+        return sent
     }
 }
 

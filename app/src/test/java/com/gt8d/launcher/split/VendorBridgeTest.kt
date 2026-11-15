@@ -3,16 +3,22 @@ package com.gt8d.launcher.split
 import com.gt8d.launcher.config.SplitRatio
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VendorBridgeTest {
 
+    private data class BroadcastSpec(val action: String, val pkg: String, val extras: Map<String, String>)
+
     private class FakeActivityLauncher(
         var canResolveResult: Boolean = true,
         var startException: Throwable? = null,
+        var broadcastResult: Boolean = true,
     ) : ActivityLauncher {
         val resolvedQueries = mutableListOf<Pair<String, String>>()
         val startedSpecs = mutableListOf<LaunchSpec>()
+        val installed = mutableSetOf<String>()
+        val broadcasts = mutableListOf<BroadcastSpec>()
 
         override fun canResolve(pkg: String, cls: String): Boolean {
             resolvedQueries.add(pkg to cls)
@@ -27,6 +33,13 @@ class VendorBridgeTest {
         override fun startApp(pkg: String, adjacent: Boolean): Boolean = true
 
         override fun isResizeable(pkg: String): Boolean = true
+
+        override fun isInstalled(pkg: String): Boolean = pkg in installed
+
+        override fun sendBroadcast(action: String, pkg: String, extras: Map<String, String>): Boolean {
+            broadcasts.add(BroadcastSpec(action, pkg, extras))
+            return broadcastResult
+        }
     }
 
     @Test
@@ -76,12 +89,49 @@ class VendorBridgeTest {
     }
 
     @Test
-    fun carHome_unavailableByDefault() {
+    fun carHome_installed_availableAndSendsExpectedBroadcast() {
+        val launcher = FakeActivityLauncher().apply { installed.add("com.carsyso.main") }
+        val bridge = VendorBridge(launcher)
+
+        assertTrue(bridge.carHomeAvailable)
+        assertTrue(bridge.switchToCarScreen())
+        assertEquals(1, launcher.broadcasts.size)
+        assertEquals(
+            BroadcastSpec(
+                action = "com.suding.main.ACTION_EXECUTE_AT_CMD",
+                pkg = "com.carsyso.main",
+                extras = mapOf("extra_at_cmd" to "AT#CB"),
+            ),
+            launcher.broadcasts.single(),
+        )
+    }
+
+    @Test
+    fun carHome_notInstalled_unavailableButStillSendsBroadcast() {
         val launcher = FakeActivityLauncher()
         val bridge = VendorBridge(launcher)
 
         assertFalse(bridge.carHomeAvailable)
+        assertTrue(bridge.switchToCarScreen())
+        assertEquals(1, launcher.broadcasts.size)
+        assertEquals(
+            BroadcastSpec(
+                action = "com.suding.main.ACTION_EXECUTE_AT_CMD",
+                pkg = "com.carsyso.main",
+                extras = mapOf("extra_at_cmd" to "AT#CB"),
+            ),
+            launcher.broadcasts.single(),
+        )
+    }
+
+    @Test
+    fun carHome_broadcastFails_returnsFalse() {
+        val launcher = FakeActivityLauncher(broadcastResult = false).apply { installed.add("com.carsyso.main") }
+        val bridge = VendorBridge(launcher)
+
+        assertTrue(bridge.carHomeAvailable)
         assertFalse(bridge.switchToCarScreen())
+        assertEquals(1, launcher.broadcasts.size)
     }
 
     @Test

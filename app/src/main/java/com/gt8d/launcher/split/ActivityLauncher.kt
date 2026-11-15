@@ -16,6 +16,8 @@ interface ActivityLauncher {
     fun startApp(pkg: String, adjacent: Boolean): Boolean
     fun startRedirect(redirect: SplitRedirect, adjacent: Boolean): Boolean = false
     fun isResizeable(pkg: String): Boolean
+    fun isInstalled(pkg: String): Boolean = false
+    fun sendBroadcast(action: String, pkg: String, extras: Map<String, String>): Boolean = false
 }
 
 class AndroidActivityLauncher(
@@ -60,6 +62,26 @@ class AndroidActivityLauncher(
     override fun canResolve(pkg: String, cls: String): Boolean {
         val intent = Intent().setComponent(ComponentName(pkg, cls))
         return context.packageManager.resolveActivity(intent, 0) != null
+    }
+
+    override fun isInstalled(pkg: String): Boolean = try {
+        context.packageManager.getPackageInfo(pkg, 0)
+        true
+    } catch (e: Exception) {
+        DiagLog.d("Vendor", "isInstalled pkg=$pkg exception: ${e.javaClass.simpleName}: ${e.message}")
+        false
+    }
+
+    override fun sendBroadcast(action: String, pkg: String, extras: Map<String, String>): Boolean = try {
+        val intent = Intent(action).setPackage(pkg)
+        for ((key, value) in extras) {
+            intent.putExtra(key, value)
+        }
+        context.sendBroadcast(intent)
+        true
+    } catch (e: Exception) {
+        DiagLog.d("Vendor", "sendBroadcast action=$action pkg=$pkg exception: ${e.javaClass.simpleName}: ${e.message}")
+        false
     }
 
     override fun start(spec: LaunchSpec) {

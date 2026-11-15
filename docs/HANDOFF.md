@@ -4,6 +4,8 @@
 
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
 
+- **追記(Task 239)**: 「純正画面へ戻る」を小アプリ `:carback` と `VendorBridge.switchToCarScreen()` で実装済み(コミット済み・未 push)。通常アプリからの送信を実機で確認。release の署名・版・配布と、YLuncher 内のボタンは未決。詳細は spike の「実装」節。
+
 - **担当: Claude**。ユーザーの依頼(「code_artifact.md を読んで調査方針に従って調査。調査だけ」)で、方策書の Step 1〜4 を読み取りだけで実施。端末・アプリ・コードは変えていない。詳細は [記録](superpowers/spikes/meter-map-nav-bridge.md)。
 - **Android Auto モードのデーモンは、ナビのフォーカス要求を送っていない**(`Controller::sendNavFocusNotifyCmd` は呼び出し元なし。DHU 接続の記録でも 0 件)。方策書の Phase 1(プロパティで抑止)は対象が無い。フォーカス系のプロパティも無い。
 - **純正画面への切り替えは `AT#CB`**(`com.suding.main.ACTION_EXECUTE_AT_CMD`、extra `extra_at_cmd`)。デーモンが映像のフォーカスを NATIVE で要求する。AIDL の `requestSwitchOriginalMpu` は実体が空。試し撃ちは未実施(ユーザーの了承待ち)。
