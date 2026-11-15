@@ -1,6 +1,16 @@
 # YLuncher 共有引き継ぎ
 
-最終更新: 2026-11-08 (JST)
+最終更新: 2026-11-15 (JST)
+
+## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
+
+- **担当: Claude**。ユーザーの依頼(「code_artifact.md を読んで調査方針に従って調査。調査だけ」)で、方策書の Step 1〜4 を読み取りだけで実施。端末・アプリ・コードは変えていない。詳細は [記録](superpowers/spikes/meter-map-nav-bridge.md)。
+- **Android Auto モードのデーモンは、ナビのフォーカス要求を送っていない**(`Controller::sendNavFocusNotifyCmd` は呼び出し元なし。DHU 接続の記録でも 0 件)。方策書の Phase 1(プロパティで抑止)は対象が無い。フォーカス系のプロパティも無い。
+- **純正画面への切り替えは `AT#CB`**(`com.suding.main.ACTION_EXECUTE_AT_CMD`、extra `extra_at_cmd`)。デーモンが映像のフォーカスを NATIVE で要求する。AIDL の `requestSwitchOriginalMpu` は実体が空。試し撃ちは未実施(ユーザーの了承待ち)。
+- **Google マップの右左折の連携は MainAiBox に実装済み**(`MapNotificationListenerService` → `AT#CW`/`AT#CX`)だが、受けるのは有線 CarPlay のデーモンだけ。実機では無効(設定 `setting_key_send_navi_info_to_car` 未設定、通知リスナー未許可)。
+- ブラックアウトの原因は未確定。仮説は「車がメーターの地図枠を投影側のクラスター表示に渡し、GT8D が何も送らない」。
+- **次の一手**: (1) DHU を `config\gt8d_cluster.ini`(クラスター有効、作成済み)で起動し直して記録を読む (2) `AT#CB` の試し撃ち (3) 実車でのサービス一覧の記録方法を用意。
+- 解析に使ったバイナリ・APK はスクラッチ領域(リポジトリ外)。`code_artifact.md` はユーザーのファイルで未追跡のまま。
 
 ## v2.3.4: ドックのステータスを独立カードに、SIM の電波を表示 (2026-11-10)
 
