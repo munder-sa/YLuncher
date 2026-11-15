@@ -131,6 +131,8 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 - テスト: carback 3 件、app の `VendorBridgeTest`・`AndroidActivityLauncherTest` 23 件、すべて成功。
 - 未実施: ユーザーによるアイコン操作での見た目・操作感の確認、release の署名・版、YLuncher 内にボタンを付けるかの判断。
 
+- **既存の「Car」アプリ(`com.ds.backcar/.MainActivity`、プリインストール)が同じ動作**(15:40 実測): 押すと MainService の `smart_box_carplay` バインダー経由で `AT#CB` → `VIDEO_FOCUS_REQUEST`(NATIVE)→ DHU が「Video focus is off.」。つまり `:carback` は純正の「Car」と機能が重複する(経路だけ違う: 純正はバインダー、こちらはブロードキャスト)。投影への復帰は DHU の `focus video on`(車側の操作)。
+
 ## 残っている確認
 
 1. **DHU をクラスター有効で起動し直す**(DHU を終了 → USB を抜き挿し → `desktop-head-unit.exe --usb -c config\gt8d_cluster.ini`)。DHU が申告するサービスと、デーモンがどのチャネルを開くかを `SdAAReverse` の記録で読む。
