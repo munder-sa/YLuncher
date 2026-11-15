@@ -147,6 +147,53 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 - 1 回目の起動(15:06 以前の別の接続)で、TLS 確立後に `Failed to read from transport - disconnect` で終了したことがあった。やり直しで接続できた。原因は未調査(DHU の初回起動時の取りこぼしと思われるが未確認)。
 - 実車での確認事項(未実施): 接続直後の `SdAAReverse` のサービス一覧に `DISPLAY_TYPE_CLUSTER` が出るか、出た場合に GT8D が開くか。
 
+## 解決策 A の掘り下げ: `sendNavFocusNotifyCmd` で NAV フォーカスを NATIVE に送る(2026-11-15、読み取り・静的解析のみ。実機の書き換えなし)
+
+ユーザーが「UI 未設置でクローズ」を撤回し、ブラックアウトの根治を目指す方針に切り替えた。**この節は設計だけ**で、パッチ適用・`.so` の配置は、設計を見たユーザーの承認後。
+
+### 1. `Controller::sendNavFocusNotifyCmd(int)` の解析(`libSdAutoReverse.so`、sha256 先頭 f2a665a8…)
+- 場所: `0x201308`、サイズ 256。呼び出し元は**ゼロ**(未使用の関数)。
+- シグネチャ: `void Controller::sendNavFocusNotifyCmd(Controller* this /*r0*/, int type /*r1*/)`。
+- 中身(抜粋):
+  ```
+  00201332 ldr  r0,[sp,#0x2c] ; 00201334 cmp r6,#0 ; 0020133a orr r0,r0,#1 ; str r0,[sp,#0x2c]   ; has_bits に focus_type を立てる
+  00201340 mov.w r0,#2 ; 00201348 it eq ; moveq r0,#1 ; 0020134c str r0,[sp,#0x34]       ; focus_type = (type==0) ? 1 : 2
+  002013a2 ldr r0,[r4,#8] ; 002013a8 movs r1,#0xd ; 002013aa blx MessageRouter::marshallProto(ushort,Message const&,IoBuffer*)
+  002013ae ldrh r1,[r4,#4] ; 002013b0 tst.w r1,#0xff ; 002013b4 beq → 送らずに片付け
+  002013b6 ldr r0,[r4,#8] ; 002013b8 lsrs r1,r1,#8 ; ... ; 002013c6 ldr r6,[r5,#8] ; blx r6   ; ルーターの送信(仮想関数)
+  ```
+- 組み立てるメッセージ: `NavFocusRequestNotification`(`MESSAGE_NAV_FOCUS_REQUEST`、メッセージ ID **13**)。フィールドは `focus_type`(`NavFocusType`)1 つ。
+- 引数の意味: **`type == 0` なら `NAV_FOCUS_NATIVE`(1)、0 以外なら `NAV_FOCUS_PROJECTED`(2)**。つまり NATIVE を送るには第 2 引数に **0** を渡す。
+- 送信先チャネル: `Controller` の `[this+5]`(1 バイト。コンストラクタで 0 初期化、`handleVersionResponse` で設定。ログの `ch:%d` に出る。制御チャネル= 0)。**`[this+4]` の下位バイトが 0 のとき(バージョン交渉の前)は送らずに黙って戻る**。
+- 前提条件: 制御チャネルの確立後(バージョン応答を処理済み)ならいつでも送れる。`ServiceDiscoveryResponse` でナビ関連のサービスが申告されたかどうかは**見ていない**(`sendAudioFocusRequest` と同じ作りで、同じ前提)。同じ前提で `sendAudioFocusRequest` が接続直後に実際に動いている(ログ `Controller::sendAudioFocusRequest finished`)。
+- 関連: `Controller::setNavigationFocus(NavFocusType)`(`0x200b70`)は逆向きの `NavFocusNotification`(ID 14)を作る側で、`sendNavFocusNotifyCmd` の末尾と `sendVoiceSessionCmd` からだけ呼ばれる。受信側の `handleNavFocus…` は見つからず、**GT8D は車からの NAV フォーカス通知を処理していない**(接続中のログにも `NAV_FOCUS` は 0 件)。
+- `Controller*` の取り方(ライブラリ内の確立した慣習): `auto_reverse_audio_start` などと同じく、グローバルハンドル(GOT 経由 `0x802d60`)を `g` として **`Controller* c = *(*(g+0xc)+0x9c) + 0xd30`**。他に `*(g+0xc)+0x3c` = `VideoSink`、`+0x74` = `MediaPlaybackStatusEndpoint`。
+- 参考: `auto_reverse_back_home`(`0x1fa4d0`、28 バイト)は `g` が null でなければ `VideoSink::setFakeVideoFocus(sink, 2, 0)` を末尾呼び出しして戻る。
+
+### 2. 外部トリガーとフックの比較
+- **コマンド受信の経路**: `AT#CB` は `sdAutoReverse` の AT ディスパッチ(`0x549c` から、`sub_2368` が入力バッファ `0x1e061` と `AT#CA`・`AT#CB`・… を順に照合)→ `sub_7440`(`carplay_back_home:H264_start=%d iconVisible=%d` を記録、`H264_start == 1` のときだけ)→ `sub_145f8` → `auto_reverse_back_home`。AT コマンドで未使用なのは `AT#CH`・`CI`・`CJ`・`CT`〜`CX`・`CZ`(`CW`・`CX` は有線 CarPlay 用で AA のデーモンには無い)。新しい AT を足すには、`sdAutoReverse` の照合の連なりへの追加が要り、**ライブラリ内のフックより大がかり**。
+- 起動の構造: `init.rc`(`/system/etc/init/hw/init.rc:1568`)の `service sd-reverse /system/bin/sd-reverse.sh`(`user root`、`seclabel u:r:init:s0`)が、スクリプトの最後で `$EXE_PATH/sdAutoReverse -c $CHANNEL` を起動する(`cp_aa == 2000` のとき)。`sdAutoReverse` は `libSdAutoReverse.so` を `NEEDED` で読み込む。SELinux は **Permissive**。`/system`・`/system_ext`・`/vendor` は **ro**(`ro.boot.verifiedbootstate=orange`、`ro.boot.vbmeta.device_state=unlocked`、`ro.boot.veritymode=enforcing`)。
+- 実装の整合性検査: 両バイナリに自己検査の文字列は無い(MD5/SHA 等は BoringSSL のもの)。
+- コードの空き: `.text` 内の 0 埋め・nop の連続は **65 バイト**(ファイルオフセット 6233472)と 20 バイトの 2 か所だけ。小さなスタブ(約 30〜40 バイト)なら入るが、余裕は少ない。
+- 比較:
+  | 方式 | 書き換え対象 | 利点 | 欠点・リスク |
+  |---|---|---|---|
+  | **A1: `LD_PRELOAD` のフック `.so`** | `sd-reverse.sh` の 1 行(`LD_PRELOAD=… sdAutoReverse`)。`.so` 自体は `/data` に置ける | ライブラリ本体は無傷。戻すのはスクリプト 1 行 | **`/system` の書き込みが要る**(init.rc も `sd-reverse.sh` も `/system`)。NDK でのビルドが要る。非公開のメンバ関数の `Controller*` は、`sendAudioFocusRequest` の PLT 呼び出しを横取りすれば `this` が取れる(接続直後に 1 回呼ばれる。`handleServiceDiscoveryResponse`)。 |
+  | **A2: バイナリパッチ** | `libSdAutoReverse.so` の数バイト + 65 バイトの空きにスタブ | NDK 不要、追加ファイル無し | `/system` の書き込みが要る。8 MB のライブラリの差し替えで、**戻すには元のファイル(sha256 f2a665a8…)の控えが必須**。OTA で元に戻る。 |
+  | **A0: 実行中のプロセスへ一時的に呼び出す(ptrace)** | 何も書き換えない(再起動で消える) | **ファイルを変えずに効果を確かめられる**。`sendNavFocusNotifyCmd(c, 0)` を 1 回呼ぶだけ | 小さなルートのヘルパーが要る(NDK ビルド)。これは**パッチではなく実験**なので、先にこれで効果を見るのが安全。 |
+- 起動直後の自動送出(第二候補)のフック箇所: `Controller::handleServiceDiscoveryResponse`(`0x200378` から `sendAudioFocusRequest` を呼ぶ)の直後、または `VIDEO_FOCUS_PROJECTED` を受けた直後。A1 なら `sendAudioFocusRequest` の PLT 横取りが最も確実(`this` を持つ)。AT#CB への相乗り(`auto_reverse_back_home` の差し替え)は、「純正画面へ」の動作に NAV の NATIVE が追加されるだけなので、メーターの黒を直す目的とは別物になる。
+
+### 3. DHU の事前実測(`gt8d_cluster.ini`、無改造のベースライン)
+- クラスター用のウィンドウ(「Instrument cluster」)は**開き、黒いまま**。Google マップで案内を開始しても黒のまま(GT8D から ch 6 への送信が無いため)。
+- DHU のコンソールに、`focus audio` / `focus nav` / `focus video`(`focus video on` は復帰で確認済み)に当たる文字列がある(`exe` の文字列に `focus au`・`focus na`・`focus vi` の断片、`focus video toggle`、`Ignoring nav focus request while locked.`)。**`focus nav` の使い方と動作は、コンソールでの実測がまだ**(`help` の出力が必要。ユーザーの手元の DHU コンソールでの確認待ち)。
+- 接続中の GT8D のログに `NAV_FOCUS` は 0 件。GT8D は NAV フォーカスを一度も要求していない。
+
+### 判断と注意点(重要)
+- **この方策が効く保証はない**。ブラックアウトの原因が「車が NAV フォーカスを投影に渡している」ことだという証拠は、まだ無い。GT8D は NAV フォーカスを一度も要求しておらず、車の既定は NATIVE と考えられるため、**NATIVE を送っても何も変わらない可能性が高い**。メーター内の地図枠を投影側に渡している仮説(クラスター用の表示)は、NAV フォーカスとは別の仕組み。
+- 先に実車でサービス一覧(`DISPLAY_TYPE_CLUSTER`・`NavigationStatusService` の有無)と、接続直後に車が NAV フォーカスの通知を送ってくるかを記録するのが、最も安い判定材料。
+- 実機を書き換える前に、**A0(実行中のプロセスへの一時的な呼び出し)で効果を確かめる**ことを勧める。パッチは、効果が確認できてから。
+- どの方式も、戻すための控え(`/system/lib/libSdAutoReverse.so`、`/system/bin/sd-reverse.sh`、`/system/bin/sdAutoReverse` の sha256 と実体)を先に `adb pull` しておく。控えは `pull/` に既にある(同期日 2026-11-15)。
+
 ## 残っている確認
 
 1. **DHU をクラスター有効で起動し直す**(DHU を終了 → USB を抜き挿し → `desktop-head-unit.exe --usb -c config\gt8d_cluster.ini`)。DHU が申告するサービスと、デーモンがどのチャネルを開くかを `SdAAReverse` の記録で読む。

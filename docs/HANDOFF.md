@@ -4,6 +4,8 @@
 
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
 
+- **【クローズ撤回 → 解決策 A の掘り下げ(設計のみ、ユーザー指示)】** `Controller::sendNavFocusNotifyCmd(int)`(`0x201308`、呼び出し元なし)は ID 13 の `NavFocusRequestNotification` を作り、**引数 0 で `NAV_FOCUS_NATIVE`(1)、0 以外で `PROJECTED`(2)**。`Controller* = *(*(g+0xc)+0x9c)+0xd30`。`[this+4]` 下位バイトが 0(バージョン交渉前)だと黙って戻る。ナビのサービス申告は見ていない。フック方式は spike の「解決策 A の掘り下げ」に比較表(A0 実行中の一時呼び出し / A1 `LD_PRELOAD` / A2 バイナリパッチ)。**実機は書き換えていない**。**効く保証は無い**(GT8D は NAV フォーカスを一度も要求しておらず、NATIVE を送っても変わらない可能性が高い)。実機の書き換えは、ユーザーの承認後。先に実車のサービス一覧の記録と、A0 での効果確認を勧める。DHU の `focus nav` の実測は、コンソールでの確認待ち。
+
 - **【クローズ】(2026-11-15、ユーザー指示)**: UI 未設置(純正画面への復帰は Dock の「Car」= `com.ds.backcar` で運用)。`VendorBridge.switchToCarScreen()` / `carHomeAvailable` は内部 API として保持(テスト済み、将来のカーテン等からの直接復帰用)。**有線 AA モード(`cp_aa=2000`)を実車持ち込みの基本方針**とする。DHU のクラスター設定での実測は、クラスター用シンクが申告されなかったため「無視する」ところまでは未確認(クラッシュ・異常なし)。未確認事項は実車でのサービス一覧の記録(spike の「クローズ記録」)。
 
 - **追記(Task 239)**: `VendorBridge.switchToCarScreen()` / `carHomeAvailable` を実装済み(コミット済み・未 push、呼び出し元は未設置)。通常アプリからの `AT#CB` 送信を実機で確認。小アプリ `:carback` は、プリインストールの「Car」(`com.ds.backcar`)と重複するため削除した。YLuncher 内のボタンは未決。詳細は spike の「実装」節。
