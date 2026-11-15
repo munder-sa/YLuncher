@@ -42,9 +42,9 @@ public final class MainActivity extends Activity {
     private static volatile boolean busy;
     private static volatile boolean rootChecked;
     private static volatile boolean rootAvailable;
-    private static volatile String rootStatus = "root: checking...";
+    private static volatile String rootStatus = "adb: checking...";
     private static volatile String sessionPath;
-    private static volatile String resultText = "Checking root...";
+    private static volatile String resultText = "Checking adb...";
     private static long lastFileTime;
 
     private final List<Button> buttons = new ArrayList<>();
@@ -111,7 +111,7 @@ public final class MainActivity extends Activity {
         current = new WeakReference<>(this);
         render();
         if (!rootChecked && !busy) {
-            startOperation("Checking root", MainActivity::checkRoot);
+            startOperation("Checking adb", MainActivity::checkRoot);
         }
     }
 
@@ -222,11 +222,15 @@ public final class MainActivity extends Activity {
     }
 
     private static void checkRoot() {
-        RootShell.Result result = RootShell.run("id", COMMAND_TIMEOUT_MS);
-        rootAvailable = result.ok;
+        AdbClient.Result result = AdbClient.run("id", COMMAND_TIMEOUT_MS);
+        rootAvailable = result.ok && result.stdout.contains("uid=0");
         rootChecked = true;
-        rootStatus = result.ok ? "root: OK (uid=0 via " + result.via + ")"
-                : "root: NO (" + result.stdout.trim().replace('\n', ' ') + ")";
+        String reason = result.stdout.trim().replace('\n', ' ');
+        if (result.ok && !rootAvailable) {
+            reason = "uid=0 not found: " + reason;
+        }
+        rootStatus = rootAvailable ? "adb: OK (uid=0 @127.0.0.1:5555)"
+                : "adb: NO (" + reason + ")";
         show(describe("id", result));
     }
 
@@ -240,10 +244,11 @@ public final class MainActivity extends Activity {
             String name = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
                     .format(new Date(lastFileTime));
             String path = "/sdcard/Download/rav4_probe_" + name + ".log";
-            String quoted = RootShell.quote(path);
-            RootShell.Result result = RootShell.run("mkdir -p /sdcard/Download && "
-                    + "if [ -e " + quoted + " ]; then exit 73; else "
-                    + "(set -C; printf '%s\\n' " + RootShell.quote(header) + " > " + quoted
+            String quoted = AdbClient.quote(path);
+            // Keep the outer shell alive so AdbClient can collect the collision exit code.
+            AdbClient.Result result = AdbClient.run("mkdir -p /sdcard/Download && "
+                    + "if [ -e " + quoted + " ]; then (exit 73); else "
+                    + "(set -C; printf '%s\\n' " + AdbClient.quote(header) + " > " + quoted
                     + "); fi", COMMAND_TIMEOUT_MS);
             if (result.ok) {
                 sessionPath = path;
@@ -263,20 +268,20 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private static RootShell.Result appendLog(String label, String text) {
+    private static AdbClient.Result appendLog(String label, String text) {
         String entry = "\n=== " + timestamp() + " | " + label + " ===\n" + text + "\n";
-        return RootShell.run("printf '%s\\n' " + RootShell.quote(entry) + " >> "
-                + RootShell.quote(sessionPath), COMMAND_TIMEOUT_MS);
+        return AdbClient.run("printf '%s\\n' " + AdbClient.quote(entry) + " >> "
+                + AdbClient.quote(sessionPath), COMMAND_TIMEOUT_MS);
     }
 
-    private static String describe(String label, RootShell.Result result) {
+    private static String describe(String label, AdbClient.Result result) {
         return label + ": " + (result.ok ? "OK" : "FAILED")
                 + " (exit=" + result.exitCode + ", via " + result.via + ")\n"
                 + result.stdout.trim();
     }
 
     private static void saveBootLog() throws IOException {
-        RootShell.Result filtered = RootShell.run("exec " + FILTERED_LOG, LOG_TIMEOUT_MS);
+        AdbClient.Result filtered = AdbClient.run(FILTERED_LOG, LOG_TIMEOUT_MS);
         ServiceSummary summary = ServiceSummary.parse(filtered.ok ? filtered.stdout : "");
         String header = summary.toText() + "\nSaved: " + timestamp();
         if (!filtered.ok) {
@@ -284,9 +289,9 @@ public final class MainActivity extends Activity {
         }
         newSession(header + "\n\n=== Full logcat (-b all) ===");
         // The full log never travels through the app's stdout or heap.
-        RootShell.Result saved = RootShell.run("exec logcat -d -v threadtime -b all >> "
-                + RootShell.quote(sessionPath), LOG_TIMEOUT_MS);
-        RootShell.Result size = RootShell.run("exec wc -c < " + RootShell.quote(sessionPath),
+        AdbClient.Result saved = AdbClient.run("logcat -d -v threadtime -b all >> "
+                + AdbClient.quote(sessionPath), LOG_TIMEOUT_MS);
+        AdbClient.Result size = AdbClient.run("wc -c < " + AdbClient.quote(sessionPath),
                 COMMAND_TIMEOUT_MS);
         String text = "Save: " + (filtered.ok && saved.ok && size.ok ? "OK" : "FAILED")
                 + "\n" + sessionPath + "\nSize: "
@@ -305,14 +310,14 @@ public final class MainActivity extends Activity {
         ensureSession();
         String command = "/data/local/tmp/a0call " + arguments;
         String started = timestamp();
-        RootShell.Result run = RootShell.run("exec " + command, COMMAND_TIMEOUT_MS);
+        AdbClient.Result run = AdbClient.run(command, COMMAND_TIMEOUT_MS);
         String text = started + "\n" + describe(command, run);
         if (includeFocus) {
-            RootShell.Result log = RootShell.run("exec " + FILTERED_LOG, LOG_TIMEOUT_MS);
+            AdbClient.Result log = AdbClient.run(FILTERED_LOG, LOG_TIMEOUT_MS);
             text += "\n\nLatest NAV_FOCUS log (may include earlier actions):\n";
             text += log.ok ? lastFocusLines(log.stdout) : describe("Focus log", log);
         }
-        RootShell.Result appended = appendLog("a0call " + arguments, text);
+        AdbClient.Result appended = appendLog("a0call " + arguments, text);
         show(text + "\n\nSession: " + sessionPath + "\n"
                 + describe("Append log", appended));
     }
@@ -346,15 +351,14 @@ public final class MainActivity extends Activity {
         String[] commands = {
                 "setprop persist.adb.tcp.port \"\"",
                 "settings put global adb_wifi_enabled 0",
-                "settings put global adb_enabled 0",
-                "setprop ctl.stop adbd"
+                "settings put global adb_enabled 0"
         };
         StringBuilder text = new StringBuilder("Finish & Disable ADB\nSession: ")
                 .append(sessionPath).append('\n');
         boolean allOk = true;
         for (String command : commands) {
             String pending = command + ": RUNNING (result follows)";
-            RootShell.Result before = appendLog("Before ADB command", pending);
+            AdbClient.Result before = appendLog("Before ADB command", pending);
             if (!before.ok) {
                 show(text + "\n" + describe("Append log", before)
                         + "\n記録できないため、残りの ADB 操作を中止しました。");
@@ -362,11 +366,11 @@ public final class MainActivity extends Activity {
             }
             // Apply earlier results and the next command to the UI before any ADB change.
             showBeforeAdbCommand(text + "\n" + pending);
-            RootShell.Result result = RootShell.run("exec " + command, COMMAND_TIMEOUT_MS);
+            AdbClient.Result result = AdbClient.run(command, COMMAND_TIMEOUT_MS);
             allOk &= result.ok;
             String line = describe(command, result);
             text.append('\n').append(line).append('\n');
-            RootShell.Result recorded = appendLog("ADB command result", line);
+            AdbClient.Result recorded = appendLog("ADB command result", line);
             if (!recorded.ok) {
                 show(text + "\n" + describe("Append log", recorded)
                         + "\n記録できないため、残りの ADB 操作を中止しました。");
@@ -374,14 +378,24 @@ public final class MainActivity extends Activity {
             }
             show(text.toString());
         }
-        String completion = allOk ? "ADB OFF 完了。通常モードです"
-                : "ADB OFF 未完了。失敗したコマンドを確認してください。";
-        text.append('\n').append(completion);
-        RootShell.Result recorded = appendLog("Finish", completion);
+        String completion = allOk ? "ADB OFF 設定完了。adbd の停止を要求します。"
+                : "ADB OFF 設定に失敗があります。adbd の停止を要求します。";
+        String stopCommand = "setprop ctl.stop adbd";
+        String pending = stopCommand + ": 送信予定（接続切断時の停止結果は未確認）";
+        text.append('\n').append(completion).append('\n').append(pending);
+        AdbClient.Result recorded = appendLog("Finish", completion + "\n" + pending);
         if (!recorded.ok) {
-            text.append('\n').append(describe("Append log", recorded));
+            show(text + "\n" + describe("Append log", recorded)
+                    + "\n記録できないため、残りの ADB 操作を中止しました。");
+            return;
         }
-        show(text.toString());
+        // The final stop severs our own transport. Finish all file writes before sending it.
+        showBeforeAdbCommand(text.toString());
+        AdbClient.Result stopped = AdbClient.run(stopCommand, COMMAND_TIMEOUT_MS);
+        rootAvailable = false;
+        rootStatus = "adb: NO (停止操作後。疎通未確認)";
+        show(text + "\n\n停止コマンドの応答:\n" + describe(stopCommand, stopped)
+                + "\n接続切断だけでは停止完了を判定できません。");
     }
 
     private static void showBeforeAdbCommand(String text) throws Exception {
