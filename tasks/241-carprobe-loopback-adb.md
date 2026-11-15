@@ -27,7 +27,7 @@
 パッケージ `com.gt8d.carprobe`。Android に依存するのはソケットだけ。UI スレッドから呼ばない前提は従来どおり。
 
 ### 定数(リトルエンディアンの u32)
-- コマンド: `A_CNXN=0x4e584e43`、`A_OPEN=0x4e45504f`、`A_OKAY=0x4f4b4159`、`A_CLSE=0x434c5345`、`A_WRTE=0x45545257`、`A_AUTH=0x48545541`
+- コマンド(4 文字をワイヤ上で ASCII 順に並べる=リトルエンディアンの u32): `A_CNXN=0x4e584e43`、`A_OPEN=0x4e45504f`、`A_OKAY=0x59414b4f`、`A_CLSE=0x45534c43`、`A_WRTE=0x45545257`、`A_AUTH=0x48545541`(例: `OKAY` はバイト列 `4f 4b 41 59` なので LE u32 は `0x59414b4f`)
 - 接続先 `HOST="127.0.0.1"`、`PORT=5555`
 - CNXN の version=`0x01000001`、maxdata=`0x40000`(256KiB)、system-identity ペイロードは `"host::\0"`(末尾 NUL 1 バイトを含むバイト列)
 
