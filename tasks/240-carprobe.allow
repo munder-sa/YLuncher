@@ -1,0 +1,9 @@
+create tools/carprobe/settings.gradle.kts
+create tools/carprobe/build.gradle.kts
+create tools/carprobe/src/main/AndroidManifest.xml
+create tools/carprobe/src/main/java/com/gt8d/carprobe/MainActivity.java
+create tools/carprobe/src/main/java/com/gt8d/carprobe/RootShell.java
+create tools/carprobe/src/main/java/com/gt8d/carprobe/ServiceSummary.java
+create tools/carprobe/src/test/java/com/gt8d/carprobe/ServiceSummaryTest.java
+command /home/munde/tools/gradle-run.sh --offline -p tools/carprobe -Pandroid.useAndroidX=true testDebugUnitTest
+command /home/munde/tools/gradle-run.sh --offline -p tools/carprobe -Pandroid.useAndroidX=true assembleDebug
