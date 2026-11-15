@@ -348,57 +348,33 @@ public final class MainActivity extends Activity {
 
     private static void finishAdb() throws Exception {
         ensureSession();
-        String[] commands = {
-                // Clear the abstract-socket transport so adbd does not reopen @gt8d-ipv6-guard
-                // if it is restarted; the final ctl.stop adbd then stops the daemon itself.
-                "setprop service.adb.listen_addrs \"\"",
-                "settings put global adb_wifi_enabled 0",
-                "settings put global adb_enabled 0"
-        };
+        String notice = "注意: GT8D-IPv6-Guard の自動適用が有効な場合、その起動時・15分周期ジョブ・アプリ起動時に adbd と gt8d-ipv6-guard ソケットが再起動され、ADB は再び有効になります。完全に止めるには GT8D-IPv6-Guard で「自動適用を停止」してください。";
         StringBuilder text = new StringBuilder("Finish & Disable ADB\nSession: ")
                 .append(sessionPath).append('\n');
-        boolean allOk = true;
-        for (String command : commands) {
-            String pending = command + ": RUNNING (result follows)";
-            AdbClient.Result before = appendLog("Before ADB command", pending);
-            if (!before.ok) {
-                show(text + "\n" + describe("Append log", before)
-                        + "\n記録できないため、残りの ADB 操作を中止しました。");
-                return;
-            }
-            // Apply earlier results and the next command to the UI before any ADB change.
-            showBeforeAdbCommand(text + "\n" + pending);
-            AdbClient.Result result = AdbClient.run(command, COMMAND_TIMEOUT_MS);
-            allOk &= result.ok;
-            String line = describe(command, result);
-            text.append('\n').append(line).append('\n');
-            AdbClient.Result recorded = appendLog("ADB command result", line);
-            if (!recorded.ok) {
-                show(text + "\n" + describe("Append log", recorded)
-                        + "\n記録できないため、残りの ADB 操作を中止しました。");
-                return;
-            }
-            show(text.toString());
-        }
-        String completion = allOk ? "ADB OFF 設定完了。adbd の停止を要求します。"
-                : "ADB OFF 設定に失敗があります。adbd の停止を要求します。";
-        String stopCommand = "setprop ctl.stop adbd";
-        String pending = stopCommand + ": 送信予定（接続切断時の停止結果は未確認）";
-        String notice = "注意: GT8D-IPv6-Guard の自動適用が有効な場合、その起動時・15分周期ジョブ・アプリ起動時に adbd と gt8d-ipv6-guard ソケットが再起動され、ADB は再び有効になります。完全に止めるには GT8D-IPv6-Guard で「自動適用を停止」してください。";
-        text.append('\n').append(completion).append('\n').append(pending);
-        AdbClient.Result recorded = appendLog("Finish", completion + "\n" + pending + "\n" + notice);
-        if (!recorded.ok) {
-            show(text + "\n" + describe("Append log", recorded)
-                    + "\n記録できないため、残りの ADB 操作を中止しました。");
-            return;
-        }
-        // The final stop severs our own transport. Finish all file writes before sending it.
+        // (1) Root-only settings go through the adbd shell. Confirmed on this device: neither
+        // adb_wifi_enabled=0 nor adb_enabled=0 stops adbd or closes @gt8d-ipv6-guard, so the
+        // transport stays alive for this step (one round-trip).
+        String settingsCommand = "settings put global adb_wifi_enabled 0; "
+                + "settings put global adb_enabled 0";
+        showBeforeAdbCommand(text + "\n" + settingsCommand + ": RUNNING");
+        AdbClient.Result settings = AdbClient.run(settingsCommand, COMMAND_TIMEOUT_MS);
+        text.append('\n').append(describe(settingsCommand, settings)).append('\n');
+        appendLog("Finish settings", describe(settingsCommand, settings) + "\n" + notice);
         showBeforeAdbCommand(text.toString());
-        AdbClient.Result stopped = AdbClient.run(stopCommand, COMMAND_TIMEOUT_MS);
+        // (2) setprop is callable directly from the app (same as Bootstrap). Run these app-side,
+        // NOT through the adbd shell, so tearing down adbd never surfaces as an EOFException.
+        // Clear the transport first, then stop the daemon.
+        AdbClient.Result cleared = AdbClient.setPropertyLocal("service.adb.listen_addrs", "");
+        AdbClient.Result stopped = AdbClient.setPropertyLocal("ctl.stop", "adbd");
         rootAvailable = false;
-        rootStatus = "adb: NO (停止操作後。疎通未確認)";
-        show(text + "\n\n停止コマンドの応答:\n" + describe(stopCommand, stopped)
-                + "\n接続切断だけでは停止完了を判定できません。\n" + notice);
+        rootStatus = "adb: NO (停止済み)";
+        boolean ok = settings.ok && cleared.ok && stopped.ok;
+        text.append('\n').append(describe("setprop service.adb.listen_addrs \"\" (app)", cleared))
+                .append('\n').append(describe("setprop ctl.stop adbd (app)", stopped)).append('\n')
+                .append('\n').append(ok ? "ADB OFF 完了。通常モードです。"
+                        : "ADB OFF に一部失敗があります。応答を確認してください。")
+                .append('\n').append(notice);
+        show(text.toString());
     }
 
     private static void showBeforeAdbCommand(String text) throws Exception {

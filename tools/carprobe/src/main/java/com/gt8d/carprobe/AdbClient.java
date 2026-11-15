@@ -294,6 +294,41 @@ public final class AdbClient {
         }
     }
 
+    /**
+     * Set a property directly from the app (same mechanism as the bootstrap), returning the
+     * outcome instead of throwing. Use this for commands that would sever the adbd shell —
+     * {@code service.adb.listen_addrs} and {@code ctl.stop adbd} — so stopping adbd never
+     * surfaces as an EOFException on the transport we are tearing down.
+     */
+    public static Result setPropertyLocal(String key, String value) {
+        Process process = null;
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try {
+            process = new ProcessBuilder("/system/bin/setprop", key, value)
+                    .redirectErrorStream(true).start();
+            process.getOutputStream().close();
+            InputStream input = process.getInputStream();
+            byte[] buffer = new byte[512];
+            int length;
+            while ((length = input.read(buffer)) >= 0) {
+                output.write(buffer, 0, length);
+            }
+            if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                return new Result(124, "setprop timed out: " + key, "setprop(app)");
+            }
+            return new Result(process.exitValue(), utf8(output), "setprop(app)");
+        } catch (IOException | SecurityException e) {
+            return new Result(-1, utf8(output) + "\n" + e, "setprop(app)");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new Result(-1, utf8(output) + "\nInterrupted", "setprop(app)");
+        } finally {
+            if (process != null) {
+                process.destroy();
+            }
+        }
+    }
+
     private static void send(OutputStream output, int command, int arg0, int arg1,
             byte[] payload) throws IOException {
         checkInterrupted();
