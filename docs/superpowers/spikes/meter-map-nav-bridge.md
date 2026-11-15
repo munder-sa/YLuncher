@@ -248,3 +248,24 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 | Phase 2: フォーカス解放の能動送信 | **不可**。送る API が外に出ていない(関数は未使用のまま) |
 | Phase 3: 右左折の連携 | Android Auto モードでは**不可**(デーモンに送信処理なし)。有線 CarPlay モードなら、純正の仕組みを有効にするだけで動く可能性がある(設定 + 通知リスナーの許可。車側の対応も必要)。YLuncher で作り直す必要は薄い |
 | ブラックアウトの根治 | 原因の確定待ち(上の 1・3)。クラスター表示が原因なら、Box 側でそのサービスに応じない・または中身を送る改修が要り、非 root のアプリからは届かない見込み |
+
+## carprobe(DHU 画面用の検証アプリ)— loopback ADB 方式(Task 241、2026-11-15)
+
+実車で、GT8D の画面だけ(PC・外部 ADB なし)でログ保存と `a0call` 実行を行う独立 APK `tools/carprobe`(`com.gt8d.carprobe`)。YLuncher 本体には触れない。
+
+### 方式の変更(なぜ loopback ADB か)
+- 当初(Task 240)は `/system/xbin/sdsu_no 0 sh -c …` で root シェルを取る方式。実機で、通常アプリ UID からの `sdsu_no`/`su` は **SELinux の su ドメインで拒否**され使えないと確定。
+- 代わりに、この開発機の開発者 ADB(`ro.adb.secure=0`・`getenforce=Permissive`・adbd は root)に対し、**端末内 loopback `127.0.0.1:5555` へ TCP 接続し、標準 ADB プロトコルで認証なしにシェルを開く最小クライアント `AdbClient`** に差し替えた。`CNXN`(認証なしなので AUTH を要求されず CNXN が返る)→ `OPEN "shell:<cmd>\0"` → `WRTE`/`OKAY` で出力受領 → `CLSE`。
+- ADB コマンド定数はリトルエンディアンの u32(例 `OKAY` はバイト列 `4f 4b 41 59` なので `0x59414b4f`)。`shell:` v1 は終了コードを返さないので、コマンド末尾に `echo __CARPROBE_EXIT__$?` を付けて最後のマーカー行から回収する。大きな出力(`logcat -b all`)はシェル側で `>> /sdcard/Download/…` にリダイレクトし、ソケットにはマーカーしか流さない。
+- `INTERNET` 権限が必要(loopback でも TCP ソケットには要る)。それ以外の権限は付けない。`RootShell.java` は削除。
+
+### 実機で分かった必須条件(本番条件)
+- **`adb_wifi_enabled=1`(ワイヤレスデバッグ=TLS)の間、adbd は TLS ポートだけを開き `persist.adb.tcp.port 5555` を無視する**。アプリが使う 5555 は開かない。
+- 5555 を開くには **クラシック ADB モード**にする(1 回のシェルで): `settings put global adb_wifi_enabled 0; setprop service.adb.tcp.port 5555`(`persist.adb.tcp.port` も `5555`)`; setprop ctl.restart adbd`。実車(povo 5G 単体+ホットスポット親機、ワイヤレスデバッグ不可)でもこれが本番条件。
+- この端末の classic adbd は **5555 を loopback 限定(`127.0.0.1:5555`)でバインド**する。mDNS は `_adb._tcp` を 5555 で広告するが、**ホスト(PC)からは 5555 へ繋がらない**(ネットワークに晒されない=安全)。端末内 `127.0.0.1:5555` は開なのでアプリは動く。クラシック 5555 に切り替えると、ホストのリモート adb(ネットワーク/USB)は全て不通になり、以後は DHU 画面での操作になる。ホスト adb を戻すには端末側でワイヤレスデバッグを再有効化する。
+
+### 検証の記録(2026-11-15)
+- 単体テスト `testDebugUnitTest` 12件成功(`AdbMessageTest` 8:エンコードのバイト列・crc・往復・bad magic 等 + `ServiceSummaryTest` 4)。`assembleDebug` 成功。APK を実機へ `install -r`、`INTERNET` 付与確認。コミット `6e38286`(未 push)。
+- **負の経路(確認済み)**: 5555 未開放の状態でアプリを起動すると、ステータス `adb: NO (… port 5555 … ECONNREFUSED)`、結果枠 `id: FAILED (exit=-1, via 127.0.0.1:5555)`、全ボタン無効。UI(横向き・大ボタン・ステータス行・結果枠)は正常描画。画面 `/tmp/.../carprobe-241-loopback-closed.png`。
+- **正の経路(DHU 画面での確認待ち)**: ユーザー承認でクラシック 5555(loopback 限定)へ切り替え済み。ホストから届かないため、DHU を直接タップして確認する: ステータスが `adb: OK (uid=0 @127.0.0.1:5555)` になること、`Save Boot Log & Services`・`Run a0call status`・`native`・`toggle 800/3000ms` が通ること。`Finish & Disable ADB` は実車テスト完了時にユーザーが押す(今は 5555 を開いたまま)。
+- 待ち受け状態: `adb_wifi_enabled=0`、`persist.adb.tcp.port=5555`、classic adbd が `127.0.0.1:5555` で稼働(mDNS `_adb._tcp` 5555 で確認)、carprobe 0.1.0 導入済み、`a0call` は `/data/local/tmp/a0call`。
