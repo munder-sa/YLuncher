@@ -229,7 +229,7 @@ public final class MainActivity extends Activity {
         if (result.ok && !rootAvailable) {
             reason = "uid=0 not found: " + reason;
         }
-        rootStatus = rootAvailable ? "adb: OK (uid=0 @127.0.0.1:5555)"
+        rootStatus = rootAvailable ? "adb: OK (uid=0 @localabstract:gt8d-ipv6-guard)"
                 : "adb: NO (" + reason + ")";
         show(describe("id", result));
     }
@@ -382,8 +382,9 @@ public final class MainActivity extends Activity {
                 : "ADB OFF 設定に失敗があります。adbd の停止を要求します。";
         String stopCommand = "setprop ctl.stop adbd";
         String pending = stopCommand + ": 送信予定（接続切断時の停止結果は未確認）";
+        String notice = "注意: GT8D-IPv6-Guard の自動適用が有効な場合、その起動時・15分周期ジョブ・アプリ起動時に adbd と gt8d-ipv6-guard ソケットが再起動され、ADB は再び有効になります。完全に止めるには GT8D-IPv6-Guard で「自動適用を停止」してください。";
         text.append('\n').append(completion).append('\n').append(pending);
-        AdbClient.Result recorded = appendLog("Finish", completion + "\n" + pending);
+        AdbClient.Result recorded = appendLog("Finish", completion + "\n" + pending + "\n" + notice);
         if (!recorded.ok) {
             show(text + "\n" + describe("Append log", recorded)
                     + "\n記録できないため、残りの ADB 操作を中止しました。");
@@ -395,7 +396,7 @@ public final class MainActivity extends Activity {
         rootAvailable = false;
         rootStatus = "adb: NO (停止操作後。疎通未確認)";
         show(text + "\n\n停止コマンドの応答:\n" + describe(stopCommand, stopped)
-                + "\n接続切断だけでは停止完了を判定できません。");
+                + "\n接続切断だけでは停止完了を判定できません。\n" + notice);
     }
 
     private static void showBeforeAdbCommand(String text) throws Exception {

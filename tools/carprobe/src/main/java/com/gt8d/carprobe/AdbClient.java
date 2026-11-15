@@ -1,13 +1,14 @@
 package com.gt8d.carprobe;
 
+import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
+
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -16,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** One unauthenticated loopback ADB shell per call; never call from the UI thread. */
+/** One unauthenticated device-local ADB shell per call; never call from the UI thread. */
 public final class AdbClient {
     static final int A_CNXN = 0x4e584e43;
     static final int A_OPEN = 0x4e45504f;
@@ -24,9 +25,8 @@ public final class AdbClient {
     static final int A_CLSE = 0x45534c43;
     static final int A_WRTE = 0x45545257;
     static final int A_AUTH = 0x48545541;
-    private static final String HOST = "127.0.0.1";
-    private static final int PORT = 5555;
-    private static final String VIA = HOST + ":" + PORT;
+    private static final String SOCKET_NAME = "gt8d-ipv6-guard";
+    private static final String VIA = "localabstract:" + SOCKET_NAME;
     private static final int VERSION = 0x01000001;
     private static final int MAX_DATA = 0x40000;
     private static final String EXIT_MARKER = "__CARPROBE_EXIT__";
@@ -84,7 +84,7 @@ public final class AdbClient {
         return readMessage(input, null, 0);
     }
 
-    private static Message readMessage(InputStream input, Socket socket, long deadline)
+    private static Message readMessage(InputStream input, LocalSocket socket, long deadline)
             throws IOException {
         ByteBuffer header = ByteBuffer.wrap(readFully(input, 24, socket, deadline))
                 .order(ByteOrder.LITTLE_ENDIAN);
@@ -103,7 +103,7 @@ public final class AdbClient {
         return new Message(command, arg0, arg1, readFully(input, length, socket, deadline));
     }
 
-    private static byte[] readFully(InputStream input, int length, Socket socket, long deadline)
+    private static byte[] readFully(InputStream input, int length, LocalSocket socket, long deadline)
             throws IOException {
         byte[] data = new byte[length];
         int offset = 0;
@@ -138,21 +138,32 @@ public final class AdbClient {
         if (Thread.currentThread().isInterrupted()) {
             return new Result(-1, "Interrupted", VIA);
         }
-        Socket socket = null;
+        LocalSocket socket = null;
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         boolean readingStream = false;
         try {
-            socket = new Socket();
-            socket.connect(new InetSocketAddress(HOST, PORT), timeoutMs);
+            try {
+                socket = connect();
+            } catch (IOException e) {
+                checkInterrupted();
+                setProperty("service.adb.listen_addrs", VIA);
+                setProperty("ctl.restart", "adbd");
+                output.write("[bootstrap: listen_addrs set, adbd restarted]\n"
+                        .getBytes(StandardCharsets.UTF_8));
+                if (!waitForSocket()) {
+                    return new Result(-1, utf8(output)
+                            + "端末内のADB待受(gt8d-ipv6-guard)を起動できません", VIA);
+                }
+                socket = connect();
+            }
             socket.setSoTimeout(timeoutMs);
-            socket.setTcpNoDelay(true);
             InputStream input = socket.getInputStream();
             OutputStream sink = socket.getOutputStream();
             send(sink, A_CNXN, VERSION, MAX_DATA, "host::\0".getBytes(StandardCharsets.UTF_8));
             Message handshake = readMessage(input);
             if (handshake.command == A_AUTH) {
                 return new Result(-1,
-                        "device requires ADB auth (expected ro.adb.secure=0)", VIA);
+                        utf8(output) + "device requires ADB auth (expected ro.adb.secure=0)", VIA);
             }
             if (handshake.command != A_CNXN) {
                 throw new IOException("unexpected handshake: 0x"
@@ -208,7 +219,7 @@ public final class AdbClient {
             return readingStream
                     ? new Result(124, utf8(output) + "\nTimed out after " + timeoutMs + " ms", VIA)
                     : new Result(-1, utf8(output) + "\n" + e, VIA);
-        } catch (InterruptedIOException e) {
+        } catch (InterruptedException | InterruptedIOException e) {
             Thread.currentThread().interrupt();
             return new Result(-1, utf8(output) + "\nInterrupted", VIA);
         } catch (IOException | SecurityException e) {
@@ -225,6 +236,60 @@ public final class AdbClient {
                     // Preserve the original command result if cleanup fails.
                 }
             }
+        }
+    }
+
+    private static LocalSocket connect() throws IOException {
+        LocalSocket socket = new LocalSocket();
+        try {
+            socket.connect(new LocalSocketAddress(SOCKET_NAME,
+                    LocalSocketAddress.Namespace.ABSTRACT));
+            return socket;
+        } catch (IOException | SecurityException e) {
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+                // Preserve the connection failure if cleanup also fails.
+            }
+            throw e;
+        }
+    }
+
+    private static boolean waitForSocket() throws IOException, InterruptedException {
+        for (int attempt = 0; attempt < 8; attempt++) {
+            checkInterrupted();
+            try (LocalSocket socket = connect()) {
+                return true;
+            } catch (IOException ignored) {
+                // adbd may still be restarting; only probe the transport here.
+            }
+            Thread.sleep(200);
+        }
+        return false;
+    }
+
+    private static void setProperty(String key, String value)
+            throws IOException, InterruptedException {
+        checkInterrupted();
+        Process process = new ProcessBuilder("/system/bin/setprop", key, value)
+                .redirectErrorStream(true).start();
+        try {
+            if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                throw new IOException("起動設定の変更がタイムアウトしました: " + key);
+            }
+            ByteArrayOutputStream result = new ByteArrayOutputStream();
+            try (InputStream input = process.getInputStream()) {
+                byte[] buffer = new byte[512];
+                int length;
+                while ((length = input.read(buffer)) >= 0) {
+                    result.write(buffer, 0, length);
+                }
+            }
+            if (process.exitValue() != 0) {
+                throw new IOException(key + ": " + utf8(result).trim());
+            }
+        } finally {
+            process.destroy();
         }
     }
 
