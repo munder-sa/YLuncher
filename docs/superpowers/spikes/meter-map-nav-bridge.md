@@ -114,6 +114,14 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 - 有線の送信は、車が iAP2 のメッセージ 0x5201/0x5202 に対応しているときだけ(非対応なら「msg id : 0x5201 is not supported by dev usb」で送らない)。`persist.suding.carplay.normal.routeguidance.start` も見ている。非案内時は `RouteGuidanceState` が 0 のとき `AT#CY0` を送る。
 - turn-by-turn の持ち主の切り替え(`switch dev turnbyturn` / `switch acc turnbyturn`)は、車から来たモード変更に応じる処理で、分岐の条件は未解析。
 
+## DHU クラスター設定での実測(2026-11-15 15:06 と 15:15、`gt8d_cluster.ini`)
+
+- 15:06 の接続(ini は `[display]` + `name`)と 15:15 の接続(`[display:Cluster]` + `displaytype = cluster`、DHU のウィンドウは 2 枚)で、**ServiceDiscoveryResponse の中身は同じ**だった。サービスは 1 センサー、2 映像(`display_id: 0` / `DISPLAY_TYPE_MAIN`、1920x1080)、3 入力、4・5 音声、6 `navigation_status_service`(IMAGE、100x100)、7 電話状態、8 ベンダー拡張、9 マイク。**`DISPLAY_TYPE_CLUSTER` の `media_sink_service` は無い**。
+- GT8D は ch 6(NavigationStatus)を開き、DHU が成功を返した。ただし開いたあとにナビ情報や `NAV_FOCUS` を送る記録は無い。映像は ch 2(メイン)だけで、`VIDEO_FOCUS_PROJECTED` → `MEDIA_MESSAGE_START`。クラスター用のチャネルを開く処理も、クラスター用のフォーカス要求も出ていない。
+- 結論: 静的解析(`VideoSink` は `display_id` が自分と同じサービスだけ受ける)と実測が一致。**GT8D は、車がクラスター用の映像を申告しても、開かない・要求しない見込み**。ただし、この DHU はクラスター用の映像を申告していないため、「申告されたときの挙動」は未実測。
+- DHU の ini キー(exe から復元): `[display:名前]` の節に `displaytype`(main/auxiliary/cluster)・`resolution`・`dpi`・`realdpi`・`framerate`・`decoderdepth`・`dhudecoderdepth`・`startupfocus`・`viewingdistance`・`gridspacing`・`uitheme`・`navigation`・`widgettype`・`videoconfig`・`inputmode`。2 枚目のウィンドウが何かは未確認(クラスターのナビ表示用か、追加ディスプレイか)。
+- 注意: 15:15 の接続の記録は、端末の時計が 10-21 のまま(再起動直後で時刻同期前)なので、ログ上の日付は `10-21 21:26` になっている。
+
 ## 残っている確認
 
 1. **DHU をクラスター有効で起動し直す**(DHU を終了 → USB を抜き挿し → `desktop-head-unit.exe --usb -c config\gt8d_cluster.ini`)。DHU が申告するサービスと、デーモンがどのチャネルを開くかを `SdAAReverse` の記録で読む。
