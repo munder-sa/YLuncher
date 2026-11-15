@@ -194,6 +194,38 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 - 実機を書き換える前に、**A0(実行中のプロセスへの一時的な呼び出し)で効果を確かめる**ことを勧める。パッチは、効果が確認できてから。
 - どの方式も、戻すための控え(`/system/lib/libSdAutoReverse.so`、`/system/bin/sd-reverse.sh`、`/system/bin/sdAutoReverse` の sha256 と実体)を先に `adb pull` しておく。控えは `pull/` に既にある(同期日 2026-11-15)。
 
+## A0 ツールの実証(DHU、2026-11-16 前日の 2026-11-15 16:01)と実車テスト手順
+
+### A0 ツール `tools/a0call/a0call.c`
+- 中身: root から、実行中の `sdAutoReverse` の主スレッドを `ptrace` で止め、レジスタを差し替えて `Controller::sendNavFocusNotifyCmd(int)`(`0x201308`)を 1 回呼び、元のレジスタへ戻して detach する。**ファイルシステム(`/system` を含む)は一切書き換えない**。デーモンを再起動すれば痕跡は残らない(`TracerPid` は 0 に戻る)。
+- 安全装置: 関数の先頭 8 バイトが想定(`2de9f04303af8fb0`)と違えば何もしない(別版のライブラリ)。`g`・`Controller*` が null(未接続)、`[Controller+4]` の準備フラグが 0 のときも中止。システムコール中に止めた場合は、戻すときに同じ呼び出しが再開するよう調整(`restart_syscall` 中だけは中止)。
+- モード: `status`(読み取りだけ)/ `native`(`sendNavFocusNotifyCmd(0)` = `NAV_FOCUS_NATIVE` を 1 回)/ `toggle [待機ms]`(`PROJECTED`(1)→ 待機(既定 500ms)→ `NATIVE`(0))。
+- ビルド(zig、追加インストール不要): `zig cc -target arm-linux-musleabihf -static -Os tools/a0call/a0call.c -o a0call`。実機へは `adb push a0call /data/local/tmp/a0call` + `chmod 755`(`/data` に置くだけ。2026-11-15 に配置済み)。
+
+### DHU での実証結果(16:01〜16:02)
+- `status`: `pid=1843 base=e751a000 g=ebbc9eb0 Controller=e6884c00 ready=1 channel=0`。
+- `native`: ログに `number=13 name=MESSAGE_NAV_FOCUS_REQUEST` / `focus_type: NAV_FOCUS_NATIVE`(`SdAAReverse`、ch:0)。**ID 13 の送出を GT8D 側のログで確認**。`sdAutoReverse` は落ちず(pid 変化なし)、`sd_screen: count:5 frame/s` の映像送出も続いた。
+- `toggle 800`: `PROJECTED` → 約 0.8 秒後 → `NATIVE` の順に 2 通を送出(16:02:04.19 / 16:02:04.997)。クラッシュなし、投影を維持。
+- 実行後も `status` は同じ値(`ready=1`)で、デーモンの状態は変わらない。
+- **未確認**: DHU 側が ID 13 を受け取ってどう反応したか(DHU のコンソールの出力、「Instrument cluster」ウィンドウの変化)。GT8D 側には車からの NAV_FOCUS 通知を処理する処理もログも無いため、GT8D のログでは見えない。ユーザーの手元の DHU コンソールでの確認待ち。
+
+### 実車テストの手順(接続後 5 分で白黒をつける)
+前提: 実車の USB に Box をつなぎ、車内 Wi-Fi のテザリング経由でワイヤレス ADB(`adb connect <IP>:<ポート>`)。**`logcat -c` は実行しない**(接続直後のサービス一覧が消える)。端末の時計が再起動直後はずれていることがあるので、日付で絞らない。
+
+1. **記録を丸ごと保存(最初に 1 回)**: `adb logcat -d -v threadtime -b all > car_log.txt`
+2. **車が申告したサービス一覧の抽出**(`SdAAReverse` の最後の `ServiceDiscoveryResponse` から): 
+   ```
+   adb logcat -d -v threadtime -s SdAAReverse:V | awk '/MESSAGE_SERVICE_DISCOVERY_REQUEST/{buf=""} {buf=buf $0 "\n"} END{printf "%s",buf}' | grep -E "services \{|  id: |media_sink_service|navigation_status|display_type|display_id|codec_resolution|frame_rate|VIDEO_FOCUS|NAV_FOCUS"
+   ```
+   見るところ: ① `media_sink_service` が `DISPLAY_TYPE_CLUSTER` を持つか(= 車がクラスター用の映像を申告している)、② `navigation_status_service`(IMAGE / 画像サイズ)の有無、③ メイン映像の解像度とフレームレート、④ 接続中に車から `NAV_FOCUS` の通知が来ているか。ログは 1 行の長さの上限で途中が切れることがあるので、同じ内容が 2 回出る(2 回目が完全)。
+3. **メーターが黒い場合に叩く A0 コマンド**(`a0call` は `/data/local/tmp/` に配置済み。なければ `adb push` + `chmod 755`):
+   - `adb shell /data/local/tmp/a0call status`(読み取りだけ。`ready=1` を確認)
+   - `adb shell /data/local/tmp/a0call native` → メーターが戻るか目視。
+   - 戻らなければ `adb shell /data/local/tmp/a0call toggle 800`(`PROJECTED` → 0.8 秒 → `NATIVE`)。さらに待機を長くして `toggle 3000` も。
+   - 各回の直後に `adb logcat -d -v threadtime -s SdAAReverse:V | tail -20` で、ID 13 の送出(`MESSAGE_NAV_FOCUS_REQUEST`)を確認。
+   - 効いたら、どのコマンドで、何秒後に戻ったかを記録(A1/A2 のパッチを設計する材料)。効かなければ、NAV フォーカスは原因ではない(ログの 4 でクラスター用の申告を確認)。
+4. **終了後に通常の車載モードへ戻す**: A0 は何も書き換えていないので、元に戻す作業は無い(`adb shell rm /data/local/tmp/a0call` は任意)。`adb disconnect` し、設定でワイヤレスデバッグ(と USB デバッグ)を **OFF**。**デバッグ OFF で遅延なしの状態に戻る**(adb が遅延の原因だったため)。念のためデーモンの状態確認は `adb shell pidof sdAutoReverse` と `TracerPid: 0`(`/proc/<pid>/status`)。デーモンを再起動したい場合は、Box の再起動だけで足りる。
+
 ## 残っている確認
 
 1. **DHU をクラスター有効で起動し直す**(DHU を終了 → USB を抜き挿し → `desktop-head-unit.exe --usb -c config\gt8d_cluster.ini`)。DHU が申告するサービスと、デーモンがどのチャネルを開くかを `SdAAReverse` の記録で読む。

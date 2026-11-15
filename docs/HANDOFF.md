@@ -4,6 +4,8 @@
 
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
 
+- **【A0 ツール完成・DHU 実証済み、実車テスト待ち】** `tools/a0call/a0call.c`(ptrace で実行中の `sdAutoReverse` に `sendNavFocusNotifyCmd` を 1 回呼ばせる。何も書き換えない)。`native` / `toggle [ms]` / `status`。DHU で ID 13 の送出(`NAV_FOCUS_NATIVE`、`PROJECTED` → `NATIVE`)を GT8D のログで確認、クラッシュなし・投影維持。**DHU 側の反応(コンソール・クラスターウィンドウ)は未確認**(ユーザーの確認待ち)。`a0call` は `/data/local/tmp/` に配置済み。**実車手順(接続後 5 分)は spike の「A0 ツールの実証と実車テスト手順」**: ① `logcat -c` せずに丸ごと保存 ② サービス一覧の抽出コマンド(`DISPLAY_TYPE_CLUSTER`・`navigation_status_service` の有無) ③ 黒いときは `a0call native` → 効かなければ `toggle 800`/`3000` ④ 終了後はデバッグ OFF で通常モードへ(A0 は何も書き換えていないので戻す作業なし)。A1/A2(`/system` の書き換え)は、実車で A0 が効くと確認できてから。
+
 - **【クローズ撤回 → 解決策 A の掘り下げ(設計のみ、ユーザー指示)】** `Controller::sendNavFocusNotifyCmd(int)`(`0x201308`、呼び出し元なし)は ID 13 の `NavFocusRequestNotification` を作り、**引数 0 で `NAV_FOCUS_NATIVE`(1)、0 以外で `PROJECTED`(2)**。`Controller* = *(*(g+0xc)+0x9c)+0xd30`。`[this+4]` 下位バイトが 0(バージョン交渉前)だと黙って戻る。ナビのサービス申告は見ていない。フック方式は spike の「解決策 A の掘り下げ」に比較表(A0 実行中の一時呼び出し / A1 `LD_PRELOAD` / A2 バイナリパッチ)。**実機は書き換えていない**。**効く保証は無い**(GT8D は NAV フォーカスを一度も要求しておらず、NATIVE を送っても変わらない可能性が高い)。実機の書き換えは、ユーザーの承認後。先に実車のサービス一覧の記録と、A0 での効果確認を勧める。DHU の `focus nav` の実測は、コンソールでの確認待ち。
 
 - **【クローズ】(2026-11-15、ユーザー指示)**: UI 未設置(純正画面への復帰は Dock の「Car」= `com.ds.backcar` で運用)。`VendorBridge.switchToCarScreen()` / `carHomeAvailable` は内部 API として保持(テスト済み、将来のカーテン等からの直接復帰用)。**有線 AA モード(`cp_aa=2000`)を実車持ち込みの基本方針**とする。DHU のクラスター設定での実測は、クラスター用シンクが申告されなかったため「無視する」ところまでは未確認(クラッシュ・異常なし)。未確認事項は実車でのサービス一覧の記録(spike の「クローズ記録」)。
