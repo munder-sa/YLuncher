@@ -25,3 +25,7 @@ keystore.properties
 # codex-run のログとバックアップ、実行中だけ置く禁止ルール
 .codex-bak/
 .codex/
+
+# GT8D-IPv6-Guard の署名鍵(コミットしない)
+GT8D-IPv6-Guard/guard-signing.p12
+*.p12

@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
 
 /** GT8D-specific bootstrap: permitted by this firmware's current SELinux policy. */
 final class Bootstrap {
-    private static boolean listening() {
+    static boolean listening() {
         try (LocalSocket socket = new LocalSocket()) {
             socket.connect(new LocalSocketAddress(LocalAdb.SOCKET_NAME, LocalSocketAddress.Namespace.ABSTRACT));
             return true;

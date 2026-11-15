@@ -7,17 +7,50 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
 import android.util.Log;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 final class Guard {
     private static final String ROOT = "/data/local/gt8d-ipv6-guard";
     private static final int RETRY = 8011, PERIODIC = 8012;
     private static final Object APPLY_LOCK = new Object();
+    // The guard's effect, readable without root: the priority-32000 unreachable IPv6 rule.
+    private static final Pattern RULE_PRESENT =
+            Pattern.compile("(?m)^32000:[ \\t]+from all unreachable([ \\t]|$)");
+
+    /**
+     * Root-free check of whether the guard is already effective. A normal app can dump the
+     * IPv6 policy rules (unprivileged netlink read; SELinux is permissive on this device).
+     * Returns false on any failure so the caller falls back to the ADB path (no regression).
+     */
+    static boolean guardEffectiveNoRoot() {
+        Process process = null;
+        try {
+            process = new ProcessBuilder("/system/bin/ip", "-6", "rule", "show")
+                    .redirectErrorStream(true).start();
+            process.getOutputStream().close();
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            InputStream in = process.getInputStream();
+            byte[] chunk = new byte[4096];
+            int length;
+            while ((length = in.read(chunk)) >= 0) buffer.write(chunk, 0, length);
+            if (!process.waitFor(3, TimeUnit.SECONDS)) return false;
+            if (process.exitValue() != 0) return false;
+            return RULE_PRESENT.matcher(buffer.toString("UTF-8")).find();
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (process != null) process.destroy();
+        }
+    }
 
     static Context storage(Context context) { return context.createDeviceProtectedStorageContext(); }
     static SharedPreferences preferences(Context context) {
@@ -48,6 +81,17 @@ final class Guard {
     static String apply(Context context, String reason) throws Exception {
         synchronized (APPLY_LOCK) {
             if (!enabled(context)) return "自動適用は停止中です。";
+            // (1) Root-free pre-check: if the guard rule is already present, do not touch adbd
+            // at all. This keeps adbd stopped during normal operation (projection stays fast)
+            // and after carprobe's Finish.
+            if (guardEffectiveNoRoot()) {
+                log(context, reason + ": already effective (adbd untouched)");
+                preferences(context).edit().putString("last_success", now()).apply();
+                return "設定済み：SIM側へのIPv6経路の流れ込みを防止しています。\n監視：動作中(推定)\n最終確認：" + now();
+            }
+            // (3) Remember whether adbd was already up (wireless debugging, or carprobe in use)
+            // so we never stop an adbd we did not start ourselves.
+            boolean adbdWasUp = Bootstrap.listening();
             Bootstrap.ensure(context);
             String script = script(context);
             String encoded = Base64.encodeToString(script.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
@@ -65,15 +109,34 @@ final class Guard {
             }
             log(context, reason + " success: " + result.replace('\n', ' ').trim());
             preferences(context).edit().putString("last_success", now()).apply();
+            // (2)(3) On-demand stop: the monitor runs detached (reparented to init) and keeps
+            // the rule applied without adbd. If we started adbd ourselves and this is not a
+            // wireless-debug session, stop adbd so it does not run continuously. The stop drops
+            // this connection, which surfaces as an exception; that is the success path.
+            if (!adbdWasUp) {
+                try {
+                    LocalAdb.shell("if [ \"$(settings get global adb_wifi_enabled)\" != 1 ]; "
+                            + "then setprop ctl.stop adbd; fi");
+                    log(context, "adbd left running (wireless debugging active)");
+                } catch (Exception e) {
+                    log(context, "adbd stopped (self-started, car mode)");
+                }
+            } else {
+                log(context, "adbd was already running; left untouched");
+            }
             return "設定済み：SIM側へのIPv6経路の流れ込みを防止しています。\n監視：動作中\n最終確認：" + now();
         }
     }
 
     static String status(Context context) throws Exception {
-        String result = LocalAdb.shell(statusCommand());
+        // Root-free: never start adbd just to show status. Monitor state is inferred from the
+        // rule being maintained (the detached monitor re-adds it every 10s).
+        boolean ruleOn = guardEffectiveNoRoot();
+        boolean adbdUp = Bootstrap.listening();
         return "自動適用：" + (enabled(context) ? "有効" : "停止中")
-                + "\nルール：" + (result.contains("from all unreachable") ? "設定済み" : "未設定")
-                + "\n監視：" + (result.contains("GUARD_RUNNING=yes") ? "動作中" : "停止中")
+                + "\nルール：" + (ruleOn ? "設定済み" : "未設定")
+                + "\n監視：" + (ruleOn ? "動作中(推定)" : "停止中")
+                + "\nADB：" + (adbdUp ? "起動中" : "停止")
                 + "\n最終適用：" + preferences(context).getString("last_success", "未実行");
     }
 
