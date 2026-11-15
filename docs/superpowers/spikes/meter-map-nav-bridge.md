@@ -126,9 +126,9 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 
 ## 実装(Task 239、2026-11-15)
 
-- 小アプリ `:carback`(`com.gt8d.launcher.carback`、画面なし。アイコンを押すと `AT#CB` のブロードキャストを送って閉じる)と、`VendorBridge.switchToCarScreen()` / `carHomeAvailable` を実装。
+- ~~小アプリ `:carback`~~(純正の「Car」と重複するため、同日に削除。経緯は下の「既存の Car アプリ」)と、`VendorBridge.switchToCarScreen()` / `carHomeAvailable` を実装。
 - **通常アプリからの送信を実機で確認(15:33)**: debug APK を入れ、Activity を起動 → デーモンが `VIDEO_FOCUS_REQUEST`(NATIVE)→ `VIDEO_FOCUS_NOTIFICATION`(NATIVE)→ `MEDIA_MESSAGE_STOP`。root シェルでなくても届く。
-- テスト: carback 3 件、app の `VendorBridgeTest`・`AndroidActivityLauncherTest` 23 件、すべて成功。
+- テスト(carback 削除前): carback 3 件、app の `VendorBridgeTest`・`AndroidActivityLauncherTest` 23 件、すべて成功。
 - 未実施: ユーザーによるアイコン操作での見た目・操作感の確認、release の署名・版、YLuncher 内にボタンを付けるかの判断。
 
 - **既存の「Car」アプリ(`com.ds.backcar/.MainActivity`、プリインストール)が同じ動作**(15:40 実測): 押すと MainService の `smart_box_carplay` バインダー経由で `AT#CB` → `VIDEO_FOCUS_REQUEST`(NATIVE)→ DHU が「Video focus is off.」。つまり `:carback` は純正の「Car」と機能が重複する(経路だけ違う: 純正はバインダー、こちらはブロードキャスト)。投影への復帰は DHU の `focus video on`(車側の操作)。
