@@ -294,3 +294,13 @@ DHU で carprobe を開くと `127.0.0.1:5555` 自体が `ECONNREFUSED`。原因
 - B: 車内に小さな host(予備 Android+adb、SBC 等)を持ち込み a0call を駆動。
 - C: ベンチ(DHU)確認のみに留める(ただし DHU はブラックアウトを再現しない)。
 - 追加調査の余地: root(uid=0)で動くベンダーのサービスで、外部からコマンド実行を受け付けるものが他に無いか(あれば A の代替になりうる)。
+
+### carprobe — 解決(2026-11-15 夜、Task 242):abstract ソケット `gt8d-ipv6-guard` 方式
+
+loopback TCP 5555 が不成立(前節)と判明後、ユーザーの別アプリ `GT8D-IPv6-Guard`(`/mnt/f/YLuncher/GT8D-IPv6-Guard/`、repo 外、`local.gt8d.ipv6guard`)が「通常アプリ→端末内 ADB→root」を実証済みと判明。その仕組みに乗せた。
+
+- **真因**: この端末は `service.adb.listen_addrs=localabstract:gt8d-ipv6-guard` が入っており、adbd は TCP 5555 の代わりに **abstract unix ソケット `@gt8d-ipv6-guard` で素の(非 TLS)adb トランスポート**を開く。`ro.adb.secure=0`+SELinux Permissive なので、通常アプリ(`untrusted_app`)が `LocalSocket`(ABSTRACT, 名前 `gt8d-ipv6-guard`)で繋いで `CNXN`(認証なし)→`OPEN shell:` すれば **root(uid=0, u:r:su:s0)** シェルが取れる。TLS も鍵も `/system` 改造も不要。
+- **ipv6guard の仕組み**(`LocalAdb.java`/`Bootstrap.java`): 通常アプリが `/system/bin/setprop service.adb.listen_addrs localabstract:gt8d-ipv6-guard` と `setprop ctl.restart adbd` を直接実行(Permissive ゆえ通る)。volatile なので毎起動 `BootReceiver` が再設定。`guard.sh` 監視は root の独立プロセスで、IPv6 ルール(`ip -6 rule add priority 32000 unreachable`)の再適用のみ=**adbd は再起動しない**。
+- **carprobe の変更(Task 242)**: `AdbClient` を TCP→`LocalSocket`(ABSTRACT `gt8d-ipv6-guard`)に差し替え。ADB プロトコル(CNXN/OPEN/WRTE/CLSE、`__CARPROBE_EXIT__$?` マーカー)は踏襲。**接続を先に試し、`IOException` のときだけ** bootstrap(`setprop listen_addrs`+`ctl.restart adbd`+200ms×8 リトライ)=現行のワイヤレス ADB を無用に切らない。`INTERNET` 権限削除。Finish には ipv6guard 競合の注記(`Bootstrap.ensure()` が起動時・15分周期ジョブ・アプリ起動時に socket 未起動なら adbd を再起動するため、Finish 後も ipv6guard 有効中は ADB が戻る)。
+- **実機実証(2026-11-15 22:07)**: carprobe 起動 → `adb: OK (uid=0 @localabstract:gt8d-ipv6-guard)`、`id: OK (exit=0)`。`Run a0call status` → `/data/local/tmp/a0call status: OK (exit=0)`・`pid=1781 Controller=efb45bb0 ready=1 channel=0`、セッションログ `/sdcard/Download/rav4_probe_20261115_220718.log` 作成。bootstrap は走らず(ipv6guard が socket を立てていた)、ホスト ADB(ワイヤレス)も維持。画面: `/tmp/.../carprobe-242-adbok.png`、`carprobe-242-a0status.png`。
+- **帰結**: a0call を**車内(PC 無し)でも**起動できる。ipv6guard が毎起動で socket を立てる(あるいは carprobe が自己 bootstrap する)ため、DHU 画面のタップだけで a0call を叩ける。`/system` 書き換え(A1/A2)は回避。
