@@ -1,0 +1,401 @@
+package com.gt8d.carprobe;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.graphics.Insets;
+import android.graphics.Typeface;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.View;
+import android.view.WindowInsets;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import java.io.IOException;
+import java.lang.ref.WeakReference;
+import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+
+public final class MainActivity extends Activity {
+    private static final int COMMAND_TIMEOUT_MS = 15000;
+    private static final int LOG_TIMEOUT_MS = 60000;
+    private static final String FILTERED_LOG = "logcat -d -v threadtime -s SdAAReverse:V";
+    private static final String LOG_TAG = "SdAAReverse: ";
+    private static final Pattern FOCUS_LINE = Pattern.compile("\\bnumber=13\\b|\\bfocus_type\\b");
+    private static final ExecutorService COMMANDS = Executors.newSingleThreadExecutor();
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
+    // Process-lifetime session: recreation must not lose the log or allow a second command.
+    private static WeakReference<MainActivity> current = new WeakReference<>(null);
+    private static volatile boolean busy;
+    private static volatile boolean rootChecked;
+    private static volatile boolean rootAvailable;
+    private static volatile String rootStatus = "root: checking...";
+    private static volatile String sessionPath;
+    private static volatile String resultText = "Checking root...";
+    private static long lastFileTime;
+
+    private final List<Button> buttons = new ArrayList<>();
+    private TextView rootView;
+    private TextView sessionView;
+    private TextView resultView;
+    private ScrollView resultScroll;
+    private String displayedResult;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        LinearLayout page = column();
+        page.setBackgroundColor(0xff101418);
+        int padding = dp(12);
+        page.setPadding(padding, padding, padding, padding);
+        page.setOnApplyWindowInsetsListener((view, insets) -> {
+            Insets bars = insets.getInsets(WindowInsets.Type.systemBars()
+                    | WindowInsets.Type.displayCutout());
+            view.setPadding(padding + bars.left, padding + bars.top,
+                    padding + bars.right, padding + bars.bottom);
+            return insets;
+        });
+
+        rootView = text(18);
+        sessionView = text(18);
+        page.addView(rootView);
+        page.addView(sessionView);
+
+        LinearLayout controls = column();
+        addRow(controls,
+                button("Save Boot Log & Services", () ->
+                        startOperation("Save Boot Log & Services", MainActivity::saveBootLog)),
+                button("Run a0call status", () ->
+                        startOperation("Run a0call status", () -> runA0("status", false))));
+
+        LinearLayout toggles = new LinearLayout(this);
+        addCell(toggles, button("toggle 800ms", () ->
+                startOperation("Run a0call toggle 800", () -> runA0("toggle 800", true))));
+        addCell(toggles, button("toggle 3000ms", () ->
+                startOperation("Run a0call toggle 3000", () -> runA0("toggle 3000", true))));
+        addRow(controls,
+                button("Run a0call native", () ->
+                        startOperation("Run a0call native", () -> runA0("native", true))),
+                toggles);
+        addRow(controls, button("Finish & Disable ADB (Normal Mode)", this::confirmFinish));
+
+        ScrollView controlScroll = new ScrollView(this);
+        controlScroll.addView(controls);
+        page.addView(controlScroll, new LinearLayout.LayoutParams(-1, 0, 3));
+
+        resultView = text(18);
+        resultView.setTypeface(Typeface.MONOSPACE);
+        resultView.setTextIsSelectable(true);
+        resultView.setPadding(padding, padding, padding, padding);
+        resultView.setBackgroundColor(0xff1c242c);
+        resultScroll = new ScrollView(this);
+        resultScroll.setFillViewport(true);
+        resultScroll.addView(resultView);
+        page.addView(resultScroll, new LinearLayout.LayoutParams(-1, 0, 2));
+        setContentView(page);
+        page.requestApplyInsets();
+
+        current = new WeakReference<>(this);
+        render();
+        if (!rootChecked && !busy) {
+            startOperation("Checking root", MainActivity::checkRoot);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (current.get() == this) {
+            current.clear();
+        }
+        super.onDestroy();
+    }
+
+    private LinearLayout column() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        return layout;
+    }
+
+    private TextView text(int sp) {
+        TextView view = new TextView(this);
+        view.setTextSize(sp);
+        view.setTextColor(0xffeeeeee);
+        return view;
+    }
+
+    private Button button(String label, Runnable action) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setTextSize(22);
+        button.setMinHeight(dp(120));
+        button.setOnClickListener(view -> {
+            if (!busy && rootAvailable) {
+                action.run();
+            }
+        });
+        buttons.add(button);
+        return button;
+    }
+
+    private void addRow(LinearLayout parent, View... cells) {
+        LinearLayout row = new LinearLayout(this);
+        for (View cell : cells) {
+            addCell(row, cell);
+        }
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(128));
+        params.topMargin = dp(4);
+        parent.addView(row, params);
+    }
+
+    private void addCell(LinearLayout row, View view) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -1, 1);
+        params.setMargins(dp(2), 0, dp(2), 0);
+        row.addView(view, params);
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void render() {
+        rootView.setText(rootStatus);
+        sessionView.setText("Session: " + (sessionPath == null ? "(not saved yet)" : sessionPath));
+        if (!resultText.equals(displayedResult)) {
+            displayedResult = resultText;
+            resultView.setText(displayedResult);
+            resultScroll.scrollTo(0, 0);
+        }
+        for (Button button : buttons) {
+            button.setEnabled(rootAvailable && !busy);
+        }
+    }
+
+    private static void refresh() {
+        MainActivity activity = current.get();
+        if (activity != null) {
+            activity.render();
+        }
+    }
+
+    private static void show(String text) {
+        resultText = text;
+        MAIN.post(MainActivity::refresh);
+    }
+
+    private void startOperation(String label, Operation operation) {
+        if (busy) {
+            return;
+        }
+        busy = true;
+        resultText = label + "\nRunning...";
+        render();
+        COMMANDS.execute(() -> {
+            try {
+                operation.run();
+            } catch (Exception e) {
+                show(resultText + "\nFailed: " + e);
+            } finally {
+                MAIN.post(() -> {
+                    busy = false;
+                    refresh();
+                });
+            }
+        });
+    }
+
+    private interface Operation {
+        void run() throws Exception;
+    }
+
+    private static void checkRoot() {
+        RootShell.Result result = RootShell.run("id", COMMAND_TIMEOUT_MS);
+        rootAvailable = result.ok;
+        rootChecked = true;
+        rootStatus = result.ok ? "root: OK (uid=0 via " + result.via + ")"
+                : "root: NO (" + result.stdout.trim().replace('\n', ' ') + ")";
+        show(describe("id", result));
+    }
+
+    private static String timestamp() {
+        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US).format(new Date());
+    }
+
+    private static void newSession(String header) throws IOException {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            lastFileTime = Math.max(System.currentTimeMillis(), lastFileTime + 1000);
+            String name = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                    .format(new Date(lastFileTime));
+            String path = "/sdcard/Download/rav4_probe_" + name + ".log";
+            String quoted = RootShell.quote(path);
+            RootShell.Result result = RootShell.run("mkdir -p /sdcard/Download && "
+                    + "if [ -e " + quoted + " ]; then exit 73; else "
+                    + "(set -C; printf '%s\\n' " + RootShell.quote(header) + " > " + quoted
+                    + "); fi", COMMAND_TIMEOUT_MS);
+            if (result.ok) {
+                sessionPath = path;
+                MAIN.post(MainActivity::refresh);
+                return;
+            }
+            if (result.exitCode != 73) {
+                throw new IOException(describe("Create " + path, result));
+            }
+        }
+        throw new IOException("Log filename collision (10 attempts)");
+    }
+
+    private static void ensureSession() throws IOException {
+        if (sessionPath == null) {
+            newSession("RAV4 Probe session\nCreated: " + timestamp());
+        }
+    }
+
+    private static RootShell.Result appendLog(String label, String text) {
+        String entry = "\n=== " + timestamp() + " | " + label + " ===\n" + text + "\n";
+        return RootShell.run("printf '%s\\n' " + RootShell.quote(entry) + " >> "
+                + RootShell.quote(sessionPath), COMMAND_TIMEOUT_MS);
+    }
+
+    private static String describe(String label, RootShell.Result result) {
+        return label + ": " + (result.ok ? "OK" : "FAILED")
+                + " (exit=" + result.exitCode + ", via " + result.via + ")\n"
+                + result.stdout.trim();
+    }
+
+    private static void saveBootLog() throws IOException {
+        RootShell.Result filtered = RootShell.run("exec " + FILTERED_LOG, LOG_TIMEOUT_MS);
+        ServiceSummary summary = ServiceSummary.parse(filtered.ok ? filtered.stdout : "");
+        String header = summary.toText() + "\nSaved: " + timestamp();
+        if (!filtered.ok) {
+            header += "\n" + describe("Summary log", filtered);
+        }
+        newSession(header + "\n\n=== Full logcat (-b all) ===");
+        // The full log never travels through the app's stdout or heap.
+        RootShell.Result saved = RootShell.run("exec logcat -d -v threadtime -b all >> "
+                + RootShell.quote(sessionPath), LOG_TIMEOUT_MS);
+        RootShell.Result size = RootShell.run("exec wc -c < " + RootShell.quote(sessionPath),
+                COMMAND_TIMEOUT_MS);
+        String text = "Save: " + (filtered.ok && saved.ok && size.ok ? "OK" : "FAILED")
+                + "\n" + sessionPath + "\nSize: "
+                + (size.ok ? size.stdout.trim() + " bytes" : "unknown")
+                + "\n\n" + header;
+        if (!saved.ok) {
+            text += "\n" + describe("Full log (file may be incomplete)", saved);
+        }
+        if (!size.ok) {
+            text += "\n" + describe("File size", size);
+        }
+        show(text);
+    }
+
+    private static void runA0(String arguments, boolean includeFocus) throws IOException {
+        ensureSession();
+        String command = "/data/local/tmp/a0call " + arguments;
+        String started = timestamp();
+        RootShell.Result run = RootShell.run("exec " + command, COMMAND_TIMEOUT_MS);
+        String text = started + "\n" + describe(command, run);
+        if (includeFocus) {
+            RootShell.Result log = RootShell.run("exec " + FILTERED_LOG, LOG_TIMEOUT_MS);
+            text += "\n\nLatest NAV_FOCUS log (may include earlier actions):\n";
+            text += log.ok ? lastFocusLines(log.stdout) : describe("Focus log", log);
+        }
+        RootShell.Result appended = appendLog("a0call " + arguments, text);
+        show(text + "\n\nSession: " + sessionPath + "\n"
+                + describe("Append log", appended));
+    }
+
+    private static String lastFocusLines(String log) {
+        ArrayDeque<String> lines = new ArrayDeque<>();
+        for (String line : log.split("\\r?\\n")) {
+            int tag = line.indexOf(LOG_TAG);
+            if (tag >= 0 && FOCUS_LINE.matcher(line.substring(tag + LOG_TAG.length())).find()) {
+                if (lines.size() == 6) {
+                    lines.removeFirst();
+                }
+                lines.addLast(line);
+            }
+        }
+        return lines.isEmpty() ? "number=13 / focus_type の行が見つかりません" :
+                String.join("\n", lines);
+    }
+
+    private void confirmFinish() {
+        new AlertDialog.Builder(this)
+                .setMessage("ADB を OFF にして通常の車載モードへ戻します。よろしいですか")
+                .setPositiveButton("OK", (dialog, which) ->
+                        startOperation("Finish & Disable ADB", MainActivity::finishAdb))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private static void finishAdb() throws Exception {
+        ensureSession();
+        String[] commands = {
+                "setprop persist.adb.tcp.port \"\"",
+                "settings put global adb_wifi_enabled 0",
+                "settings put global adb_enabled 0",
+                "setprop ctl.stop adbd"
+        };
+        StringBuilder text = new StringBuilder("Finish & Disable ADB\nSession: ")
+                .append(sessionPath).append('\n');
+        boolean allOk = true;
+        for (String command : commands) {
+            String pending = command + ": RUNNING (result follows)";
+            RootShell.Result before = appendLog("Before ADB command", pending);
+            if (!before.ok) {
+                show(text + "\n" + describe("Append log", before)
+                        + "\n記録できないため、残りの ADB 操作を中止しました。");
+                return;
+            }
+            // Apply earlier results and the next command to the UI before any ADB change.
+            showBeforeAdbCommand(text + "\n" + pending);
+            RootShell.Result result = RootShell.run("exec " + command, COMMAND_TIMEOUT_MS);
+            allOk &= result.ok;
+            String line = describe(command, result);
+            text.append('\n').append(line).append('\n');
+            RootShell.Result recorded = appendLog("ADB command result", line);
+            if (!recorded.ok) {
+                show(text + "\n" + describe("Append log", recorded)
+                        + "\n記録できないため、残りの ADB 操作を中止しました。");
+                return;
+            }
+            show(text.toString());
+        }
+        String completion = allOk ? "ADB OFF 完了。通常モードです"
+                : "ADB OFF 未完了。失敗したコマンドを確認してください。";
+        text.append('\n').append(completion);
+        RootShell.Result recorded = appendLog("Finish", completion);
+        if (!recorded.ok) {
+            text.append('\n').append(describe("Append log", recorded));
+        }
+        show(text.toString());
+    }
+
+    private static void showBeforeAdbCommand(String text) throws Exception {
+        CountDownLatch applied = new CountDownLatch(1);
+        MAIN.post(() -> {
+            MainActivity activity = current.get();
+            resultText = text;
+            if (activity != null && !activity.isFinishing() && !activity.isDestroyed()) {
+                activity.render();
+                applied.countDown();
+            }
+        });
+        if (!applied.await(5, TimeUnit.SECONDS)) {
+            throw new IOException("画面に結果を反映できないため、残りの ADB 操作を中止しました。");
+        }
+    }
+}

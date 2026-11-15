@@ -1,0 +1,6 @@
+create tools/carprobe/src/main/java/com/gt8d/carprobe/AdbClient.java
+create tools/carprobe/src/test/java/com/gt8d/carprobe/AdbMessageTest.java
+write tools/carprobe/src/main/java/com/gt8d/carprobe/MainActivity.java
+write tools/carprobe/src/main/AndroidManifest.xml
+command /home/munde/tools/gradle-run.sh --offline -p tools/carprobe -Pandroid.useAndroidX=true testDebugUnitTest
+command /home/munde/tools/gradle-run.sh --offline -p tools/carprobe -Pandroid.useAndroidX=true assembleDebug
