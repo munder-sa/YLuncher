@@ -1,0 +1,4 @@
+write tools/carprobe/src/main/java/com/gt8d/carprobe/ServiceSummary.java
+write tools/carprobe/src/test/java/com/gt8d/carprobe/ServiceSummaryTest.java
+create tools/carprobe/src/test/resources/sdr_dhu_20261115.log
+command /home/munde/tools/gradle-run.sh --offline -p tools/carprobe -Pandroid.useAndroidX=true testDebugUnitTest
