@@ -1,0 +1,295 @@
+11-15 23:08:02.014  1830 12613 D SdAAReverse: number=5 name=MESSAGE_SERVICE_DISCOVERY_REQUEST
+11-15 23:08:02.014  1830 12613 D SdAAReverse: large_icon: <removed by GalMonitor> 
+11-15 23:08:02.014  1830 12613 D SdAAReverse: medium_icon: <removed by GalMonitor> 
+11-15 23:08:02.014  1830 12613 D SdAAReverse: small_icon: <removed by GalMonitor> 
+11-15 23:08:02.014  1830 12613 D SdAAReverse: label_text: Auto 
+11-15 23:08:02.014  1830 12613 D SdAAReverse: device_name: Android
+11-15 23:08:02.015  1830 12613 D SdAAReverse: Controller::routeMessage channelId:0 type:6
+11-15 23:08:02.015  1830 12613 D SdAAReverse: virtual int Controller::routeMessage(uint8_t, uint16_t, const shared_ptr<IoBuffer> &):307 len=594
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 1
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   sensor_source_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     sensors {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sensor_type: SENSOR_LOCATION
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     sensors {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sensor_type: SENSOR_NIGHT_MODE
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     sensors {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sensor_type: SENSOR_DRIVING_STATUS_DATA
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     location_characterization: 256
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     supported_fuel_types: FUEL_TYPE_UNLEADED
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 2
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   media_sink_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     video_configs {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       codec_resolution: VIDEO_1920x1080
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       frame_rate: VIDEO_FPS_60
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       width_margin: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       height_margin: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       density: 160
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       decoder_additional_depth: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       viewing_distance: 500
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       pixel_aspect_ratio_e4: 10000
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       real_density: 160
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       video_codec_type: MEDIA_CODEC_VIDEO_H264_BP
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       ui_config {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         margins {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:           top: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:           bottom: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:           left: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:           right: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         content_insets {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         stable_content_insets {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         ui_theme: UI_THEME_AUTOMATIC
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     display_id: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     display_type: DISPLAY_TYPE_MAIN
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 3
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   input_source_serv
+11-15 23:08:02.016  1830 12613 D SdAAReverse: virtual int Controller::routeMessage(uint8_t, uint16_t, const shared_ptr<IoBuffer> &):313 len=594
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 1
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   sensor_source_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     sensors {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sensor_type: SENSOR_LOCATION
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     sensors {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sensor_type: SENSOR_NIGHT_MODE
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     sensors {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sensor_type: SENSOR_DRIVING_STATUS_DATA
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     location_characterization: 256
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     supported_fuel_types: FUEL_TYPE_UNLEADED
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 2
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   media_sink_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     video_configs {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       codec_resolution: VIDEO_1920x1080
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       frame_rate: VIDEO_FPS_60
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       width_margin: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       height_margin: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       density: 160
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       decoder_additional_depth: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       viewing_distance: 500
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       pixel_aspect_ratio_e4: 10000
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       real_density: 160
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       video_codec_type: MEDIA_CODEC_VIDEO_H264_BP
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       ui_config {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         margins {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:           top: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:           bottom: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:           left: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:           right: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         content_insets {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         stable_content_insets {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:         ui_theme: UI_THEME_AUTOMATIC
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     display_id: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     display_type: DISPLAY_TYPE_MAIN
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 3
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   input_source_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 3
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 4
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 5
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 6
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 84
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 85
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 87
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 88
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 126
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 127
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 65537
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 65538
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     keycodes_supported: 65540
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     touchscreen {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       width: 1920
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       height: 1080
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       type: RESISTIVE
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       is_secondary: false
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     display_id: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 4
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   media_sink_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     available_type: MEDIA_CODEC_AUDIO_PCM
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     audio_type: AUDIO_STREAM_GUIDANCE
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     audio_configs {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sampling_rate: 16000
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       number_of_bits: 16
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       number_of_channels: 1
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     audio_configs {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sampling_rate: 48000
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       number_of_bits: 16
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       number_of_channels: 1
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 5
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   media_sink_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     available_type: MEDIA_CODEC_AUDIO_PCM
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     audio_type: AUDIO_STREAM_MEDIA
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     audio_configs {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sampling_rate: 48000
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       number_of_bits: 16
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       number_of_channels: 2
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 6
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   navigation_status_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     minimum_interval_ms: 500
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     type: IMAGE
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     image_options {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       height: 100
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       width: 100
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       colour_depth_bits: 16
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 7
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   phone_status_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 8
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   vendor_extension_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     service_name: "com.example.android.projection.protocol.EchoVendorExtension"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     package_white_list: "com.example.echovendor"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: services {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   id: 9
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   media_source_service {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     available_type: MEDIA_CODEC_AUDIO_PCM
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     audio_config {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       sampling_rate: 16000
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       number_of_bits: 16
+11-15 23:08:02.016  1830 12613 D SdAAReverse:       number_of_channels: 1
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     }
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: make: "Google"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: model: "Desktop Head Unit"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: year: "2015"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: vehicle_id: "0582521f-87ac-40ed-8a99-9659ba2eb7f3"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: driver_position: DRIVER_POSITION_LEFT
+11-15 23:08:02.016  1830 12613 D SdAAReverse: head_unit_make: "Google"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: head_unit_model: "Desktop Head Unit"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: head_unit_software_build: "2022-03-30-438482292"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: head_unit_software_version: "2.0-windows"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: session_configuration: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse: display_name: ""
+11-15 23:08:02.016  1830 12613 D SdAAReverse: probe_for_support: false
+11-15 23:08:02.016  1830 12613 D SdAAReverse: connection_configuration {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   ping_configuration {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     timeout_ms: 3000
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     interval_ms: 1000
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     high_latency_threshold_ms: 200
+11-15 23:08:02.016  1830 12613 D SdAAReverse:     tracked_ping_count: 5
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: headunit_info {
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   make: "Google"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   model: "Desktop Head Unit"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   year: "2015"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   vehicle_id: "0582521f-87ac-40ed-8a99-9659ba2eb7f3"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   head_unit_make: "Google"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   head_unit_model: "Desktop Head Unit"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   head_unit_software_build: "2022-03-30-438482292"
+11-15 23:08:02.016  1830 12613 D SdAAReverse:   head_unit_software_version: "2.0-windows"
+11-15 23:08:02.016  1830 12613 D SdAAReverse: }
+11-15 23:08:02.016  1830 12613 D SdAAReverse: Fake   serviceId: 1 fakeServiceId:2
+11-15 23:08:02.016  1830 12613 D SdAAReverse: notifyDiscoveryInfo mCodecType:1
+11-15 23:08:02.016  1830 12613 D SdAAReverse: code:3 rate:1 w_m:0 h_m:0 density:160
+11-15 23:08:02.016  1830 12613 D SdAAReverse: VideoSink::virtual bool VideoSink::notifyDiscoveryInfo(ServiceDiscoveryResponse *):290 service is exist, and stop
+11-15 23:08:02.016  1830 12613 D SdAAReverse: serviceId:1 channelId:2
+11-15 23:08:02.016  1830 12613 D SdAAReverse: ch:2 sz:6 Control
+11-15 23:08:02.016  1830 12613 D SdAAReverse: number=7 name=MESSAGE_CHANNEL_OPEN_REQUEST
+11-15 23:08:02.016  1830 12613 D SdAAReverse: service_id: 2 
+11-15 23:08:02.016  1830 12613 D SdAAReverse: priority: 0
+11-15 23:08:02.016  1830 12613 D SdAAReverse: InputSource::virtual bool InputSource::notifyDiscoveryInfo(ServiceDiscoveryResponse *):388 start
+11-15 23:08:02.016  1830 12613 D SdAAReverse: iss.display_id():0 mDisplayId:0
+11-15 23:08:02.016  1830 12613 D SdAAReverse: Fake   serviceId: 2 fakeServiceId:3
+11-15 23:08:02.016  1830 12613 D SdAAReverse: ts.width():1920 ts.height():1080 ts.type():2
+11-15 23:08:02.017  1830 12613 D SdAAReverse: InputSource::virtual bool InputSource::notifyDiscoveryInfo(ServiceDiscoveryResponse *):422 service is exist, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: serviceId:2 channelId:3
+11-15 23:08:02.017  1830 12613 D SdAAReverse: ch:3 sz:6 Control
+11-15 23:08:02.017  1830 12613 D SdAAReverse: number=7 name=MESSAGE_CHANNEL_OPEN_REQUEST
+11-15 23:08:02.017  1830 12613 D SdAAReverse: service_id: 3 
+11-15 23:08:02.017  1830 12613 D SdAAReverse: priority: 0
+11-15 23:08:02.017  1830 12613 D SdAAReverse: AudioSource::virtual bool AudioSource::notifyDiscoveryInfo(ServiceDiscoveryResponse *):146 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: Fake   serviceId: 3 fakeServiceId:9
+11-15 23:08:02.017  1830 12613 D SdAAReverse: AudioSource::virtual bool AudioSource::notifyDiscoveryInfo(ServiceDiscoveryResponse *):165 service is exist, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: serviceId:3 channelId:9
+11-15 23:08:02.017  1830 12613 D SdAAReverse: ch:9 sz:6 Control
+11-15 23:08:02.017  1830 12613 D SdAAReverse: number=7 name=MESSAGE_CHANNEL_OPEN_REQUEST
+11-15 23:08:02.017  1830 12613 D SdAAReverse: service_id: 9 
+11-15 23:08:02.017  1830 12613 D SdAAReverse: priority: 0
+11-15 23:08:02.017  1830 12613 D SdAAReverse: AudioSink::virtual bool AudioSink::notifyDiscoveryInfo(ServiceDiscoveryResponse *):113 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: Fake   serviceId: 4 fakeServiceId:5
+11-15 23:08:02.017  1830 12613 D SdAAReverse: codec_type:1 audio_type:3 rate:48000 bits:16 channels:2
+11-15 23:08:02.017  1830 12613 D SdAAReverse: AudioSink::virtual bool AudioSink::notifyDiscoveryInfo(ServiceDiscoveryResponse *):158 service is exist, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: serviceId:4 channelId:5
+11-15 23:08:02.017  1830 12613 D SdAAReverse: ch:5 sz:6 Control
+11-15 23:08:02.017  1830 12613 D SdAAReverse: number=7 name=MESSAGE_CHANNEL_OPEN_REQUEST
+11-15 23:08:02.017  1830 12613 D SdAAReverse: service_id: 5 
+11-15 23:08:02.017  1830 12613 D SdAAReverse: priority: 0
+11-15 23:08:02.017  1830 12613 D SdAAReverse: AudioSink::virtual bool AudioSink::notifyDiscoveryInfo(ServiceDiscoveryResponse *):113 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: Fake   serviceId: 5 fakeServiceId:4
+11-15 23:08:02.017  1830 12613 D SdAAReverse: codec_type:1 audio_type:1 rate:16000 bits:16 channels:1
+11-15 23:08:02.017  1830 12613 D SdAAReverse: AudioSink::virtual bool AudioSink::notifyDiscoveryInfo(ServiceDiscoveryResponse *):158 service is exist, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: serviceId:5 channelId:4
+11-15 23:08:02.017  1830 12613 D SdAAReverse: ch:4 sz:6 Control
+11-15 23:08:02.017  1830 12613 D SdAAReverse: number=7 name=MESSAGE_CHANNEL_OPEN_REQUEST
+11-15 23:08:02.017  1830 12613 D SdAAReverse: service_id: 4 
+11-15 23:08:02.017  1830 12613 D SdAAReverse: priority: 0
+11-15 23:08:02.017  1830 12613 D SdAAReverse: AudioSink::virtual bool AudioSink::notifyDiscoveryInfo(ServiceDiscoveryResponse *):113 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: AudioSink::virtual bool AudioSink::notifyDiscoveryInfo(ServiceDiscoveryResponse *):158 service is not found, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: SensorSource::virtual bool SensorSource::notifyDiscoveryInfo(ServiceDiscoveryResponse *):742 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: Fake   serviceId: 7 fakeServiceId:1
+11-15 23:08:02.017  1830 12613 D SdAAReverse: SensorSource::virtual bool SensorSource::notifyDiscoveryInfo(ServiceDiscoveryResponse *):759 service is exist, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: serviceId:7 channelId:1
+11-15 23:08:02.017  1830 12613 D SdAAReverse: ch:1 sz:6 Control
+11-15 23:08:02.017  1830 12613 D SdAAReverse: number=7 name=MESSAGE_CHANNEL_OPEN_REQUEST
+11-15 23:08:02.017  1830 12613 D SdAAReverse: service_id: 1 
+11-15 23:08:02.017  1830 12613 D SdAAReverse: priority: 0
+11-15 23:08:02.017  1830 12613 D SdAAReverse: BluetoothEndpoint::virtual bool BluetoothEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):202 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: BluetoothEndpoint::virtual bool BluetoothEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):222 service is not found, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: RadioEndpoint::virtual bool RadioEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):474 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: RadioEndpoint::virtual bool RadioEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):483 service is not found, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: MediaBrowserEndpoint::virtual bool MediaBrowserEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):176 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: MediaBrowserEndpoint::virtual bool MediaBrowserEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):185 service is not found, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: MediaPlaybackStatusEndpoint::virtual bool MediaPlaybackStatusEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):89 start
+11-15 23:08:02.017  1830 12613 D SdAAReverse: MediaPlaybackStatusEndpoint::virtual bool MediaPlaybackStatusEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):98 service is not found, and stop
+11-15 23:08:02.017  1830 12613 D SdAAReverse: NavigationStatusEndpoint::virtual bool NavigationStatusEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):160 start
+11-15 23:08:02.018  1830 12613 D SdAAReverse: Fake   serviceId: 12 fakeServiceId:6
+11-15 23:08:02.018  1830 12613 D SdAAReverse: NavigationStatusEndpoint::virtual bool NavigationStatusEndpoint::notifyDiscoveryInfo(ServiceDiscoveryResponse *):177 service is exist, and stop
+11-15 23:08:02.018  1830 12613 D SdAAReverse: serviceId:12 channelId:6
+11-15 23:08:02.018  1830 12613 D SdAAReverse: ch:6 sz:6 Control

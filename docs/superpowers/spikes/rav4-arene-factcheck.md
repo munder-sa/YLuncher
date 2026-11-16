@@ -49,7 +49,7 @@
 0. **USB を挿す前に、純正のメーター地図が出ている状態を作る。** iPhone の CarPlay と GT8D の無線を切っておく。先に CarPlay が一瞬でも繋がると黒が残り、有線 AA だけで黒くなったのか区別できなくなる。
 1. **接続直後・案内なしの状態でメーター地図が黒いか**をまず記録する(AA は未案内時の挙動が未確定なため、ここが最初の分岐)。
 2. 黒いときの順序は既存手順どおり `native` → `toggle`。GT8D はフォーカスを持っていないので **`native` 単発の無反応は想定内で、`toggle` まで必ず試す**。`native` を先にするのは、それだけで戻れば「解放だけで足りる」と分かり、自動送信が最も簡単になるため。
-3. 保存したログで、`navigation_status_service` と `DISPLAY_TYPE_CLUSTER` の映像サービスの有無に加え、**ナビ状態チャネルの `InstrumentClusterStart`(0x8001、HU→Phone)** が来ているかを見る(nav.md による)。ただし 0x8001 は右左折メタデータ側の合図で、地図タイルの映像(第 2 の映像チャネル、`CLUSTER = 1`)とは別系統。**0x8001 が無くても映像側だけ開こうとしている場合がある**ので、ServiceDiscoveryResponse 内の映像サービス(`media_sink_service`)が 1 つか 2 つか(2 つ目の `display_id` が 0 以外か)も数える。carprobe の `Cluster sink` 表示は `DISPLAY_TYPE_CLUSTER` の文字列の有無だけで、数は数えていない。
+3. 保存したログで、`navigation_status_service` と `DISPLAY_TYPE_CLUSTER` の映像サービスの有無に加え、**ナビ状態チャネルの `InstrumentClusterStart`(0x8001、HU→Phone)** が来ているかを見る(nav.md による)。ただし 0x8001 は右左折メタデータ側の合図で、地図タイルの映像(第 2 の映像チャネル、`CLUSTER = 1`)とは別系統。**0x8001 が無くても映像側だけ開こうとしている場合がある**ので、ServiceDiscoveryResponse 内の映像サービス(`media_sink_service`)が 1 つか 2 つか(2 つ目の `display_id` が 0 以外か)も数える。carprobe の `Cluster sink` 表示は `DISPLAY_TYPE_CLUSTER` の文字列の有無だけなので、Task 243 で `Video sinks`・`Secondary video`・`Nav status events` を要約に足した(`type:32769` は入力チャネルでも出るため文字列検索しない)。
 4. CarPlay モードで持ち込む場合は、暗転の主因は `altScreen` の申告と見てよい(上の結論 3)。この場合 a0call は効かない(別デーモン・別プロトコル)。
 
 ## 判断表(更新)
