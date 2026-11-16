@@ -65,6 +65,6 @@ ip -6 rule del priority 32000 unreachable
 
 ソースZIPにはJavaソース、マニフェスト、ローカル用ビルドスクリプトを含めています。外部ライブラリは使いません。
 
-ビルドにはJDK、Android SDK Platform 35、Build Tools 36.0.0が必要です。`build.ps1` 内のSDK・JDK・出力先のパスを使用環境に合わせて変更してください。
+ビルドにはJDK、Android SDK Platform 35、Build Tools 36.0.0が必要です。`build.ps1` 内のSDK・JDK・出力先のパスを使用環境に合わせて変更してください。署名鍵 `guard-signing.p12` のパスワードは環境変数 `GT8D_GUARD_KS_PASS` で渡します(未設定ならビルドは止まります)。端末に入っている版へ上書きインストールするには、既存の鍵を作ったときのパスワードを設定してください。
 
 配布するソースZIPに署名用秘密鍵は含めません。新しい鍵でビルドしたAPKは、インストール済みのものへ上書きできません。今回の作業環境には、更新用の元の署名鍵を保管しています。

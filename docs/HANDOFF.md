@@ -21,9 +21,10 @@
 - 実車持ち込みは**有線 AA モード(`cp_aa=2000`)**が基本方針。ワイヤレスデバッグは不要(carprobe は端末内 socket を使う)。
 
 **車内の手順(接続後 5 分)**:
-1. エンジン始動 → 起動を待つ。ipv6guard が起動時に socket を立てる(ワイヤレスデバッグ不要)。
+0. **エンジンを始動し、GT8D の USB を挿す前に「純正のメーター地図が出ている状態」を確かめる。** 手元の iPhone の CarPlay と、GT8D の無線(無線 CarPlay/AA)を切った状態で、メーター内に純正地図が見えていることを確認してから USB を挿す。納車直後の設定中などに CarPlay が一瞬でも先に繋がるとその時点で黒くなり、続けて有線 AA に繋ぎ直しても「前の CarPlay の黒が残っている」のか「有線 AA だけで黒くなった」のか区別できなくなる。黒が残っていたら、CarPlay を切ったまま純正ナビで案内を開始→終了する(note の復活手順)などで純正地図に戻してから始める。
+1. GT8D を有線で USB に挿す → 起動と有線 AA の投影を待つ。ipv6guard が起動時に socket を立てる(ワイヤレスデバッグ不要)。
 2. DHU で **RAV4 Probe** を開く。上部が **`adb: OK (uid=0 @localabstract:gt8d-ipv6-guard)`** になることを確認(NO のときは数秒待って再度開く/ボタンを押す。carprobe は socket 未起動なら自己 bootstrap する)。
-3. まず **`Save Boot Log & Services`** を押す → `/sdcard/Download/rav4_probe_<日時>.log` に全ログ+サービス要約を保存。画面の要約を確認: **Cluster sink YES/NO・Nav status service YES/NO・解像度一覧・NAV_FOCUS の有無**(= 実車がクラスター用シンクやナビサービスを申告しているかの肝。これで A1/A2 が効く余地があるか分かる)。
+3. まず **`Save Boot Log & Services`** を押す → `/sdcard/Download/rav4_probe_<日時>.log` に全ログ+サービス要約を保存。画面の要約を確認: **Cluster sink YES/NO・Nav status service YES/NO・解像度一覧・NAV_FOCUS の有無**(= 実車がクラスター用シンクやナビサービスを申告しているかの肝。これで A1/A2 が効く余地があるか分かる)。**誤判定に注意(後でログを読むとき)**: ①**映像サービスの数を数える。** carprobe の `Cluster sink` は `display_type: DISPLAY_TYPE_CLUSTER` の文字列の有無だけを見ていて、数は数えない。ServiceDiscoveryResponse の中に `media_sink_service`(映像)が 1 つか 2 つか、2 つ目の `display_id` が 0 以外かを保存ログで直接確かめる(`display_type` を付けない第 2 映像シンクだと `Cluster sink: NO` と出るため)。②**`InstrumentClusterStart`(0x8001)と映像の第 2 チャネルは別系統。** 0x8001 は右左折メタデータ用のナビ状態サービス上の合図で、地図タイルの映像(第 2 の映像チャネルの開設・開始)とは別。0x8001 が無くても、車が映像側の第 2 チャネルだけを使おうとしている場合があるので、①と合わせて判断する。
 4. **メーター内地図が黒いとき**(まず**接続直後・ルート案内なしの状態で黒いかどうか**を記録する。AA では未案内時の挙動が未確定なため)に **`Run a0call native`** を押す(`NAV_FOCUS_NATIVE` を 1 回送出)。メータークラスターの変化を見る。画面に `number=13`/`focus_type` の送出ログが出る(送った証拠)。
 5. 変わらなければ **`toggle 800ms`** → それでもなら **`toggle 3000ms`**(`PROJECTED`→`NATIVE` を待機付きで送る)。
 6. 各操作は同じセッションログに追記される。テスト後、ログは `/sdcard/Download/rav4_probe_*.log`(自宅で後から回収)。

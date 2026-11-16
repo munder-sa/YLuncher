@@ -21,11 +21,17 @@ Check-Exit 'package dex'
 & (Join-Path $taskTools 'zipalign.exe') -f 4 (Join-Path $taskBuild 'unsigned.apk') (Join-Path $taskBuild 'aligned.apk')
 Check-Exit 'zipalign'
 $taskKey = Join-Path $PSScriptRoot 'guard-signing.p12'
+# Keystore password comes from env GT8D_GUARD_KS_PASS (never commit it).
+# To keep signing with the existing guard-signing.p12, set the password it was created with;
+# a different key cannot update the build already installed on the device.
+if ([string]::IsNullOrEmpty($env:GT8D_GUARD_KS_PASS)) {
+    throw 'GT8D_GUARD_KS_PASS is not set (keystore password for guard-signing.p12)'
+}
 if (!(Test-Path -LiteralPath $taskKey)) {
-    & (Join-Path $taskJdk 'bin\keytool.exe') -genkeypair -keystore $taskKey -storetype PKCS12 -storepass local-gt8d-guard -alias guard -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=GT8D IPv6 Guard Local'
+    & (Join-Path $taskJdk 'bin\keytool.exe') -genkeypair -keystore $taskKey -storetype PKCS12 -storepass:env GT8D_GUARD_KS_PASS -alias guard -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=GT8D IPv6 Guard Local'
     Check-Exit 'keytool'
 }
-& (Join-Path $taskJdk 'bin\java.exe') -jar (Join-Path $taskTools 'lib\apksigner.jar') sign --ks $taskKey --ks-pass pass:local-gt8d-guard --ks-key-alias guard --out (Join-Path $taskOutput 'GT8D-IPv6-Guard.apk') (Join-Path $taskBuild 'aligned.apk')
+& (Join-Path $taskJdk 'bin\java.exe') -jar (Join-Path $taskTools 'lib\apksigner.jar') sign --ks $taskKey --ks-pass env:GT8D_GUARD_KS_PASS --ks-key-alias guard --out (Join-Path $taskOutput 'GT8D-IPv6-Guard.apk') (Join-Path $taskBuild 'aligned.apk')
 Check-Exit 'apksigner'
 & (Join-Path $taskJdk 'bin\java.exe') -jar (Join-Path $taskTools 'lib\apksigner.jar') verify --verbose (Join-Path $taskOutput 'GT8D-IPv6-Guard.apk')
 Check-Exit 'verify'
