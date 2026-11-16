@@ -20,17 +20,32 @@
 - `RAV4 Probe`(`com.gt8d.carprobe`)導入済み。`GT8D-IPv6-Guard`(`local.gt8d.ipv6guard`)導入済み・自動適用 ON(毎起動で abstract ソケット `gt8d-ipv6-guard` を立てる=carprobe の接続先)。`a0call` が `/data/local/tmp/a0call` にある。
 - 実車持ち込みは**有線 AA モード(`cp_aa=2000`)**が基本方針。ワイヤレスデバッグは不要(carprobe は端末内 socket を使う)。
 
-**車内の手順(接続後 5 分)**:
-0. **エンジンを始動し、GT8D の USB を挿す前に「純正のメーター地図が出ている状態」を確かめる。** 手元の iPhone の CarPlay と、GT8D の無線(無線 CarPlay/AA)を切った状態で、メーター内に純正地図が見えていることを確認してから USB を挿す。納車直後の設定中などに CarPlay が一瞬でも先に繋がるとその時点で黒くなり、続けて有線 AA に繋ぎ直しても「前の CarPlay の黒が残っている」のか「有線 AA だけで黒くなった」のか区別できなくなる。黒が残っていたら、CarPlay を切ったまま純正ナビで案内を開始→終了する(note の復活手順)などで純正地図に戻してから始める。
-1. GT8D を有線で USB に挿す → 起動と有線 AA の投影を待つ。ipv6guard が起動時に socket を立てる(ワイヤレスデバッグ不要)。
-2. DHU で **RAV4 Probe** を開く。上部が **`adb: OK (uid=0 @localabstract:gt8d-ipv6-guard)`** になることを確認(NO のときは数秒待って再度開く/ボタンを押す。carprobe は socket 未起動なら自己 bootstrap する)。
-3. まず **`Save Boot Log & Services`** を押す → `/sdcard/Download/rav4_probe_<日時>.log` に全ログ+サービス要約を保存。画面の要約を確認: **Cluster sink YES/NO・Nav status service YES/NO・解像度一覧・NAV_FOCUS の有無**(= 実車がクラスター用シンクやナビサービスを申告しているかの肝。これで A1/A2 が効く余地があるか分かる)。**要約の追加行(Task 243、2026-11-16)**: `Video sinks: N`(映像サービスごとに `id / display_id / type / 解像度`)、`Secondary video: YES/NO`、`Nav status endpoint: exist/not found/?`、`Nav status events: N`(+最大 3 行の見本)。**読み方と誤判定の注意**: ①**`Cluster sink` ではなく `Secondary video` で判断する。** `Cluster sink` は `DISPLAY_TYPE_CLUSTER` の文字列の有無だけで、`display_type` を付けない第 2 映像シンクだと NO になる。`Secondary video` は映像サービスが 2 つ以上・`display_id` が 0 以外・MAIN 以外の type のどれかで YES(重複出力は id で除き、後の完全な方を採用)。`?` は省略された値(protobuf の初期値 0 = MAIN / display_id 0 の可能性)。②**`InstrumentClusterStart`(0x8001)と映像の第 2 チャネルは別系統。** 0x8001 は右左折メタデータ用のナビ状態サービス上の合図で、地図タイルの映像とは別。`type:32769` は入力チャネル(channelId:3)でも大量に出るので文字列検索しない。`Nav status events` は `NavigationStatusEndpoint` の受信処理の記録だけを数える(実車で受信したときのログの文言は未確認。見本の行で確かめる)。③**要約は押した時点のログから作る。** 車がメーター表示を始めた後のナビ状態の受信を見るには、黒くなった後や a0call の後にもう一度 `Save Boot Log & Services` を押す。
-4. **メーター内地図が黒いとき**(まず**接続直後・ルート案内なしの状態で黒いかどうか**を記録する。AA では未案内時の挙動が未確定なため)に **`Run a0call native`** を押す(`NAV_FOCUS_NATIVE` を 1 回送出)。メータークラスターの変化を見る。画面に `number=13`/`focus_type` の送出ログが出る(送った証拠)。
-5. 変わらなければ **`toggle 800ms`** → それでもなら **`toggle 3000ms`**(`PROJECTED`→`NATIVE` を待機付きで送る)。
-6. 各操作は同じセッションログに追記される。テスト後、ログは `/sdcard/Download/rav4_probe_*.log`(自宅で後から回収)。
-7. 終了: a0call は無改造なので戻す作業なし。`Finish & Disable ADB` は**任意**(押すと adbd を止めるが、ipv6guard 有効中は起動時・15分周期で socket が戻る。完全に止めるなら ipv6guard で「自動適用を停止」)。通常はそのままでよい。
+**車内の手順(ユーザー確定版、2026-11-16)**:
 
-**報告してほしいこと**: ⓪ 接続直後・案内なしでメーター地図が黒かったか ① native/toggle でメーター内地図が復帰したか ② `Save Boot Log & Services` の要約(Cluster sink / Nav status service の YES/NO、解像度、NAV_FOCUS の有無)。②が「申告なし」なら、NATIVE を送っても効かない可能性が高く、A1/A2(/system 書き換え)も効果が薄いと判断できる。
+各段階で、**メーター全体の様子(地図が出ているか・黒いか・他の表示)をメモ**し、写真を撮る。carprobe の画面は操作ごとにスクリーンショット(SS)を取る。
+
+1. **純正の状態を確かめる(GT8D は挿さない)**: 車と iPhone をテザリングで繋ぐ(**CarPlay にはしない**)。メーターに純正ナビの地図が出るかを確認する。
+   - 事前に iPhone で、この車の CarPlay を無効にしておく(設定 > 一般 > CarPlay > この車)。ペアリング済みだと、テザリングや Bluetooth の接続をきっかけに無線 CarPlay が自動で始まり、その時点でメーターが黒くなることがある。
+   - メーターの表示設定を地図(ナビ)にしておく。ルート案内はしない。
+   - CarPlay が一瞬でも先に繋がると黒が残り、2 の結果が「有線 AA だけで黒くなったのか」区別できなくなる。黒が残っていたら、CarPlay を切ったまま純正ナビで案内を開始→終了する(note の復活手順)などで純正地図に戻してから 2 に進む。
+2. **GT8D を有線 AA で繋ぎ、メーターが暗転するかを確かめる**: GT8D を USB に挿す → 起動と有線 AA の投影が安定するまで待つ。**ルート案内なし**のまま、メーターの地図が黒くなるかを記録する(ipv6guard が起動時に socket を立てるので、ワイヤレスデバッグは不要)。
+   - **暗転しなければ**: 結果を記録して、念のため 3 の `Save Boot Log & Services`(サービス一覧の記録)だけ行い、Finish へ。
+3. **暗転したら carprobe**: GT8D で **RAV4 Probe** を開き、上部が **`adb: OK (uid=0 @localabstract:gt8d-ipv6-guard)`** になることを確認(NO のときは数秒待って再度開く/ボタンを押す。carprobe は socket 未起動なら自己 bootstrap する)。次の順に押し、**それぞれ SS を取る**:
+   1. `Save Boot Log & Services`(暗転した状態の記録) → SS
+   2. `Run a0call status` → SS → `Save Boot Log & Services` → SS
+   3. `Run a0call native` → メーターを見る → SS → `Save Boot Log & Services` → SS
+      - **ここで地図が戻ったら**: 戻った時刻と、戻った状態が続くか(1 分ほど)をメモする。toggle は黒い状態から試さないと意味が無いので、USB を抜き挿しして再び黒くしてから(黒くならなければそれも記録)次へ。
+   4. `toggle 800ms` → メーターを見る → SS
+   5. `toggle 3000ms` → メーターを見る → SS
+   6. 最後にもう一度 `Save Boot Log & Services` → SS(toggle の送信と、その後の受信の記録を残すため)
+4. **終了**: `Finish & Disable ADB` を押す(adbd を止める。ipv6guard が有効なら、起動時・15 分ごとに socket が戻る)。
+
+**ログの残り方**: `Save Boot Log & Services` は押すたびに新しいファイル `/sdcard/Download/rav4_probe_<日時>.log` を作り、全ログとサービス要約を保存する。a0call の結果は、直前に作ったファイルに追記される。自宅で全ファイルを回収する。
+
+**要約の見方**(`Save Boot Log & Services` を押すと画面に出る): **Cluster sink YES/NO・Nav status service YES/NO・解像度一覧・NAV_FOCUS の有無**(= 実車がクラスター用シンクやナビサービスを申告しているかの肝。これで A1/A2 が効く余地があるか分かる)。**要約の追加行(Task 243、2026-11-16)**: `Video sinks: N`(映像サービスごとに `id / display_id / type / 解像度`)、`Secondary video: YES/NO`、`Nav status endpoint: exist/not found/?`、`Nav status events: N`(+最大 3 行の見本)。**読み方と誤判定の注意**: ①**`Cluster sink` ではなく `Secondary video` で判断する。** `Cluster sink` は `DISPLAY_TYPE_CLUSTER` の文字列の有無だけで、`display_type` を付けない第 2 映像シンクだと NO になる。`Secondary video` は映像サービスが 2 つ以上・`display_id` が 0 以外・MAIN 以外の type のどれかで YES(重複出力は id で除き、後の完全な方を採用)。`?` は省略された値(protobuf の初期値 0 = MAIN / display_id 0 の可能性)。②**`InstrumentClusterStart`(0x8001)と映像の第 2 チャネルは別系統。** 0x8001 は右左折メタデータ用のナビ状態サービス上の合図で、地図タイルの映像とは別。`type:32769` は入力チャネル(channelId:3)でも大量に出るので文字列検索しない。`Nav status events` は `NavigationStatusEndpoint` の受信処理の記録だけを数える(実車で受信したときのログの文言は未確認。見本の行で確かめる)。③**要約は押した時点のログから作る。** 車がメーター表示を始めた後のナビ状態の受信を見るには、黒くなった後や a0call の後にもう一度 `Save Boot Log & Services` を押す。
+**ボタンの中身**: `Run a0call status` は送らずに状態だけ見る(`Controller=… ready=1` なら送れる状態)。`native` は `NAV_FOCUS_NATIVE` を 1 回送る(画面に `number=13`/`focus_type` の送出ログ=送った証拠)。`toggle` は `PROJECTED`→(待機)→`NATIVE`。GT8D はフォーカスを持っていないので、`native` だけの無反応は想定内で、toggle まで必ず試す。a0call は何も書き換えないので、終了後に戻す作業はない。
+
+**報告してほしいこと**: ① 純正状態(1)でメーターに地図が出たか ② 有線 AA を繋いで(2)、案内なしで黒くなったか ③ native / toggle 800 / toggle 3000 のそれぞれで地図が戻ったか(戻ったなら、それが続いたか) ④ 各段階のメーターのメモと写真、carprobe の SS ⑤ 回収した `rav4_probe_*.log` 全部。要約の `Secondary video` が NO(映像は 1 つだけ)なら、車はメーター用の映像を求めていないので、黒の原因は別の所にある可能性が高い。
 
 - **【旧経緯・参考】carprobe の loopback ADB(TCP 5555)方式は、この端末では構造的に不成立(2026-11-15 夜)。上記 abstract ソケット方式で解決済み】** 実機で決定的に確認: **(1) この端末の adbd は、どのモードでも素の TCP `:5555` を LISTEN しない。** classic モード(`adb_wifi=0`・`persist/service.adb.tcp.port=5555`・adbd は `running`)でも `ss -ltnp` で `:5555` は 0 件(0.0.0.0 にも loopback にも無し。system の別 cgroup から採取、adbd 再起動に耐えた確実な結果)。`adb_wifi=1` では TLS の一時ポートだけ、車載 USB モードでは USB FFS(`FUNCTIONFS_BIND` 待ち)に張り付く。= carprobe が繋ぐ先の `127.0.0.1:5555` は開かない(DHU でも `ECONNREFUSED` を確認)。「停止でシェルが切れただけ」ではなく構造的。**(2) ベンダーの `com.carsyso.main` の `ACTION_EXECUTE_SH`(usb-toggle 方式)は uid=1000(system)・`u:r:system_app:s0` で実行**(ブロードキャストで `id` を実証)。root ではない。a0call は root 専用の sdAutoReverse を ptrace するため system では不可。さらに system は `/system/xbin`(`drwxr-x--- root shell`、0750)に入れず `sdsu_no`(setuid root)にも到達できない(昇格経路なし)。**結論: この端末で「アプリから root」を得る手段は、USB/ワイヤレスの adb(host が必要)以外に無い。車内(host 無し)では a0call を起動できない。** 有用な副産物: `ACTION_EXECUTE_SH` は adbd と別 cgroup なので、ここから `settings put adb_wifi_enabled 0/1`+`ctl.restart adbd`+`ss` を叩けば adbd 再起動に巻き込まれず、`adb_wifi=1` への自己復帰も効く(mDNS 再広告に数十秒)。**次の判断**: 車内で a0call を動かすには root 起動の仕組みが要る → (A) 起動時に動く root サービス/デーモン(init か `/system`/`/vendor` の .rc = A1/A2 相当、要ユーザー承認・verified boot の remount)で a0call を自律実行 or トリガーファイル監視、carprobe はトリガー UI に縮小 / (B) 車内に小さな host(予備 Android+adb、SBC 等)を持ち込む / (C) ベンチ(DHU)確認のみに留める。loopback 版 carprobe の実装(`6e38286`)は技術的には正しいが、この HW では無効。方式の選択はユーザー決定待ち。詳細は spike の「carprobe — 診断結果」。
 
