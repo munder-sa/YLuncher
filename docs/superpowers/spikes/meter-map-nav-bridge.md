@@ -65,6 +65,7 @@ Google の受信側ライブラリ(ヘッドユニット用の GAL receiver-lib)
 - 60 系 RAV4 は、純正の Android Auto で 12.3 インチメーターに地図を全画面表示でき、CarPlay でもメーターに地図が出る(Apple のマップ固定)との報告がある。つまり**車はメーターの地図枠を投影側に渡す作り**。
 - クラウン スポーツ + 他社の AI Box(CarPlay)で、メーター内の地図だけが真っ黒になり、AI Box の USB を抜くと戻るという報告がある。
 - 以上から、ブラックアウトは「ナビのフォーカス」ではなく「メーター用の表示(Android Auto ならクラスター表示のサービス、CarPlay なら別画面のストリームや turn-by-turn の状態)を車が投影側に割り当て、Box が中身を送らない」ことで起きている可能性が高い(仮説)。
+- **2026-11-16 追記**: 外部調査メモ 2 本を一次ソースで確かめた結果を `rav4-arene-factcheck.md` にまとめた。NAV フォーカスの値(NATIVE=1 / PROJECTED=2、msg 13 は Phone→HU の request/release)、`DISPLAY_TYPE_CLUSTER`、CarPlay の type 110/111 は一次ソースで確認。CarPlay は本物の iPhone で未案内時もメーターに地図が出る(Reddit)ため、上の仮説は CarPlay では強く支持される。AA の未案内時の挙動は未確定。P3 Pro / R15 世代の仮説は根拠が崩れたので外した。
 
 ## 追加確認(同日、ユーザー承認「AT#CB の試し撃ち GO」)
 

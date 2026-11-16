@@ -1,8 +1,10 @@
 # YLuncher 共有引き継ぎ
 
-最終更新: 2026-11-15 21:22 (JST)
+最終更新: 2026-11-16 22:20 (JST)
 
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
+
+- **【外部調査メモのファクトチェック完了(2026-11-16)】** `docs/superpowers/spikes/rav4-arene-factcheck.md`(出典は同じフォルダの `rav4-arene-sources/`)。要点: ①a0call が送る `NAV_FOCUS_NATIVE=1` / `PROJECTED=2` は open-android-auto の `.proto` と一致(APK 静的解析由来で実機の実証ではない)。Phone からの NATIVE は仕様上の「解放」なので、フォーカスを持っていない GT8D では **`native` 単発の無反応は想定内。`toggle` まで必ず試す**(手順の順序は native→toggle のまま。native だけで戻れば自動化が最も簡単になるので、切り分けのため先に試す) ②CarPlay は本物の iPhone で未案内時もメーターに地図が出る+GT8D のブリッジが `altScreen` を申告 → CarPlay モードの暗転はこれが主因とみてよい(未実測、a0call は効かない) ③AA の未案内時の挙動は未確定 → 実車で「接続直後・案内なしで黒いか」を最初に記録。ログでは `InstrumentClusterStart`(0x8001)も見る ④復活手順の note は HE PRO ULTRA の記事(GT8D ではない) ⑤P3 Pro / R15 世代の仮説は外した。実車テスト手順そのものは変更なし。
 
 - **【A0 ツール完成・DHU 実証済み、実車テスト待ち】** `tools/a0call/a0call.c`(ptrace で実行中の `sdAutoReverse` に `sendNavFocusNotifyCmd` を 1 回呼ばせる。何も書き換えない)。`native` / `toggle [ms]` / `status`。DHU で ID 13 の送出(`NAV_FOCUS_NATIVE`、`PROJECTED` → `NATIVE`)を GT8D のログで確認、クラッシュなし・投影維持。再実験(16:13・16:18)で、DHU のコンソールは無反応、クラスターウィンドウも変化なし(黒)。DHU は「送出できること」までの実証で、車の反応は実車でしか分からない。`com.estrongs.android.pop`(ES)がログを連発して logcat が数十秒で入れ替わっていたため、ユーザー承認で `pm uninstall --user 0` した(2026-11-15 16:23、`/vendor` は未変更、戻し方は spike に記載)。削除後に連発は止まった。`a0call` は `/data/local/tmp/` に配置済み。**実車手順(接続後 5 分)は spike の「A0 ツールの実証と実車テスト手順」**: ① `logcat -c` せずに丸ごと保存 ② サービス一覧の抽出コマンド(`DISPLAY_TYPE_CLUSTER`・`navigation_status_service` の有無) ③ 黒いときは `a0call native` → 効かなければ `toggle 800`/`3000` ④ 終了後はデバッグ OFF で通常モードへ(A0 は何も書き換えていないので戻す作業なし)。A1/A2(`/system` の書き換え)は、実車で A0 が効くと確認できてから。
 
@@ -22,12 +24,12 @@
 1. エンジン始動 → 起動を待つ。ipv6guard が起動時に socket を立てる(ワイヤレスデバッグ不要)。
 2. DHU で **RAV4 Probe** を開く。上部が **`adb: OK (uid=0 @localabstract:gt8d-ipv6-guard)`** になることを確認(NO のときは数秒待って再度開く/ボタンを押す。carprobe は socket 未起動なら自己 bootstrap する)。
 3. まず **`Save Boot Log & Services`** を押す → `/sdcard/Download/rav4_probe_<日時>.log` に全ログ+サービス要約を保存。画面の要約を確認: **Cluster sink YES/NO・Nav status service YES/NO・解像度一覧・NAV_FOCUS の有無**(= 実車がクラスター用シンクやナビサービスを申告しているかの肝。これで A1/A2 が効く余地があるか分かる)。
-4. **メーター内地図が黒いとき**に **`Run a0call native`** を押す(`NAV_FOCUS_NATIVE` を 1 回送出)。メータークラスターの変化を見る。画面に `number=13`/`focus_type` の送出ログが出る(送った証拠)。
+4. **メーター内地図が黒いとき**(まず**接続直後・ルート案内なしの状態で黒いかどうか**を記録する。AA では未案内時の挙動が未確定なため)に **`Run a0call native`** を押す(`NAV_FOCUS_NATIVE` を 1 回送出)。メータークラスターの変化を見る。画面に `number=13`/`focus_type` の送出ログが出る(送った証拠)。
 5. 変わらなければ **`toggle 800ms`** → それでもなら **`toggle 3000ms`**(`PROJECTED`→`NATIVE` を待機付きで送る)。
 6. 各操作は同じセッションログに追記される。テスト後、ログは `/sdcard/Download/rav4_probe_*.log`(自宅で後から回収)。
 7. 終了: a0call は無改造なので戻す作業なし。`Finish & Disable ADB` は**任意**(押すと adbd を止めるが、ipv6guard 有効中は起動時・15分周期で socket が戻る。完全に止めるなら ipv6guard で「自動適用を停止」)。通常はそのままでよい。
 
-**報告してほしいこと**: ① native/toggle でメーター内地図が復帰したか ② `Save Boot Log & Services` の要約(Cluster sink / Nav status service の YES/NO、解像度、NAV_FOCUS の有無)。②が「申告なし」なら、NATIVE を送っても効かない可能性が高く、A1/A2(/system 書き換え)も効果が薄いと判断できる。
+**報告してほしいこと**: ⓪ 接続直後・案内なしでメーター地図が黒かったか ① native/toggle でメーター内地図が復帰したか ② `Save Boot Log & Services` の要約(Cluster sink / Nav status service の YES/NO、解像度、NAV_FOCUS の有無)。②が「申告なし」なら、NATIVE を送っても効かない可能性が高く、A1/A2(/system 書き換え)も効果が薄いと判断できる。
 
 - **【旧経緯・参考】carprobe の loopback ADB(TCP 5555)方式は、この端末では構造的に不成立(2026-11-15 夜)。上記 abstract ソケット方式で解決済み】** 実機で決定的に確認: **(1) この端末の adbd は、どのモードでも素の TCP `:5555` を LISTEN しない。** classic モード(`adb_wifi=0`・`persist/service.adb.tcp.port=5555`・adbd は `running`)でも `ss -ltnp` で `:5555` は 0 件(0.0.0.0 にも loopback にも無し。system の別 cgroup から採取、adbd 再起動に耐えた確実な結果)。`adb_wifi=1` では TLS の一時ポートだけ、車載 USB モードでは USB FFS(`FUNCTIONFS_BIND` 待ち)に張り付く。= carprobe が繋ぐ先の `127.0.0.1:5555` は開かない(DHU でも `ECONNREFUSED` を確認)。「停止でシェルが切れただけ」ではなく構造的。**(2) ベンダーの `com.carsyso.main` の `ACTION_EXECUTE_SH`(usb-toggle 方式)は uid=1000(system)・`u:r:system_app:s0` で実行**(ブロードキャストで `id` を実証)。root ではない。a0call は root 専用の sdAutoReverse を ptrace するため system では不可。さらに system は `/system/xbin`(`drwxr-x--- root shell`、0750)に入れず `sdsu_no`(setuid root)にも到達できない(昇格経路なし)。**結論: この端末で「アプリから root」を得る手段は、USB/ワイヤレスの adb(host が必要)以外に無い。車内(host 無し)では a0call を起動できない。** 有用な副産物: `ACTION_EXECUTE_SH` は adbd と別 cgroup なので、ここから `settings put adb_wifi_enabled 0/1`+`ctl.restart adbd`+`ss` を叩けば adbd 再起動に巻き込まれず、`adb_wifi=1` への自己復帰も効く(mDNS 再広告に数十秒)。**次の判断**: 車内で a0call を動かすには root 起動の仕組みが要る → (A) 起動時に動く root サービス/デーモン(init か `/system`/`/vendor` の .rc = A1/A2 相当、要ユーザー承認・verified boot の remount)で a0call を自律実行 or トリガーファイル監視、carprobe はトリガー UI に縮小 / (B) 車内に小さな host(予備 Android+adb、SBC 等)を持ち込む / (C) ベンチ(DHU)確認のみに留める。loopback 版 carprobe の実装(`6e38286`)は技術的には正しいが、この HW では無効。方式の選択はユーザー決定待ち。詳細は spike の「carprobe — 診断結果」。
 
