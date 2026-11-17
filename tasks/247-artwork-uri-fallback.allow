@@ -1,0 +1,6 @@
+create app/src/main/java/com/gt8d/launcher/media/ArtworkFallbackLoader.kt
+create app/src/test/java/com/gt8d/launcher/media/ArtworkFallbackLoaderTest.kt
+write app/src/main/java/com/gt8d/launcher/media/MediaSessionCache.kt
+write app/src/main/java/com/gt8d/launcher/media/MediaWatcher.kt
+write app/src/test/java/com/gt8d/launcher/media/MediaWatcherTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.MediaWatcherTest' --tests 'com.gt8d.launcher.media.ArtworkFallbackLoaderTest'
