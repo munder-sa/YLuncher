@@ -2,7 +2,7 @@
 
 最終更新: 2026-11-17 (JST)
 
-## Apple Music のジャケット・背景色の欠落対策 (2026-11-17、**v2.3.5 正式版(版66)を GT8D に導入・push 済み**)
+## Apple Music のジャケット・背景色の欠落対策 (2026-11-17、**v2.3.6 正式版(版68)を GT8D に導入・push 済み**)
 
 - 事象: GT8D 起動直後に Apple Music を再生すると、ミニプレイヤーのジャケットと背景色が欠け、別ジャケットの曲に移ると直ることがある。仕様の出典はユーザー提供の指示書(Task 244/245 のテンプレート)。
 - **Task 244**(`1aedb9f`): `[Artwork] meta ...`(Bitmap の有無・DISPLAY_ICON・URI のスキームのみ、同内容は抑止)と、ジャケット未取得パッケージのメディア通知の `largeIcon` 有無だけの `[Artwork] notif ...` を追加。
@@ -11,6 +11,8 @@
 - **Task 247**(`7e76584`): Bitmap が無く http(s) の画像 URL だけが **2秒** 続いたら `ArtworkFallbackLoader` で取得して `artwork` を補う。失敗はキャッシュせず 1.5s/4s で再試行+`NetworkCallback.onAvailable` で再試行。成功 3 件を LRU 保持、8MB 上限・最大辺 512px。DISPLAY_ICON 補完・通知 largeIcon 補完は、ログ上不要なので入れていない。
 - テスト: `MediaWatcherTest` 16件・`ArtworkFallbackLoaderTest` 8件・`ArtworkBackgroundTest` 22件 成功。全テストは未実行(正式版にする前に1回)。
 - beta2 の実機確認でユーザーが問題なしと判断 → 全テスト成功(失敗0)→ v2.3.5(版66、タグ `v2.3.5-release`)。
+- **Task 250**(v2.3.6): `NET_CAPABILITY_VALIDATED` の立ち上がり(ネットワークごとに1回)でも画像を再取得(`ValidatedNetworkTracker`)。同じ曲で画像サイズだけ変わったときは再抽出中も前の背景色を保つ(`colorsFor` は抽出完了時のみ、`imageColorsFor` は同一曲なら引き継ぐ)。通知診断の抑止を回復・通知削除・切断で解除(`NotificationArtworkDiag`)。`positionAt` は位置 -1 で 0、更新時刻が未来なら補間しない。ユーザー提供の指示書から「全画面離脱で image を消す」は `sameArtworkDoesNotReextract` と矛盾するため除外。
+- **Task 252**: Task 250 の「`positionUpdatedAt <= 0` なら補間しない」は、歌詞の UI テスト(時計 0 開始)を14件壊したので取り消した。全テスト成功(失敗0)→ v2.3.6(版68、タグ `v2.3.6-release`)。
 - **次の一手**: 普段使いで欠けたら `adb logcat -d -s GT8D | grep Artwork` を採取(補完が効けば `meta ... bmp=null uri=ALBUM_ART_URI:https` の約2秒後に `extract start` が出る)。補完が効いていなければ原因を追う。
 
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
