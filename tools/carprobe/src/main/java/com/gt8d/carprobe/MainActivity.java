@@ -35,7 +35,11 @@ public final class MainActivity extends Activity {
     private static final String LOG_TAG = "SdAAReverse: ";
     private static final Pattern FOCUS_LINE = Pattern.compile("\\bnumber=13\\b|\\bfocus_type\\b");
     private static final ExecutorService COMMANDS = Executors.newSingleThreadExecutor();
-    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
+    // Initialize Android state only when posting, so the pure helpers work in JVM tests.
+    private static final class MainHandler {
+        private static final Handler INSTANCE = new Handler(Looper.getMainLooper());
+    }
 
     // Process-lifetime session: recreation must not lose the log or allow a second command.
     private static WeakReference<MainActivity> current = new WeakReference<>(null);
@@ -48,6 +52,7 @@ public final class MainActivity extends Activity {
     private static long lastFileTime;
 
     private final List<Button> buttons = new ArrayList<>();
+    private Button retryButton;
     private TextView rootView;
     private TextView sessionView;
     private TextView resultView;
@@ -90,7 +95,19 @@ public final class MainActivity extends Activity {
                 button("Run a0call native", () ->
                         startOperation("Run a0call native", () -> runA0("native", true))),
                 toggles);
-        addRow(controls, button("Finish & Disable ADB (Normal Mode)", this::confirmFinish));
+        retryButton = new Button(this);
+        retryButton.setText("Retry ADB");
+        retryButton.setAllCaps(false);
+        retryButton.setTextSize(22);
+        retryButton.setMinHeight(dp(120));
+        retryButton.setOnClickListener(view -> {
+            if (canRetryAdb(rootAvailable, busy)) {
+                rootStatus = "adb: checking...";
+                startOperation("Checking adb", MainActivity::checkRoot);
+            }
+        });
+        addRow(controls, retryButton,
+                button("Finish & Disable ADB (Normal Mode)", this::confirmFinish));
 
         ScrollView controlScroll = new ScrollView(this);
         controlScroll.addView(controls);
@@ -136,6 +153,14 @@ public final class MainActivity extends Activity {
         return view;
     }
 
+    static boolean canRunCommand(boolean rootAvailable, boolean busy) {
+        return rootAvailable && !busy;
+    }
+
+    static boolean canRetryAdb(boolean rootAvailable, boolean busy) {
+        return !rootAvailable && !busy;
+    }
+
     private Button button(String label, Runnable action) {
         Button button = new Button(this);
         button.setText(label);
@@ -143,7 +168,7 @@ public final class MainActivity extends Activity {
         button.setTextSize(22);
         button.setMinHeight(dp(120));
         button.setOnClickListener(view -> {
-            if (!busy && rootAvailable) {
+            if (canRunCommand(rootAvailable, busy)) {
                 action.run();
             }
         });
@@ -180,7 +205,10 @@ public final class MainActivity extends Activity {
             resultScroll.scrollTo(0, 0);
         }
         for (Button button : buttons) {
-            button.setEnabled(rootAvailable && !busy);
+            button.setEnabled(canRunCommand(rootAvailable, busy));
+        }
+        if (retryButton != null) {
+            retryButton.setEnabled(canRetryAdb(rootAvailable, busy));
         }
     }
 
@@ -193,7 +221,7 @@ public final class MainActivity extends Activity {
 
     private static void show(String text) {
         resultText = text;
-        MAIN.post(MainActivity::refresh);
+        MainHandler.INSTANCE.post(MainActivity::refresh);
     }
 
     private void startOperation(String label, Operation operation) {
@@ -209,7 +237,7 @@ public final class MainActivity extends Activity {
             } catch (Exception e) {
                 show(resultText + "\nFailed: " + e);
             } finally {
-                MAIN.post(() -> {
+                MainHandler.INSTANCE.post(() -> {
                     busy = false;
                     refresh();
                 });
@@ -252,7 +280,7 @@ public final class MainActivity extends Activity {
                     + "); fi", COMMAND_TIMEOUT_MS);
             if (result.ok) {
                 sessionPath = path;
-                MAIN.post(MainActivity::refresh);
+                MainHandler.INSTANCE.post(MainActivity::refresh);
                 return;
             }
             if (result.exitCode != 73) {
@@ -379,7 +407,7 @@ public final class MainActivity extends Activity {
 
     private static void showBeforeAdbCommand(String text) throws Exception {
         CountDownLatch applied = new CountDownLatch(1);
-        MAIN.post(() -> {
+        MainHandler.INSTANCE.post(() -> {
             MainActivity activity = current.get();
             resultText = text;
             if (activity != null && !activity.isFinishing() && !activity.isDestroyed()) {

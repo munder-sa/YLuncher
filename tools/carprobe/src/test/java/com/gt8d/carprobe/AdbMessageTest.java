@@ -2,7 +2,9 @@ package com.gt8d.carprobe;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.EOFException;
@@ -14,6 +16,21 @@ import java.util.Arrays;
 import org.junit.Test;
 
 public class AdbMessageTest {
+    @Test
+    public void buttonEnablementSeparatesNormalCommandsAndRetryAdb() {
+        assertFalse(MainActivity.canRunCommand(false, true));
+        assertFalse(MainActivity.canRetryAdb(false, true));
+
+        assertTrue(MainActivity.canRunCommand(true, false));
+        assertFalse(MainActivity.canRetryAdb(true, false));
+
+        assertFalse(MainActivity.canRunCommand(false, false));
+        assertTrue(MainActivity.canRetryAdb(false, false));
+
+        assertFalse(MainActivity.canRunCommand(true, true));
+        assertFalse(MainActivity.canRetryAdb(true, true));
+    }
+
     @Test
     public void encodeCnxnHeaderAndPayload() {
         byte[] payload = "host::\0".getBytes(StandardCharsets.UTF_8);
