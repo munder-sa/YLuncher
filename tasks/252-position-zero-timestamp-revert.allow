@@ -1,0 +1,3 @@
+write app/src/main/java/com/gt8d/launcher/media/NowPlaying.kt
+write app/src/test/java/com/gt8d/launcher/media/NowPlayingTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.NowPlayingTest' --tests 'com.gt8d.launcher.ui.home.LyricIndexTest' --tests 'com.gt8d.launcher.ui.home.InterludeBoundaryUiTest' --tests 'com.gt8d.launcher.ui.home.LyricsPaneTest' --tests 'com.gt8d.launcher.ui.lifecycle.VisibleUiLifecycleTest'
