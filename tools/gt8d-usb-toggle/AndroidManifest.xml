@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.gt8d.usbtoggle">
+    <uses-sdk android:minSdkVersion="35" android:targetSdkVersion="35" />
+    <queries><package android:name="com.carsyso.main" /></queries>
+    <application android:label="GT8D USB切替" android:icon="@drawable/ic_usb"
+        android:allowBackup="false" android:theme="@android:style/Theme.Material.NoActionBar"
+        android:debuggable="false" android:supportsRtl="true">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

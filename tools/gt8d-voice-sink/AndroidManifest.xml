@@ -1,0 +1,26 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.gt8d.voicesink">
+    <uses-sdk android:minSdkVersion="35" android:targetSdkVersion="35" />
+    <queries>
+        <intent><action android:name="android.speech.action.WEB_SEARCH" /></intent>
+        <intent><action android:name="android.speech.action.VOICE_SEARCH_HANDS_FREE" /></intent>
+    </queries>
+    <application android:label="GT8D 音声キー抑止" android:icon="@drawable/ic_voice_sink"
+        android:allowBackup="false" android:debuggable="false" android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+        <activity android:name=".SettingsActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".SinkActivity" android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true"
+            android:noHistory="true" android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.speech.action.WEB_SEARCH" />
+                <action android:name="android.speech.action.VOICE_SEARCH_HANDS_FREE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
