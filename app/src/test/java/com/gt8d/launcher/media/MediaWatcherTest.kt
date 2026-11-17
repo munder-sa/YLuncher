@@ -33,6 +33,68 @@ class MediaWatcherTest {
     private val apple = "com.apple.android.music"
     private val favorite = "com.apple.android.music.playback.action.FAVORITE"
 
+    @Test fun validatedNetworkTrackerRetriesOnAvailableAndValidatedRisingEdgeOnly() {
+        var retries = 0
+        val tracker = ValidatedNetworkTracker<String> { retries++ }
+        tracker.onAvailable("net1")
+        assertEquals(1, retries)
+        tracker.onCapabilitiesChanged("net1", isValidated = false)
+        assertEquals(1, retries)
+        tracker.onCapabilitiesChanged("net1", isValidated = true)
+        assertEquals(2, retries)
+        tracker.onCapabilitiesChanged("net1", isValidated = true)
+        assertEquals(2, retries)
+        tracker.onCapabilitiesChanged("net1", isValidated = false)
+        assertEquals(2, retries)
+        tracker.onCapabilitiesChanged("net1", isValidated = true)
+        assertEquals(3, retries)
+        tracker.onLost("net1")
+        assertEquals(3, retries)
+        tracker.onCapabilitiesChanged("net1", isValidated = true)
+        assertEquals(4, retries)
+
+        tracker.onCapabilitiesChanged("net2", isValidated = true)
+        assertEquals(5, retries)
+        tracker.onCapabilitiesChanged("net1", isValidated = true)
+        assertEquals(5, retries)
+        tracker.clear()
+        assertEquals(5, retries)
+        tracker.onCapabilitiesChanged("net1", isValidated = true)
+        assertEquals(6, retries)
+        tracker.onCapabilitiesChanged("net2", isValidated = true)
+        assertEquals(7, retries)
+    }
+
+    @Test fun notificationArtworkDiagResetsAfterArtworkRecoveryRemovalAndClear() {
+        val logs = mutableListOf<Pair<String, Boolean>>()
+        val diag = NotificationArtworkDiag { pkg, hasLargeIcon -> logs += pkg to hasLargeIcon }
+        val missing = setOf(apple)
+        diag.onPosted(apple, missing, hasMediaSession = false, hasLargeIcon = true)
+        diag.onPosted("other", missing, hasMediaSession = true, hasLargeIcon = true)
+        assertTrue(logs.isEmpty())
+
+        repeat(2) {
+            diag.onPosted(apple, missing, hasMediaSession = true, hasLargeIcon = true)
+        }
+        assertEquals(listOf(apple to true), logs)
+
+        diag.onPosted("other", emptySet(), hasMediaSession = false, hasLargeIcon = false)
+        assertEquals(listOf(apple to true), logs)
+        diag.onPosted(apple, missing, hasMediaSession = true, hasLargeIcon = true)
+        assertEquals(List(2) { apple to true }, logs)
+
+        diag.onRemoved(null)
+        diag.onPosted(apple, missing, hasMediaSession = true, hasLargeIcon = true)
+        assertEquals(List(2) { apple to true }, logs)
+        diag.onRemoved(apple)
+        diag.onPosted(apple, missing, hasMediaSession = true, hasLargeIcon = true)
+        assertEquals(List(3) { apple to true }, logs)
+
+        diag.clear()
+        diag.onPosted(apple, missing, hasMediaSession = true, hasLargeIcon = true)
+        assertEquals(List(4) { apple to true }, logs)
+    }
+
     @Test fun hundredPositionCallbacksDoNotReadAnyControllerOrLabelAgain() {
         val art = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         val sessions = listOf(

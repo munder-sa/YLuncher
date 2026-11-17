@@ -161,6 +161,34 @@ class NowPlayingTest {
     }
 
     @Test
+    fun positionAt_guardsUnknownPositionZeroTimestampAndFutureTimestamp() {
+        val unknownPosition = snapshot(
+            playing = true,
+            positionMs = -1L,
+            positionUpdatedAt = 1000L,
+        )
+        assertEquals(0L, positionAt(unknownPosition, nowMs = 5000L))
+        assertEquals(0L, unknownPosition.toNowPlaying().positionAt(nowMs = 5000L))
+
+        val zeroTimestamp = snapshot(
+            playing = true,
+            positionMs = 2000L,
+            positionUpdatedAt = 0L,
+            durationMs = 10000L,
+        )
+        assertEquals(2000L, positionAt(zeroTimestamp, nowMs = 500_000L))
+        assertEquals(2000L, zeroTimestamp.toNowPlaying().positionAt(nowMs = 500_000L))
+
+        val futureTimestamp = zeroTimestamp.copy(positionUpdatedAt = 9000L)
+        assertEquals(2000L, positionAt(futureTimestamp, nowMs = 5000L))
+        assertEquals(2000L, futureTimestamp.toNowPlaying().positionAt(nowMs = 5000L))
+
+        val trackStart = zeroTimestamp.copy(positionMs = 0L, positionUpdatedAt = 1000L, speed = 1f)
+        assertEquals(1500L, positionAt(trackStart, nowMs = 2500L))
+        assertEquals(1500L, trackStart.toNowPlaying().positionAt(nowMs = 2500L))
+    }
+
+    @Test
     fun nowPlaying_positionAt_interpolates() {
         val playing = NowPlaying(
             pkg = "com.example.music",

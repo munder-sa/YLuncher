@@ -29,6 +29,52 @@ import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 
+internal class ValidatedNetworkTracker<N>(private val onRetry: () -> Unit) {
+    private val validated = mutableSetOf<N>()
+
+    fun onAvailable(network: N) {
+        onRetry()
+    }
+
+    fun onCapabilitiesChanged(network: N, isValidated: Boolean) {
+        if (isValidated) {
+            if (validated.add(network)) onRetry()
+        } else {
+            validated.remove(network)
+        }
+    }
+
+    fun onLost(network: N) {
+        validated.remove(network)
+    }
+
+    fun clear() {
+        validated.clear()
+    }
+}
+
+internal class NotificationArtworkDiag(
+    private val onLog: (pkg: String, hasLargeIcon: Boolean) -> Unit,
+) {
+    private val lastLargeIconByPackage = mutableMapOf<String, Boolean>()
+
+    fun onPosted(pkg: String, missingPackages: Set<String>, hasMediaSession: Boolean, hasLargeIcon: Boolean) {
+        lastLargeIconByPackage.keys.retainAll(missingPackages)
+        if (pkg !in missingPackages || !hasMediaSession) return
+        if (lastLargeIconByPackage[pkg] == hasLargeIcon) return
+        lastLargeIconByPackage[pkg] = hasLargeIcon
+        onLog(pkg, hasLargeIcon)
+    }
+
+    fun onRemoved(pkg: String?) {
+        if (pkg != null) lastLargeIconByPackage.remove(pkg)
+    }
+
+    fun clear() {
+        lastLargeIconByPackage.clear()
+    }
+}
+
 object MediaWatcher {
     private const val TAG = "GT8D"
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
@@ -51,6 +97,7 @@ object MediaWatcher {
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
         fetch = { fetchArtworkBitmap(artworkClient, it) },
     )
+    private val validatedNetworkTracker = ValidatedNetworkTracker<Network> { artworkLoader.onNetworkAvailable() }
     private val cache = MediaSessionCache(object : MediaSessionCache.Access<MediaController> {
         override fun packageName(controller: MediaController) = controller.packageName
         override fun metadata(controller: MediaController) = controller.metadata
@@ -100,6 +147,7 @@ object MediaWatcher {
         labelReceiver = null
         val callback = networkCallback
         networkCallback = null
+        validatedNetworkTracker.clear()
         cache.clear()
         if (callback != null) {
             try {
@@ -222,7 +270,20 @@ object MediaWatcher {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 if (networkCallback !== this) return
-                artworkLoader.onNetworkAvailable()
+                validatedNetworkTracker.onAvailable(network)
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                if (networkCallback !== this) return
+                validatedNetworkTracker.onCapabilitiesChanged(
+                    network,
+                    networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+                )
+            }
+
+            override fun onLost(network: Network) {
+                if (networkCallback !== this) return
+                validatedNetworkTracker.onLost(network)
             }
         }
         try {
@@ -253,7 +314,9 @@ object MediaWatcher {
 }
 
 class MediaListenerService : NotificationListenerService() {
-    private val lastLargeIconByPackage = mutableMapOf<String, Boolean>()
+    private val diag = NotificationArtworkDiag { pkg, hasLargeIcon ->
+        DiagLog.d("Artwork", "notif pkg=$pkg hasMediaSession=true largeIcon=$hasLargeIcon")
+    }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -261,6 +324,7 @@ class MediaListenerService : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        diag.clear()
         MediaWatcher.stop()
         super.onListenerDisconnected()
     }
@@ -270,16 +334,15 @@ class MediaListenerService : NotificationListenerService() {
         // 通知のタイトル・本文・その他の extras の値は読まない・保存しない。
         if (sbn == null) return
         val pkg = sbn.packageName
-        if (pkg !in MediaWatcher.packagesMissingArtwork()) return
-        val notification = sbn.notification
-        if (!notification.extras.containsKey(Notification.EXTRA_MEDIA_SESSION)) return
-        val hasLargeIcon = notification.getLargeIcon() != null
-        if (lastLargeIconByPackage[pkg] == hasLargeIcon) return
-        lastLargeIconByPackage[pkg] = hasLargeIcon
-        DiagLog.d("Artwork", "notif pkg=$pkg hasMediaSession=true largeIcon=$hasLargeIcon")
+        val missing = MediaWatcher.packagesMissingArtwork()
+        val hasMediaSession = pkg in missing &&
+            sbn.notification.extras.containsKey(Notification.EXTRA_MEDIA_SESSION)
+        val hasLargeIcon = hasMediaSession && sbn.notification.getLargeIcon() != null
+        diag.onPosted(pkg, missing, hasMediaSession, hasLargeIcon)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         // 通知の内容は読まない・保存しない
+        diag.onRemoved(sbn?.packageName)
     }
 }

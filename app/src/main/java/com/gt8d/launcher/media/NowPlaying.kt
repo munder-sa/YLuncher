@@ -72,7 +72,8 @@ val NowPlaying.lyricsRequest: LyricsRequest?
     get() = lyricsQuery?.let { LyricsRequest(it, lyricsIdentity) }
 
 fun NowPlaying.positionAt(nowMs: Long): Long {
-    val raw = if (playing) {
+    if (positionMs < 0L) return 0L
+    val raw = if (playing && positionUpdatedAt > 0L && nowMs > positionUpdatedAt) {
         positionMs + ((nowMs - positionUpdatedAt) * speed).toLong()
     } else {
         positionMs
@@ -85,7 +86,8 @@ fun NowPlaying.positionAt(nowMs: Long): Long {
 }
 
 fun positionAt(s: SessionSnapshot, nowMs: Long): Long {
-    val raw = if (s.playing) {
+    if (s.positionMs < 0L) return 0L
+    val raw = if (s.playing && s.positionUpdatedAt > 0L && nowMs > s.positionUpdatedAt) {
         s.positionMs + ((nowMs - s.positionUpdatedAt) * s.speed).toLong()
     } else {
         s.positionMs

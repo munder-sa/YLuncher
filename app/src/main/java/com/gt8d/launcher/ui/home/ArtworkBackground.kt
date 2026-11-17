@@ -95,22 +95,28 @@ internal class ArtworkBackgroundHolder(
     }
 
     fun colorsFor(now: NowPlaying?): ArtworkColors? =
-        if (now.imageKey() == image) colors.value else null
+        if (completed && now.imageKey() == image) colors.value else null
 
     fun imageColorsFor(now: NowPlaying?): ArtworkColors? =
-        if (now.imageKey() == image) colors.value else null
+        if (now?.artwork != null && now.imageKey()?.track == image?.track) colors.value else null
 
     private fun select(now: NowPlaying?) {
         generation++
         val next = now.imageKey()
         if (next != image) {
+            val prevImage = image
+            val prevColors = colors.value
             job?.cancel()
             job = null
             request = null
             image = next
             retained = null
             completed = false
-            colors.value = null
+            colors.value = if (next != null && prevImage != null && next.track == prevImage.track) {
+                prevColors
+            } else {
+                null
+            }
         }
         if (next == null) return
         if (completed) {

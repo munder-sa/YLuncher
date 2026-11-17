@@ -310,6 +310,27 @@ class ArtworkBackgroundTest {
         assertNull(holder.colorsFor(now))
     }
 
+    @Test fun sameTrackSizeChangeKeepsImageColorsWhileReextracting() = runTest {
+        val blue = ArtworkColors(0xff181838.toInt(), 0xff0c0c1c.toInt())
+        val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), {
+            if (it.width == 16) red else blue
+        })
+        val now = song(Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888))
+        holder.update(this, now); runCurrent()
+        assertEquals(red, holder.colorsFor(now))
+
+        val next = now.copy(artwork = Bitmap.createBitmap(8, 16, Bitmap.Config.ARGB_8888))
+        holder.update(this, next)
+        assertEquals(red, holder.colors.value)
+        assertEquals(red, holder.imageColorsFor(next))
+        assertNull(holder.colorsFor(next))
+
+        runCurrent()
+        assertEquals(blue, holder.colors.value)
+        assertEquals(blue, holder.imageColorsFor(next))
+        assertEquals(blue, holder.colorsFor(next))
+    }
+
     @Test fun unreadableBitmapFallsBack() {
         val art = bitmap(); art.recycle()
         assertNull(sampleArtworkColors(art))
