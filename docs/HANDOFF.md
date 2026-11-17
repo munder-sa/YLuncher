@@ -13,6 +13,7 @@
 - beta2 の実機確認でユーザーが問題なしと判断 → 全テスト成功(失敗0)→ v2.3.5(版66、タグ `v2.3.5-release`)。
 - **Task 250**(v2.3.6): `NET_CAPABILITY_VALIDATED` の立ち上がり(ネットワークごとに1回)でも画像を再取得(`ValidatedNetworkTracker`)。同じ曲で画像サイズだけ変わったときは再抽出中も前の背景色を保つ(`colorsFor` は抽出完了時のみ、`imageColorsFor` は同一曲なら引き継ぐ)。通知診断の抑止を回復・通知削除・切断で解除(`NotificationArtworkDiag`)。`positionAt` は位置 -1 で 0、更新時刻が未来なら補間しない。ユーザー提供の指示書から「全画面離脱で image を消す」は `sameArtworkDoesNotReextract` と矛盾するため除外。
 - **Task 252**: Task 250 の「`positionUpdatedAt <= 0` なら補間しない」は、歌詞の UI テスト(時計 0 開始)を14件壊したので取り消した。全テスト成功(失敗0)→ v2.3.6(版68、タグ `v2.3.6-release`)。
+- **v2.3.6 公開(2026-11-17 13:25 JST、ユーザー承認「Pushとリリースお願い」)**: 配布物 `build/releases/v2.3.6/`(本体 `7cd94578…8022`、中継 `a6d54e3c…0728`、非debuggable、証明書 `44d8c612…7f6d` は従来と同じ、実機 base.apk と一致)。GitHub Release `v2.3.6-release` を下書きで添付し、digest 3件の一致を確かめてから公開・latest。2.3.5 は Release を作らず、2.3.6 の本文に内容を含めた。gh は Windows 版(`/mnt/c/Program Files/GitHub CLI/gh.exe`、2026-11-17 ユーザーが導入・ログイン)。
 - **次の一手**: 普段使いで欠けたら `adb logcat -d -s GT8D | grep Artwork` を採取(補完が効けば `meta ... bmp=null uri=ALBUM_ART_URI:https` の約2秒後に `extract start` が出る)。補完が効いていなければ原因を追う。
 
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
