@@ -104,6 +104,129 @@ class MediaWatcherTest {
         assertTrue(finalLogs.none { "example.com" in it || "secret" in it })
     }
 
+    @Test fun uriFallbackFillsArtworkUntilInlineBitmapArrives() {
+        val uri = "https://example.test/art.png"
+        val initial = MediaMetadata.Builder(metadata("Song"))
+            .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, uri)
+            .build()
+        val controller = Controller(apple, initial, state())
+        val fallback = FakeArtworkFallback()
+        val h = Harness(fallback)
+        h.cache.replaceControllers(listOf(controller))
+        assertEquals(listOf(uri), fallback.requests.map { it.uri })
+        assertNull(h.now!!.artwork)
+        assertEquals(setOf(apple), h.cache.activePackagesMissingArtwork())
+        controller.callback.onMetadataChanged(initial)
+        assertEquals(1, fallback.requests.size)
+        val logs = DiagLog.dump()
+        val downloaded = Bitmap.createBitmap(3, 3, Bitmap.Config.ARGB_8888)
+        val request = fallback.requests.single()
+        request.onResult(downloaded)
+        assertSame(downloaded, h.now!!.artwork)
+        assertTrue(h.cache.activePackagesMissingArtwork().isEmpty())
+        controller.callback.onMetadataChanged(initial)
+        assertSame(downloaded, h.now!!.artwork)
+        repeat(5) { position ->
+            controller.callback.onPlaybackStateChanged(state(position = position.toLong()))
+        }
+        assertEquals(1, fallback.requests.size)
+        assertEquals(1, controller.metadataReads)
+        assertEquals(1, controller.stateReads)
+        assertEquals(logs, DiagLog.dump())
+        assertFalse(request.cancelled)
+        val inline = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
+        controller.callback.onMetadataChanged(MediaMetadata.Builder(initial)
+            .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, inline).build())
+        assertSame(inline, h.now!!.artwork)
+        assertTrue(request.cancelled)
+        val published = h.published
+        request.onResult(downloaded)
+        assertSame(inline, h.now!!.artwork)
+        assertEquals(published, h.published)
+        assertEquals(1, fallback.requests.size)
+    }
+
+    @Test fun uriFallbackIgnoresStaleResultsAndNonHttpUris() {
+        val first = MediaMetadata.Builder(metadata("First"))
+            .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "https://example.test/first.png")
+            .build()
+        val second = MediaMetadata.Builder(metadata("Second"))
+            .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "https://example.test/second.png")
+            .build()
+        val controller = Controller(apple, first, state())
+        val fallback = FakeArtworkFallback()
+        val h = Harness(fallback)
+        h.cache.replaceControllers(listOf(controller))
+        val old = fallback.requests.single()
+        controller.callback.onMetadataChanged(second)
+        assertTrue(old.cancelled)
+        assertEquals(2, fallback.requests.size)
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        val changed = h.published
+        old.onResult(bitmap)
+        assertNull(h.now!!.artwork)
+        assertEquals(changed, h.published)
+        controller.callback.onMetadataChanged(MediaMetadata.Builder(second)
+            .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "content://artwork/second")
+            .putString(MediaMetadata.METADATA_KEY_ART_URI, "https://example.test/ignored.png")
+            .build())
+        assertEquals(2, fallback.requests.size)
+        assertTrue(fallback.requests[1].cancelled)
+        assertNull(h.now!!.artwork)
+        fallback.requests[1].onResult(bitmap)
+        assertNull(h.now!!.artwork)
+        controller.callback.onMetadataChanged(second)
+        assertEquals(3, fallback.requests.size)
+        val last = fallback.requests.last()
+        controller.callback.onSessionDestroyed()
+        assertTrue(last.cancelled)
+        assertNull(h.now)
+        val destroyed = h.published
+        last.onResult(bitmap)
+        assertNull(h.now)
+        assertEquals(destroyed, h.published)
+        assertTrue(h.cache.controllers.isEmpty())
+    }
+
+    @Test fun uriFallbackUsesUriPriorityAndCancelsOnMissingMetadataReplacementAndClear() {
+        val initial = MediaMetadata.Builder(metadata("Song"))
+            .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "")
+            .putString(MediaMetadata.METADATA_KEY_ART_URI, "HTTP://example.test/art.png")
+            .putString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI, "https://example.test/icon.png")
+            .build()
+        val controller = Controller(apple, initial, state())
+        val fallback = FakeArtworkFallback()
+        val h = Harness(fallback)
+        h.cache.replaceControllers(listOf(controller))
+        assertEquals("HTTP://example.test/art.png", fallback.requests.single().uri)
+        val iconOnly = MediaMetadata.Builder(initial)
+            .putString(MediaMetadata.METADATA_KEY_ART_URI, "").build()
+        controller.callback.onMetadataChanged(iconOnly)
+        assertTrue(fallback.requests[0].cancelled)
+        assertEquals("https://example.test/icon.png", fallback.requests[1].uri)
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        fallback.requests[1].onResult(bitmap)
+        assertSame(bitmap, h.now!!.artwork)
+        controller.callback.onMetadataChanged(null)
+        assertTrue(fallback.requests[1].cancelled)
+        assertNull(h.now!!.artwork)
+        controller.callback.onMetadataChanged(initial)
+        val replaced = fallback.requests.last()
+        h.cache.replaceControllers(listOf(controller))
+        assertTrue(replaced.cancelled)
+        val published = h.published
+        replaced.onResult(bitmap)
+        assertEquals(published, h.published)
+        assertNull(h.now!!.artwork)
+        val cleared = fallback.requests.last()
+        h.cache.clear()
+        assertTrue(cleared.cancelled)
+        val stopped = h.published
+        cleared.onResult(bitmap)
+        assertNull(h.now)
+        assertEquals(stopped, h.published)
+    }
+
     @Test fun initialMetadataFailureRecoversFullSnapshotOnPlaybackCallback() {
         val art = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         val controller = Controller(apple, metadata("Recovered", "123", art), state(position = 42))
@@ -526,11 +649,27 @@ class MediaWatcherTest {
         }
     }
 
-    private class Harness {
+    private class FakeArtworkFallback : ArtworkFallback {
+        class Request(val uri: String, val onResult: (Bitmap) -> Unit) {
+            var cancelled = false
+        }
+        val requests = mutableListOf<Request>()
+        override fun request(uri: String, onResult: (Bitmap) -> Unit): ArtworkFallback.Cancel {
+            val request = Request(uri, onResult)
+            requests += request
+            return ArtworkFallback.Cancel { request.cancelled = true }
+        }
+    }
+
+    private class Harness(fallback: ArtworkFallback? = null) {
         val access = Access()
         var now: NowPlaying? = null
         var published = 0
-        val cache = MediaSessionCache(access) { value -> now = value; published++ }
+        val cache = if (fallback == null) {
+            MediaSessionCache(access) { value -> now = value; published++ }
+        } else {
+            MediaSessionCache(access, { value -> now = value; published++ }, fallback)
+        }
     }
 
     private fun metadata(title: String, id: String? = null, artwork: Bitmap? = null) =

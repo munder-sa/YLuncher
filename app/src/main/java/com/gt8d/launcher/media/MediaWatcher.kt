@@ -9,13 +9,25 @@ import android.content.IntentFilter
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.gt8d.launcher.diag.DiagLog
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import okhttp3.CookieJar
+import okhttp3.OkHttpClient
 
 object MediaWatcher {
     private const val TAG = "GT8D"
@@ -26,6 +38,19 @@ object MediaWatcher {
     private var sessionManager: MediaSessionManager? = null
     private var sessionsChangedListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
     private var labelReceiver: BroadcastReceiver? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private val artworkClient = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .cookieJar(CookieJar.NO_COOKIES)
+        .build()
+    private val artworkLoader = ArtworkFallbackLoader(
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+        fetch = { fetchArtworkBitmap(artworkClient, it) },
+    )
     private val cache = MediaSessionCache(object : MediaSessionCache.Access<MediaController> {
         override fun packageName(controller: MediaController) = controller.packageName
         override fun metadata(controller: MediaController) = controller.metadata
@@ -35,7 +60,7 @@ object MediaWatcher {
             controller.registerCallback(callback)
         override fun unregister(controller: MediaController, callback: MediaController.Callback) =
             controller.unregisterCallback(callback)
-    }) { _nowPlaying.value = it }
+    }, onChanged = { _nowPlaying.value = it }, artworkFallback = artworkLoader)
 
     fun start(context: Context) {
         stop()
@@ -58,6 +83,7 @@ object MediaWatcher {
         sessionsChangedListener = listener
         try {
             registerLabelReceiver(ctx)
+            registerNetworkCallback(ctx)
             manager.addOnActiveSessionsChangedListener(listener, component)
             val initial = manager.getActiveSessions(component)
             cache.replaceControllers(initial)
@@ -72,7 +98,17 @@ object MediaWatcher {
         sessionsChangedListener = null
         val receiver = labelReceiver
         labelReceiver = null
+        val callback = networkCallback
+        networkCallback = null
         cache.clear()
+        if (callback != null) {
+            try {
+                connectivityManager?.unregisterNetworkCallback(callback)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to remove artwork network callback", e)
+            }
+        }
+        connectivityManager = null
         if (listener != null) {
             try {
                 sessionManager?.removeOnActiveSessionsChangedListener(listener)
@@ -180,6 +216,29 @@ object MediaWatcher {
             addAction(Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         }, Context.RECEIVER_EXPORTED)
+    }
+
+    private fun registerNetworkCallback(ctx: Context) {
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                if (networkCallback !== this) return
+                artworkLoader.onNetworkAvailable()
+            }
+        }
+        try {
+            val manager = ctx.getSystemService(ConnectivityManager::class.java) ?: return
+            connectivityManager = manager
+            networkCallback = callback
+            manager.registerNetworkCallback(
+                NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),
+                callback,
+                Handler(Looper.getMainLooper()),
+            )
+        } catch (e: Exception) {
+            networkCallback = null
+            connectivityManager = null
+            Log.w(TAG, "Failed to register artwork network callback", e)
+        }
     }
 
     private fun resolveAppLabel(pkg: String): String {

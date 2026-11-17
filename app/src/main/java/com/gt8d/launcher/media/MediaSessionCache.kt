@@ -1,5 +1,6 @@
 package com.gt8d.launcher.media
 
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.PlaybackState
@@ -11,7 +12,11 @@ import com.gt8d.launcher.diag.DiagLog
 internal class MediaSessionCache<C : Any>(
     private val access: Access<C>,
     private val onChanged: (NowPlaying?) -> Unit,
+    private val artworkFallback: ArtworkFallback? = null,
 ) {
+    // Preserve existing MediaSessionCache(access) { ... } call sites.
+    constructor(access: Access<C>, onChanged: (NowPlaying?) -> Unit) : this(access, onChanged, null)
+
     internal interface Access<C> {
         fun packageName(controller: C): String
         fun metadata(controller: C): MediaMetadata?
@@ -30,6 +35,9 @@ internal class MediaSessionCache<C : Any>(
         var metadataSeen = false
         var lastTitle: String? = null
         var lastArtworkDiag: String? = null
+        var fallbackUri: String? = null
+        var fallbackBitmap: Bitmap? = null
+        var fallbackCancel: ArtworkFallback.Cancel? = null
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 update(this@Entry) { it.withPlaybackState(state) }
@@ -110,6 +118,7 @@ internal class MediaSessionCache<C : Any>(
 
     private fun dispose(entry: Entry) {
         entry.active = false
+        clearFallback(entry)
         val controller = entry.controller
         // Queued callbacks may still own Entry: release its bitmap and controller references too.
         entry.snapshot = null
@@ -204,12 +213,50 @@ internal class MediaSessionCache<C : Any>(
         return snapshot.copy(
             title = title,
             artist = metadata?.getText(MediaMetadata.METADATA_KEY_ARTIST)?.toString(),
-            artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART),
+            artwork = artwork(entry, metadata),
             durationMs = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L,
             album = metadata?.getText(MediaMetadata.METADATA_KEY_ALBUM)?.toString(),
             lyricsIdentity = lyricsIdentity(entry.pkg, LyricsMetadataProbe.read(metadata)),
         )
+    }
+
+    private fun clearFallback(entry: Entry) {
+        val cancel = entry.fallbackCancel
+        entry.fallbackUri = null
+        entry.fallbackBitmap = null
+        entry.fallbackCancel = null
+        cancel?.cancel()
+    }
+
+    private fun artwork(entry: Entry, metadata: MediaMetadata?): Bitmap? {
+        val inline = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+        if (inline != null) {
+            clearFallback(entry)
+            return inline
+        }
+        val uri = listOf(
+            MediaMetadata.METADATA_KEY_ALBUM_ART_URI,
+            MediaMetadata.METADATA_KEY_ART_URI,
+            MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI,
+        ).firstNotNullOfOrNull { key -> metadata?.getString(key)?.takeIf { it.isNotEmpty() } }
+            ?.takeIf { Uri.parse(it).scheme?.lowercase() in setOf("https", "http") }
+        if (uri == null) {
+            clearFallback(entry)
+            return null
+        }
+        if (uri != entry.fallbackUri) {
+            clearFallback(entry)
+            entry.fallbackUri = uri
+            entry.fallbackCancel = artworkFallback?.request(uri) { bitmap ->
+                if (entry.active && entry.fallbackUri == uri && entry.snapshot?.artwork == null) {
+                    entry.fallbackBitmap = bitmap
+                    entry.snapshot = entry.snapshot?.copy(artwork = bitmap)
+                    publish()
+                }
+            }
+        }
+        return entry.fallbackBitmap
     }
 
     private fun SessionSnapshot.withPlaybackState(state: PlaybackState?) = copy(
