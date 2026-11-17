@@ -1,0 +1,7 @@
+write app/src/main/java/com/gt8d/launcher/media/MediaWatcher.kt
+write app/src/main/java/com/gt8d/launcher/media/NowPlaying.kt
+write app/src/main/java/com/gt8d/launcher/ui/home/ArtworkBackground.kt
+write app/src/test/java/com/gt8d/launcher/media/MediaWatcherTest.kt
+write app/src/test/java/com/gt8d/launcher/media/NowPlayingTest.kt
+write app/src/test/java/com/gt8d/launcher/ui/home/ArtworkBackgroundTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.MediaWatcherTest' --tests 'com.gt8d.launcher.media.NowPlayingTest' --tests 'com.gt8d.launcher.ui.home.ArtworkBackgroundTest'
