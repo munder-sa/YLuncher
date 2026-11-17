@@ -20,7 +20,8 @@ GT8D 起動直後に Apple Music を再生すると、ミニプレイヤーの�
   - `uriDesc`: `METADATA_KEY_ALBUM_ART_URI` → `METADATA_KEY_ART_URI` → `METADATA_KEY_DISPLAY_ICON_URI` の順に `getString` し、最初の空でない値について `${which}:${scheme}`(`which` は `ALBUM_ART_URI` / `ART_URI` / `DISPLAY_ICON_URI`、`scheme` は `Uri.parse(raw).scheme?.lowercase() ?: "noscheme"`)。どれも無ければ `none`。**URI のホスト・パス・クエリはログに出さない。**
   - `keys`: `metadata?.keySet()?.sorted()?.joinToString(",").orEmpty()`
 - 既存の `DiagLog.d("Lyrics", ...)` と、`snapshot.copy(...)` の返り値(`artwork` は従来どおり `ALBUM_ART ?: ART`)は変えない。
-- `withPlaybackState` / `onPlaybackStateChanged` の経路では `DiagLog` を一切出さない。
+- `withPlaybackState` 自体には `DiagLog` を足さない。通常の位置更新(スナップショットがある状態での `onPlaybackStateChanged`)ではログが増えないこと。
+- 例外: スナップショットが欠けていて `update()` が `readSnapshot` で取り直す経路では、`withMetadata` を通るので、既存の `[Lyrics]` ログと新しい `[Artwork]` ログが出てよい(既存の動作を保つ。この経路のログを抑止する変更はしない)。
 
 ### 2. `MediaWatcher.kt`: メディア通知の LargeIcon の有無だけを記録する
 - `MediaSessionCache` に読み取り専用の `fun activePackagesMissingArtwork(): Set<String>` を足す。`entries` のうち `snapshot != null && snapshot.artwork == null` のものの `pkg` の集合を返す。
