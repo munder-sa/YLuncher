@@ -1,5 +1,6 @@
 package com.gt8d.launcher.media
 
+import android.app.Notification
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -11,6 +12,7 @@ import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.gt8d.launcher.diag.DiagLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,6 +90,9 @@ object MediaWatcher {
         sessionManager = null
         appContext = null
     }
+
+    internal fun packagesMissingArtwork(): Set<String> =
+        if (sessionsChangedListener == null) emptySet() else cache.activePackagesMissingArtwork()
 
     // PiP から戻して分割を組み直す間、再生中のアプリが裏に回ったと判断して PiP に入り直すのを防ぐ(実機で確認)。
     fun pauseIfPlaying(pkg: String): Boolean {
@@ -189,6 +194,8 @@ object MediaWatcher {
 }
 
 class MediaListenerService : NotificationListenerService() {
+    private val lastLargeIconByPackage = mutableMapOf<String, Boolean>()
+
     override fun onListenerConnected() {
         super.onListenerConnected()
         MediaWatcher.start(applicationContext)
@@ -200,7 +207,17 @@ class MediaListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        // 通知の内容は読まない・保存しない
+        // 診断対象のパッケージ名と MediaSession キー・LargeIcon の有無だけを確認する。
+        // 通知のタイトル・本文・その他の extras の値は読まない・保存しない。
+        if (sbn == null) return
+        val pkg = sbn.packageName
+        if (pkg !in MediaWatcher.packagesMissingArtwork()) return
+        val notification = sbn.notification
+        if (!notification.extras.containsKey(Notification.EXTRA_MEDIA_SESSION)) return
+        val hasLargeIcon = notification.getLargeIcon() != null
+        if (lastLargeIconByPackage[pkg] == hasLargeIcon) return
+        lastLargeIconByPackage[pkg] = hasLargeIcon
+        DiagLog.d("Artwork", "notif pkg=$pkg hasMediaSession=true largeIcon=$hasLargeIcon")
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {

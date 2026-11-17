@@ -3,6 +3,7 @@ package com.gt8d.launcher.media
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.PlaybackState
+import android.net.Uri
 import android.util.Log
 import com.gt8d.launcher.diag.DiagLog
 
@@ -28,6 +29,7 @@ internal class MediaSessionCache<C : Any>(
         var snapshot: SessionSnapshot? = null
         var metadataSeen = false
         var lastTitle: String? = null
+        var lastArtworkDiag: String? = null
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 update(this@Entry) { it.withPlaybackState(state) }
@@ -54,6 +56,11 @@ internal class MediaSessionCache<C : Any>(
     private var selected: Entry? = null
     val selectedController: C? get() = selected?.controller
     val controllers: List<C> get() = entries.mapNotNull { it.controller }
+
+    fun activePackagesMissingArtwork(): Set<String> = entries.mapNotNull { entry ->
+        val snapshot = entry.snapshot
+        if (snapshot != null && snapshot.artwork == null) entry.pkg else null
+    }.toSet()
 
     fun replaceControllers(controllers: List<C>) {
         discardEntries()
@@ -108,6 +115,7 @@ internal class MediaSessionCache<C : Any>(
         entry.snapshot = null
         entry.controller = null
         entry.lastTitle = null
+        entry.lastArtworkDiag = null
         entry.metadataSeen = false
         if (entry.registered && controller != null) {
             try {
@@ -169,6 +177,29 @@ internal class MediaSessionCache<C : Any>(
             entry.metadataSeen = true
             entry.lastTitle = title
             DiagLog.d("Lyrics", "metadata keys pkg=${entry.pkg} ${metadata?.keySet()?.sorted()?.joinToString(",").orEmpty()}")
+        }
+        val bmpDesc = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)?.let {
+            "ALBUM_ART:${it.width}x${it.height}"
+        } ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)?.let {
+            "ART:${it.width}x${it.height}"
+        } ?: "null"
+        val dispDesc = metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)?.let {
+            "${it.width}x${it.height}"
+        } ?: "null"
+        val uriDesc = listOf(
+            "ALBUM_ART_URI" to MediaMetadata.METADATA_KEY_ALBUM_ART_URI,
+            "ART_URI" to MediaMetadata.METADATA_KEY_ART_URI,
+            "DISPLAY_ICON_URI" to MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI,
+        ).firstNotNullOfOrNull { (which, key) ->
+            metadata?.getString(key)?.takeIf { it.isNotEmpty() }?.let { raw ->
+                "$which:${Uri.parse(raw).scheme?.lowercase() ?: "noscheme"}"
+            }
+        } ?: "none"
+        val keys = metadata?.keySet()?.sorted()?.joinToString(",").orEmpty()
+        val diag = "meta pkg=${entry.pkg} hasTitle=${!title.isNullOrBlank()} bmp=$bmpDesc dispIcon=$dispDesc uri=$uriDesc keys=$keys"
+        if (entry.lastArtworkDiag != diag) {
+            entry.lastArtworkDiag = diag
+            DiagLog.d("Artwork", diag)
         }
         return snapshot.copy(
             title = title,

@@ -63,6 +63,47 @@ class MediaWatcherTest {
         assertFalse(art.isRecycled)
     }
 
+    @Test fun artworkDiagLogsDelayedSameTitleMetadataWithoutLoggingPositionCallbacks() {
+        DiagLog.clearForTest()
+        val initialMetadata = MediaMetadata.Builder()
+            .putString(MediaMetadata.METADATA_KEY_TITLE, "Song")
+            .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "https://example.com/a.jpg?token=secret")
+            .build()
+        val controller = Controller(apple, initialMetadata, state())
+        val h = Harness()
+        h.cache.replaceControllers(listOf(controller))
+        val initialLogs = DiagLog.dump().filter { "[Artwork]" in it }
+        assertEquals(1, initialLogs.size)
+        assertTrue(initialLogs.single().contains("[Artwork] meta pkg=$apple "))
+        assertTrue(initialLogs.single().contains("bmp=null"))
+        assertTrue(initialLogs.single().contains("uri=ALBUM_ART_URI:https"))
+        assertTrue(initialLogs.none { "example.com" in it || "secret" in it })
+        assertNull(h.now!!.artwork)
+
+        val art = Bitmap.createBitmap(2, 3, Bitmap.Config.ARGB_8888)
+        val delayedMetadata = MediaMetadata.Builder(initialMetadata)
+            .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art)
+            .build()
+        controller.callback.onMetadataChanged(delayedMetadata)
+        val delayedLogs = DiagLog.dump().filter { "[Artwork]" in it }
+        assertEquals(2, delayedLogs.size)
+        assertTrue(delayedLogs.last().contains("[Artwork] meta pkg=$apple "))
+        assertTrue(delayedLogs.last().contains("bmp=ALBUM_ART:2x3"))
+        assertEquals("Song", h.now!!.title)
+        assertSame(art, h.now!!.artwork)
+
+        repeat(2) {
+            controller.callback.onMetadataChanged(delayedMetadata)
+        }
+        assertEquals(delayedLogs, DiagLog.dump().filter { "[Artwork]" in it })
+        repeat(10) { position ->
+            controller.callback.onPlaybackStateChanged(state(position = position.toLong()))
+        }
+        val finalLogs = DiagLog.dump().filter { "[Artwork]" in it }
+        assertEquals(delayedLogs, finalLogs)
+        assertTrue(finalLogs.none { "example.com" in it || "secret" in it })
+    }
+
     @Test fun initialMetadataFailureRecoversFullSnapshotOnPlaybackCallback() {
         val art = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         val controller = Controller(apple, metadata("Recovered", "123", art), state(position = 42))
