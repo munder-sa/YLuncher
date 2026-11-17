@@ -1,6 +1,16 @@
 # YLuncher 共有引き継ぎ
 
-最終更新: 2026-11-16 22:20 (JST)
+最終更新: 2026-11-17 (JST)
+
+## Apple Music のジャケット・背景色の欠落対策 (2026-11-17、v2.3.5-beta2 を GT8D に導入済み)
+
+- 事象: GT8D 起動直後に Apple Music を再生すると、ミニプレイヤーのジャケットと背景色が欠け、別ジャケットの曲に移ると直ることがある。仕様の出典はユーザー提供の指示書(Task 244/245 のテンプレート)。
+- **Task 244**(`1aedb9f`): `[Artwork] meta ...`(Bitmap の有無・DISPLAY_ICON・URI のスキームのみ、同内容は抑止)と、ジャケット未取得パッケージのメディア通知の `largeIcon` 有無だけの `[Artwork] notif ...` を追加。
+- **実機ログ(beta1、再起動直後、今回は再現せず)**: Apple Music はまず `bmp=null uri=ALBUM_ART_URI:https` を送り、約0.27秒後に同じ曲で `ALBUM_ART:256x256`(+`DISPLAY_ICON`)を送る。欠けるのはこの2回目が来ない場合と推定(Media3 が URI 単位で失敗を保持)。欠けた瞬間のログは未取得。
+- **Task 245**(`0c7f066`): `ArtworkBackgroundHolder.remove` で、削除した画面より古い画面しか残らないとき抽出済みの色・進行中の抽出を保つ(パネルを閉じたとき停止中のホームの古い状態で巻き戻らない)。`rememberArtworkBackground` の条件付き早期 return を廃止。
+- **Task 247**(`7e76584`): Bitmap が無く http(s) の画像 URL だけが **2秒** 続いたら `ArtworkFallbackLoader` で取得して `artwork` を補う。失敗はキャッシュせず 1.5s/4s で再試行+`NetworkCallback.onAvailable` で再試行。成功 3 件を LRU 保持、8MB 上限・最大辺 512px。DISPLAY_ICON 補完・通知 largeIcon 補完は、ログ上不要なので入れていない。
+- テスト: `MediaWatcherTest` 16件・`ArtworkFallbackLoaderTest` 8件・`ArtworkBackgroundTest` 22件 成功。全テストは未実行(正式版にする前に1回)。
+- **次の一手**: beta2 を普段使いし、欠けたら `adb logcat -d -s GT8D | grep Artwork` を採取(補完が効けば `meta ... bmp=null uri=ALBUM_ART_URI:https` の約2秒後に `extract start` が出る)。問題なければ全テスト→v2.3.5 正式版。
 
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
 
