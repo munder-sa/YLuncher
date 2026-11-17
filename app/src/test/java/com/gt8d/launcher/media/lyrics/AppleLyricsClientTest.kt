@@ -206,6 +206,53 @@ class AppleLyricsClientTest {
         assertEquals(2 + 1 + invalidXml.size + invalidJson.size + 1 + 2 + 3, f.apiCalls.size)
     }
 
+    @Test fun lineOnlyTtmlKeepsMissingUnsupportedButCarriesLines() = runTest {
+        DiagLog.clearForTest()
+        val f = Fixture(this)
+        val ttml = """<tt xmlns="http://www.w3.org/ns/ttml"><body><p begin="1">$LYRIC_SECRET</p><p begin="2.5">あ😀 B</p></body></tt>"""
+        f.apiAnswer = { ok(lyricsBody(ttml)) }
+        val actual = f.client.fetch(request(), "gb", USER_TOKEN)
+        result(actual, LyricsState.Missing, AppleLyricsReason.UNSUPPORTED)
+        assertEquals(listOf(LyricLine(1000, LYRIC_SECRET), LyricLine(2500, "あ😀 B")), actual.lineSynced)
+        assertTrue(actual.lineSynced!!.all { it.words.isEmpty() })
+        assertNull(actual.detail)
+        assertEquals("AppleLyricsResult(state=Missing, reason=UNSUPPORTED, retryAfterSec=null)", actual.toString())
+        assertFalse(actual.toString().contains(LYRIC_SECRET))
+        assertFalse(actual.toString().contains("あ😀 B"))
+        assertEquals(emptyList<String>(), DiagLog.dump())
+    }
+
+    @Test fun unsupportedTtmlCarriesOnlyReasonCode() = runTest {
+        DiagLog.clearForTest()
+        val f = Fixture(this)
+        val bodies = listOf(
+            "<p>$LYRIC_SECRET</p>" to "line-without-begin",
+            """<p begin="1" m:role="$LYRIC_SECRET">$LYRIC_SECRET</p>""" to "role",
+            """<p begin="1" timeContainer="$LYRIC_SECRET">$LYRIC_SECRET</p>""" to "timeContainer",
+            "" to "no-timed-words",
+        )
+        for ((body, reason) in bodies) {
+            val ttml = """<tt xmlns="http://www.w3.org/ns/ttml" xmlns:m="http://www.w3.org/ns/ttml#metadata"><body>$body</body></tt>"""
+            f.apiAnswer = { ok(lyricsBody(ttml)) }
+            val actual = f.client.fetch(request(), "gb", USER_TOKEN)
+            result(actual, LyricsState.Missing, AppleLyricsReason.UNSUPPORTED)
+            assertEquals(reason, actual.detail)
+            assertNull(actual.lineSynced)
+            assertFalse(actual.toString().contains(LYRIC_SECRET))
+        }
+        f.apiAnswer = { ok(lyricsBody(WORDS)) }
+        val success = f.client.fetch(request(), "gb", USER_TOKEN)
+        synced(success)
+        assertNull(success.detail)
+        assertNull(success.lineSynced)
+        f.apiAnswer = { ok(lyricsBody(WORDS.replace("1.5", "0.5"))) }
+        val invalid = f.client.fetch(request(), "gb", USER_TOKEN)
+        result(invalid, LyricsState.Failed, AppleLyricsReason.INVALID)
+        assertNull(invalid.detail)
+        assertNull(invalid.lineSynced)
+        assertEquals(emptyList<String>(), DiagLog.dump())
+    }
+
     @Test fun refreshesBearerAtMostOnceOnAuthenticationFailure() = runTest {
         for (connect in listOf(false, true)) {
             for (code in listOf(401, 403)) {

@@ -30,6 +30,8 @@ class AppleLyricsResult(
     val state: LyricsState,
     val reason: AppleLyricsReason,
     val retryAfterSec: Long? = null,
+    val lineSynced: List<LyricLine>? = null,
+    val detail: String? = null,
 ) {
     override fun toString() =
         "AppleLyricsResult(state=${state.javaClass.simpleName}, reason=$reason, retryAfterSec=$retryAfterSec)"
@@ -192,11 +194,21 @@ class AppleLyricsClient(
         }
         if (!hasTtmlRoot(ttml)) return failed(AppleLyricsReason.INVALID)
         val durationMs = durationSec?.takeIf { it in 1L..3600L }?.let { it * 1000L }
-        val parsed = TtmlParser.parse(ttml, durationMs)
+        var detail: String? = null
+        val parsed = TtmlParser.parse(ttml, durationMs, allowLineSynced = true) { diagnostic ->
+            if (diagnostic.startsWith("Unsupported ")) {
+                detail = diagnostic.removePrefix("Unsupported ").takeIf { UNSUPPORTED_DETAIL.matches(it) }
+            }
+        }
         currentCoroutineContext().ensureActive()
         return when (parsed) {
             is TtmlParseResult.WordSynced -> AppleLyricsResult(LyricsState.Synced(parsed.lines), AppleLyricsReason.OK)
-            TtmlParseResult.Unsupported -> AppleLyricsResult(LyricsState.Missing, AppleLyricsReason.UNSUPPORTED)
+            is TtmlParseResult.LineSynced -> AppleLyricsResult(
+                LyricsState.Missing, AppleLyricsReason.UNSUPPORTED, lineSynced = parsed.lines,
+            )
+            TtmlParseResult.Unsupported -> AppleLyricsResult(
+                LyricsState.Missing, AppleLyricsReason.UNSUPPORTED, detail = detail,
+            )
             TtmlParseResult.Invalid -> failed(AppleLyricsReason.INVALID)
         }
     }
@@ -274,6 +286,7 @@ class AppleLyricsClient(
         const val MAX_TOKEN_BYTES = 16 * 1024
         val STOREFRONT = Regex("[a-z]{2}")
         val APPLE_ID = Regex("[0-9]{1,20}")
+        val UNSUPPORTED_DETAIL = Regex("[a-zA-Z-]{1,32}")
         val THOUSAND: BigInteger = BigInteger.valueOf(1000L)
         val MAX_LONG: BigInteger = BigInteger.valueOf(Long.MAX_VALUE)
 

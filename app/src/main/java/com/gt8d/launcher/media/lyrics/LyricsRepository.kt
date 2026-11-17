@@ -63,6 +63,7 @@ class LyricsRepository(
                     }
                     val request = key.second
                     val q = request.query
+                    var appleLine: LyricsState.Synced? = null
                     suspend fun checkCurrent() {
                         currentCoroutineContext().ensureActive()
                         val current = appleConnection.value
@@ -94,7 +95,8 @@ class LyricsRepository(
                     checkCurrent()
                     if (!amllCached?.state.hasWords()) {
                         DiagLog.d("Lyrics", if (cached != null) "cache hit ${cached.javaClass.simpleName}" else "cache miss")
-                        mutableState.value = cached ?: LyricsState.Loading
+                        appleLine = appleCached?.lineState()
+                        mutableState.value = appleLine ?: cached ?: LyricsState.Loading
                     }
                     delay(600)
                     checkCurrent()
@@ -117,6 +119,7 @@ class LyricsRepository(
                         if (suppressed == null) appleCache.put(appleKey, apple)
                         checkCurrent()
                         logApple(apple, suppressed != null, (clock() - startedAt).coerceAtLeast(0L))
+                        apple.lineState()?.let { appleLine = it }
                         if (apple.isWordSuccess()) {
                             checkCurrent()
                             mutableState.value = apple.state
@@ -161,6 +164,11 @@ class LyricsRepository(
                         if (amll.state.hasWords()) {
                             mutableState.value = amll.state
                             logResult(amll.state, "AMLL")
+                            return@collectLatest
+                        }
+                        appleLine?.let {
+                            mutableState.value = it
+                            logResult(it, "APPLE_LINE")
                             return@collectLatest
                         }
                         if (cached is LyricsState.Synced || cached is LyricsState.Plain) {
@@ -216,12 +224,18 @@ class LyricsRepository(
 
     private fun AppleLyricsResult.isWordSuccess(): Boolean = reason == AppleLyricsReason.OK && state.hasWords()
 
+    private fun AppleLyricsResult.lineState(): LyricsState.Synced? =
+        if (reason == AppleLyricsReason.UNSUPPORTED && state == LyricsState.Missing && !lineSynced.isNullOrEmpty()) {
+            LyricsState.Synced(lineSynced)
+        } else null
+
     private fun logApple(result: AppleLyricsResult, cacheHit: Boolean, elapsedMs: Long) {
         val accepted = result.isWordSuccess()
         val lines = (result.state as? LyricsState.Synced)?.lines.orEmpty()
         DiagLog.d("Lyrics", "apple result accepted=$accepted reason=${result.reason.name} " +
             "cache=${if (cacheHit) "hit" else "miss"} ms=$elapsedMs " +
-            "lines=${if (accepted) lines.size else 0} words=${if (accepted) lines.sumOf { it.words.size } else 0}")
+            "lines=${if (accepted) lines.size else 0} words=${if (accepted) lines.sumOf { it.words.size } else 0}" +
+            " line=${result.lineSynced?.size ?: 0}" + (result.detail?.let { " detail=$it" } ?: ""))
     }
 
     private fun logResult(state: LyricsState, source: String) {

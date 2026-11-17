@@ -34,9 +34,12 @@ class AppleLyricsCache(private val clock: () -> Long) {
         if (key.generation != generation) return
         val now = now()
         pruneExpired(now)
+        val hasLineSynced = result.reason == AppleLyricsReason.UNSUPPORTED &&
+            result.state == LyricsState.Missing && !result.lineSynced.isNullOrEmpty()
         val seconds = when {
             result.reason == AppleLyricsReason.OK && result.state is LyricsState.Synced &&
                 result.state.lines.any { it.words.isNotEmpty() } -> 30 * 60L
+            hasLineSynced -> 30 * 60L
             result.state == LyricsState.Missing && result.reason in setOf(
                 AppleLyricsReason.NOT_FOUND, AppleLyricsReason.UNSUPPORTED,
             ) -> 60L
@@ -45,22 +48,23 @@ class AppleLyricsCache(private val clock: () -> Long) {
             else -> return
         }
         val state = result.state
+        val lineSynced = if (state == LyricsState.Missing && !hasLineSynced) null else result.lineSynced
         var textBytes = 0L
-        if (state is LyricsState.Synced) {
-            for (line in state.lines) {
+        for (lines in listOf((state as? LyricsState.Synced)?.lines, lineSynced)) {
+            for (line in lines.orEmpty()) {
                 textBytes += line.text.toByteArray(Charsets.UTF_8).size
                 if (textBytes > MAX_TEXT_BYTES) return
             }
         }
         // Protect both against mutation of the input and mutation through a returned list.
         val snapshot = if (state is LyricsState.Synced) LyricsState.Synced(
-            Collections.unmodifiableList(state.lines.map { line ->
-                line.copy(words = Collections.unmodifiableList(line.words.map { it.copy() }))
-            }),
+            state.lines.immutableCopy(),
         ) else state
         val ttl = if (seconds > Long.MAX_VALUE / 1000L) Long.MAX_VALUE else seconds * 1000L
         val expiresAt = if (now > Long.MAX_VALUE - ttl) Long.MAX_VALUE else now + ttl
-        entries[key] = Entry(AppleLyricsResult(snapshot, result.reason, result.retryAfterSec), expiresAt, textBytes)
+        entries[key] = Entry(AppleLyricsResult(
+            snapshot, result.reason, result.retryAfterSec, lineSynced?.immutableCopy(), result.detail,
+        ), expiresAt, textBytes)
         var totalBytes = entries.values.sumOf { it.textBytes }
         val oldest = entries.entries.iterator()
         while (entries.size > 8 || totalBytes > MAX_TEXT_BYTES) {
@@ -68,6 +72,10 @@ class AppleLyricsCache(private val clock: () -> Long) {
             oldest.remove()
         }
     }
+
+    private fun List<LyricLine>.immutableCopy(): List<LyricLine> = Collections.unmodifiableList(map { line ->
+        line.copy(words = Collections.unmodifiableList(line.words.map { it.copy() }))
+    })
 
     private fun now(): Long = clock().also { now ->
         // A clock reset invalidates existing deadlines; never revive old entries.

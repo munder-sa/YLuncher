@@ -32,12 +32,18 @@ class AppleLyricsRepositoryTest {
     @get:Rule val folder = TemporaryFolder()
     private val connected = AppleMusicConnection(AppleMusicStatus.CONNECTED, 1, "jp")
     private val appleWords = words("PRIVATE-APPLE-SYNTHETIC-LYRIC")
+    private val appleLines = LyricsState.Synced(listOf(
+        LyricLine(1000, "PRIVATE-APPLE-SYNTHETIC-LINE"), LyricLine(2500, "PRIVATE-APPLE-SECOND-LINE"),
+    ))
     private val amllWords = words("PRIVATE-AMLL-SYNTHETIC-LYRIC")
     private val synced = LyricsState.Synced(listOf(LyricLine(1000, "PRIVATE-LRCLIB-SYNTHETIC-LYRIC")))
     private fun words(text: String) = LyricsState.Synced(listOf(
         LyricLine(1000, text, listOf(LyricWord(1000, 0), LyricWord(1500, 3))),
     ))
     private fun appleSuccess(state: LyricsState = appleWords) = AppleLyricsResult(state, AppleLyricsReason.OK)
+    private fun appleLineResult() = AppleLyricsResult(
+        LyricsState.Missing, AppleLyricsReason.UNSUPPORTED, lineSynced = appleLines.lines,
+    )
     private fun amllSuccess() = AmllResult(amllWords, AmllReason.DIRECT_ID, AmllTarget("am-lyrics", "123"), cacheable = true)
     private fun song(title: String = "A", id: String? = "123") = NowPlaying(
         "com.apple.android.music", title, "Synthetic artist", null, 120_000, true, false,
@@ -141,6 +147,122 @@ class AppleLyricsRepositoryTest {
             assertEquals(appleWords, f.repo.state.value)
             assertEquals(if (legacy == amllWords) synced else legacy, f.cache.get(request().query))
             assertEquals(if (legacy == amllWords) amllWords else null, f.amllCache.get(request(), null)?.state)
+        }
+    }
+
+    @Test fun appleLineSyncedIsUsedAfterAmllWordsAndBeforeLrclib() = runTest {
+        DiagLog.clearForTest()
+        val amll = Fixture(this, appleAnswer = { _, _ -> appleLineResult() }, amllAnswer = { amllSuccess() })
+        amll.tick(600)
+        assertEquals(amllWords, amll.repo.state.value)
+        assertEquals(1, amll.appleCalls.size)
+        assertEquals(1, amll.amllCalls.size)
+        assertTrue(amll.calls.isEmpty())
+        assertNull(amll.cache.get(request().query))
+        assertEquals(amllWords, amll.amllCache.get(request(), null)!!.state)
+
+        val cached = Fixture(this, appleAnswer = { _, _ -> appleLineResult() })
+        cached.cache.put(request().query, synced)
+        cached.tick(600)
+        assertEquals(appleLines, cached.repo.state.value)
+        assertEquals(appleLines.lines, cached.appleCache.get(key())!!.lineSynced)
+        assertEquals(1, cached.appleCalls.size)
+        assertEquals(1, cached.amllCalls.size)
+        assertTrue(cached.calls.isEmpty())
+        assertEquals(synced, cached.cache.get(request().query))
+        assertNull(cached.amllCache.get(request(), null))
+        assertTrue(DiagLog.dump().any { it.contains("amll result Synced source=APPLE_LINE") })
+        assertTrue(DiagLog.dump().any {
+            it.contains("apple result accepted=false reason=UNSUPPORTED cache=miss ms=0 lines=0 words=0 line=2")
+        })
+
+        for (state in listOf(LyricsState.Failed, LyricsState.Offline)) {
+            val failed = Fixture(this,
+                appleAnswer = { _, _ -> appleLineResult() },
+                amllAnswer = { AmllResult(state, AmllReason.NETWORK) },
+            )
+            failed.tick(600)
+            assertEquals(appleLines, failed.repo.state.value)
+            failed.assertNoDiskEntries()
+            failed.tick(300_000)
+            assertEquals(appleLines, failed.repo.state.value)
+            assertEquals(1, failed.appleCalls.size)
+            assertEquals(1, failed.amllCalls.size)
+            assertTrue(failed.calls.isEmpty())
+            failed.assertNoDiskEntries()
+        }
+
+        val unsupported = Fixture(this, appleAnswer = { _, _ ->
+            AppleLyricsResult(LyricsState.Missing, AppleLyricsReason.UNSUPPORTED, detail = "line-without-begin")
+        })
+        unsupported.tick(600)
+        assertEquals(synced, unsupported.repo.state.value)
+        assertTrue(DiagLog.dump().any {
+            it.contains("apple result accepted=false reason=UNSUPPORTED cache=miss ms=0 lines=0 words=0 line=0 detail=line-without-begin")
+        })
+        assertTrue(DiagLog.dump().none { it.contains("PRIVATE-") })
+    }
+
+    @Test fun cachedAppleLineSyncedIsShownImmediately() = runTest {
+        for (amllCached in listOf(false, true)) {
+            for (lrclibCached in listOf(false, true)) {
+                DiagLog.clearForTest()
+                val f = Fixture(this)
+                f.appleCache.activateGeneration(connected.generation)
+                f.appleCache.put(key(), appleLineResult())
+                if (amllCached) f.amllCache.put(request(), null, amllSuccess())
+                if (lrclibCached) f.cache.put(request().query, synced)
+                runCurrent()
+                val expected = if (amllCached) amllWords else appleLines
+                assertEquals(expected, f.repo.state.value)
+                assertTrue(f.appleCalls.isEmpty())
+                assertTrue(f.amllCalls.isEmpty())
+                assertTrue(f.calls.isEmpty())
+                if (!amllCached) {
+                    val log = if (lrclibCached) "cache hit Synced" else "cache miss"
+                    assertTrue(DiagLog.dump().any { it.contains(log) })
+                }
+                f.tick(599)
+                assertEquals(expected, f.repo.state.value)
+                assertTrue(f.appleCalls.isEmpty())
+                assertTrue(f.amllCalls.isEmpty())
+                f.tick(1)
+                assertEquals(expected, f.repo.state.value)
+                assertTrue(f.appleCalls.isEmpty())
+                assertEquals(if (amllCached) 0 else 1, f.amllCalls.size)
+                assertTrue(f.calls.isEmpty())
+                assertEquals(if (lrclibCached) synced else null, f.cache.get(request().query))
+                assertEquals(if (amllCached) amllWords else null, f.amllCache.get(request(), null)?.state)
+            }
+        }
+    }
+
+    @Test fun appleLineSurvivesExpiryAndTransientFailureDuringDebounce() = runTest {
+        for (failure in listOf(
+            AppleLyricsResult(LyricsState.Failed, AppleLyricsReason.NETWORK),
+            AppleLyricsResult(LyricsState.Offline, AppleLyricsReason.NETWORK),
+            AppleLyricsResult(LyricsState.Missing, AppleLyricsReason.UNSUPPORTED),
+        )) {
+            val f = Fixture(this, on = false, appleAnswer = { _, _ -> failure })
+            runCurrent()
+            f.appleCache.put(key(), appleLineResult())
+            f.tick(1_800_000L - 300)
+            f.enabled.value = true
+            runCurrent()
+            assertEquals(appleLines, f.repo.state.value)
+            assertTrue(f.appleCalls.isEmpty())
+            f.tick(599)
+            assertNull(f.appleCache.get(key()))
+            assertEquals(appleLines, f.repo.state.value)
+            assertTrue(f.appleCalls.isEmpty())
+            f.tick(1)
+            assertEquals(1, f.appleCalls.size)
+            assertEquals(1, f.amllCalls.size)
+            assertEquals(failure.state, f.appleCache.get(key())!!.state)
+            assertEquals(failure.reason, f.appleCache.get(key())!!.reason)
+            assertEquals(appleLines, f.repo.state.value)
+            assertTrue(f.calls.isEmpty())
+            f.assertNoDiskEntries()
         }
     }
 

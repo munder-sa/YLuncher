@@ -104,6 +104,41 @@ class TtmlParserTest {
         invalid(p("<span begin=\"3\">A</span>"))
     }
     @Test fun noWordsIsUnsupported() = assertEquals(TtmlParseResult.Unsupported, parse(p("A")))
+    @Test fun lineOnlyTtmlIsLineSyncedOnlyWhenAllowed() = runBlocking {
+        val body = """<p begin="1"> A &amp; <span>B</span> </p><p begin="2.5">あ😀</p>"""
+        assertEquals(TtmlParseResult.Unsupported, TtmlParser.parse(xml(body)))
+        val expected = listOf(LyricLine(1000, " A & B "), LyricLine(2500, "あ😀"))
+        val actual = TtmlParser.parse(xml(body), allowLineSynced = true)
+        assertEquals(TtmlParseResult.LineSynced(expected), actual)
+        assertTrue((actual as TtmlParseResult.LineSynced).lines.all { it.words.isEmpty() })
+        val mixed = xml(p() + p("B", "3", "4"))
+        val words = TtmlParser.parse(mixed, allowLineSynced = true)
+        assertTrue(words is TtmlParseResult.WordSynced)
+        assertEquals(TtmlParser.parse(mixed), words)
+    }
+
+    @Test fun lineSyncedStillRejectsUnsupportedStructureAndInvalidTiming() = runBlocking {
+        for (body in listOf(
+            """<p begin="1" m:role="custom">A</p>""",
+            """<p begin="1" timeContainer="seq">A</p>""",
+            "<p>A</p>",
+            """<p begin="1"><span end="2">A</span></p>""",
+            """<p begin="1"><br/>A</p>""",
+            "", p(" "), p("<span m:role=\"x-bg\">X</span>"),
+        )) {
+            assertEquals(body, TtmlParseResult.Unsupported, TtmlParser.parse(xml(body), allowLineSynced = true))
+        }
+        for (body in listOf(
+            p("A", "3", "1"), p("A", "1", "1"),
+            p("A") + p("B", "2", "4"), p("A") + p("B"), p("A", "bad", "3"),
+        )) {
+            assertEquals(body, TtmlParseResult.Invalid, TtmlParser.parse(xml(body), allowLineSynced = true))
+        }
+        assertEquals(TtmlParseResult.Invalid, TtmlParser.parse(xml(p("A")), 999, allowLineSynced = true))
+        assertEquals(TtmlParseResult.LineSynced(listOf(LyricLine(1000, "A"))),
+            TtmlParser.parse(xml(p("A")), 1000, allowLineSynced = true))
+    }
+
     @Test fun plainLineWithinWordSyncedSongHasNoWords() {
         assertEquals(LyricLine(3000, "B"), lines(p() + p("B", "3", "4"))[1])
     }

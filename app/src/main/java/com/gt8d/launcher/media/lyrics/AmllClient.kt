@@ -136,7 +136,8 @@ class AmllClient(
                 DiagLog.d("Lyrics", "amll parse $it")
             }) {
                 is TtmlParseResult.WordSynced -> return result(LyricsState.Synced(parsed.lines), reason, target, true)
-                TtmlParseResult.Unsupported -> return result(LyricsState.Missing, AmllReason.UNSUPPORTED, target, true)
+                is TtmlParseResult.LineSynced, TtmlParseResult.Unsupported ->
+                    return result(LyricsState.Missing, AmllReason.UNSUPPORTED, target, true)
                 TtmlParseResult.Invalid -> failure = AmllReason.INVALID
             }
         }

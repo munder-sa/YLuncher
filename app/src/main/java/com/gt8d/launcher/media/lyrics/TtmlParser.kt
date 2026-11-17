@@ -9,6 +9,7 @@ import org.xmlpull.v1.XmlPullParserException
 
 sealed interface TtmlParseResult {
     data class WordSynced(val lines: List<LyricLine>) : TtmlParseResult
+    data class LineSynced(val lines: List<LyricLine>) : TtmlParseResult
     data object Unsupported : TtmlParseResult
     data object Invalid : TtmlParseResult
 }
@@ -47,7 +48,7 @@ object TtmlParser {
     }
 
     /** Call off the main thread. Cancellation is checked for every XML token. */
-    suspend fun parse(xml: String, durationMs: Long? = null,
+    suspend fun parse(xml: String, durationMs: Long? = null, allowLineSynced: Boolean = false,
         diagnostic: (String) -> Unit = {}): TtmlParseResult {
         coroutineContext.ensureActive()
         // Reject before handing any DTD (including external declarations) to the parser.
@@ -172,7 +173,9 @@ object TtmlParser {
                     previous = word.start
                 }
             }
-            if (unsupported || sorted.none { it.words.isNotEmpty() }) {
+            if (allowLineSynced && !unsupported && sorted.isNotEmpty() && sorted.all { it.words.isEmpty() }) {
+                TtmlParseResult.LineSynced(sorted.map { line -> LyricLine(line.start, line.text.toString()) })
+            } else if (unsupported || sorted.none { it.words.isNotEmpty() }) {
                 diagnostic("Unsupported $unsupportedReason")
                 TtmlParseResult.Unsupported
             } else TtmlParseResult.WordSynced(sorted.map { line ->

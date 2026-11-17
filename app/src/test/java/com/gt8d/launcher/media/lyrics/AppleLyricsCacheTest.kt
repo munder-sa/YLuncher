@@ -69,6 +69,70 @@ class AppleLyricsCacheTest {
         }
     }
 
+    @Test fun lineSyncedUnsupportedIsKeptThirtyMinutesAndBounded() {
+        fun lineResult(lines: List<LyricLine>?) = AppleLyricsResult(
+            LyricsState.Missing, AppleLyricsReason.UNSUPPORTED, lineSynced = lines, detail = "no-timed-words",
+        )
+        var now = 500L
+        val cache = AppleLyricsCache { now }
+        val words = mutableListOf<LyricWord>()
+        val line = LyricLine(1000, "PRIVATE-SYNTHETIC-LINE", words)
+        val lines = mutableListOf(line, LyricLine(2000, "Second synthetic line"))
+        val expected = lines.map { it.copy(words = it.words.toList()) }
+        cache.put(key, lineResult(lines))
+        lines.clear()
+        words.add(LyricWord(1000, 0))
+        val stored = requireNotNull(cache.get(key))
+        assertEquals(LyricsState.Missing, stored.state)
+        assertEquals(AppleLyricsReason.UNSUPPORTED, stored.reason)
+        assertEquals(expected, stored.lineSynced)
+        assertEquals("no-timed-words", stored.detail)
+        assertNotSame(line, stored.lineSynced!!.first())
+        assertFalse(stored.toString().contains("PRIVATE-SYNTHETIC-LINE"))
+        assertThrows(UnsupportedOperationException::class.java) {
+            (stored.lineSynced as MutableList<LyricLine>).clear()
+        }
+        assertThrows(UnsupportedOperationException::class.java) {
+            (stored.lineSynced.first().words as MutableList<LyricWord>).add(LyricWord(1000, 0))
+        }
+        now += 1_800_000L - 1
+        assertEquals(expected, cache.get(key)!!.lineSynced)
+        now++
+        assertNull(cache.get(key))
+
+        for (result in listOf(lineResult(null), lineResult(emptyList()),
+            AppleLyricsResult(LyricsState.Missing, AppleLyricsReason.NOT_FOUND,
+                lineSynced = expected, detail = "no-timed-words"))) {
+            val negative = AppleLyricsCache { now }
+            negative.put(key, result)
+            now += 59_999L
+            val saved = requireNotNull(negative.get(key))
+            assertEquals(result.state, saved.state)
+            assertEquals(result.reason, saved.reason)
+            assertNull(saved.lineSynced)
+            assertEquals(result.detail, saved.detail)
+            now++
+            assertNull(negative.get(key))
+        }
+
+        val limit = 2 * 1024 * 1024
+        val fullText = "あ".repeat(limit / 3) + "aa"
+        assertEquals(limit, fullText.toByteArray(Charsets.UTF_8).size)
+        val bounded = AppleLyricsCache { now }
+        bounded.put(key, lineResult(listOf(LyricLine(1000, fullText + "x"))))
+        assertNull(bounded.get(key))
+        val fullLines = listOf(LyricLine(1000, fullText.dropLast(2)), LyricLine(2000, "aa"))
+        bounded.put(key, lineResult(fullLines))
+        assertEquals(fullLines, bounded.get(key)!!.lineSynced)
+        val otherKey = key.copy(appleMusicId = "124")
+        bounded.put(otherKey, success("b"))
+        assertNull(bounded.get(key))
+        assertNotNull(bounded.get(otherKey))
+        bounded.put(key, AppleLyricsResult(success("b").state, AppleLyricsReason.OK, lineSynced = fullLines))
+        assertNull(bounded.get(key)) // State text and line text share the same byte bound.
+        assertNotNull(bounded.get(otherKey))
+    }
+
     @Test fun transientFailuresRemainFailuresAndRespectCooldown() {
         val reasons = listOf(AppleLyricsReason.NETWORK, AppleLyricsReason.HTTP, AppleLyricsReason.WAIT,
             AppleLyricsReason.TIMEOUT, AppleLyricsReason.TOKEN_UNAVAILABLE, AppleLyricsReason.INVALID)
