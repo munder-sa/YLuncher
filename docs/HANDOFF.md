@@ -16,6 +16,12 @@
 - **v2.3.6 公開(2026-11-17 13:25 JST、ユーザー承認「Pushとリリースお願い」)**: 配布物 `build/releases/v2.3.6/`(本体 `7cd94578…8022`、中継 `a6d54e3c…0728`、非debuggable、証明書 `44d8c612…7f6d` は従来と同じ、実機 base.apk と一致)。GitHub Release `v2.3.6-release` を下書きで添付し、digest 3件の一致を確かめてから公開・latest。2.3.5 は Release を作らず、2.3.6 の本文に内容を含めた。gh は Windows 版(`/mnt/c/Program Files/GitHub CLI/gh.exe`、2026-11-17 ユーザーが導入・ログイン)。
 - **次の一手**: 普段使いで欠けたら `adb logcat -d -s GT8D | grep Artwork` を採取(補完が効けば `meta ... bmp=null uri=ALBUM_ART_URI:https` の約2秒後に `extract start` が出る)。補完が効いていなければ原因を追う。
 
+## Apple Music の歌詞が行単位しかない曲の対応 / carprobe Retry ADB (2026-11-17、v2.3.7 公開)
+
+- **Task 254(v2.3.7)**: Apple Music が行単位(単語の時刻なし)の歌詞しか持たない曲で「歌詞なし」になっていた(実機 DYGL「All Tomorrows」で確認)。優先順位を Apple 単語 → AMLL 単語 → Apple 行 → LRCLIB に。`TtmlParser.parse(allowLineSynced)` が単語なし TTML を `LineSynced` で返し(AMLL は従来どおり)、`AppleLyricsResult` に `lineSynced`/`detail` を追加。行単位は30分キャッシュ、暫定表示は一時通信失敗で消さない。非対応理由は `apple result ... detail=<code>` でログ。実機で歌詞表示を確認(`source=APPLE_LINE` のログは logcat 周回で採取できず、他経路に歌詞が無いことから Apple 行単位と判断)。
+- **Task 257**: carprobe に `Retry ADB` ボタン(`!rootAvailable && !busy` のときだけ有効)。初回 `adb: NO` や Finish 後に端末再起動なしで再プローブ。静的 Handler を遅延ホルダーに移し JVM テストで純粋ヘルパーを呼べるように(実機挙動は不変)。debug APK を GT8D へ導入済み、実車確認は納車後。
+- **v2.3.7 公開(2026-11-17、ユーザー承認「OKすすめて」→「OK進めて」)**: 全テスト 4,526 件成功・失敗0。版 2.3.7 / 70。配布物 `build/releases/v2.3.7/`(本体 `0b5e4626…2a26`、中継 `1d86dcc4…e377`、非debuggable、証明書 `44d8c612…7f6d`、実機 base.apk と一致)。タグ `v2.3.7-release`、GitHub Release を下書き→digest 照合→公開予定。
+
 ## メーター内地図のブラックアウトとナビ連携の事前調査 (2026-11-15)
 
 - **【外部調査メモのファクトチェック完了(2026-11-16)】** `docs/superpowers/spikes/rav4-arene-factcheck.md`(出典は同じフォルダの `rav4-arene-sources/`)。要点: ①a0call が送る `NAV_FOCUS_NATIVE=1` / `PROJECTED=2` は open-android-auto の `.proto` と一致(APK 静的解析由来で実機の実証ではない)。Phone からの NATIVE は仕様上の「解放」なので、フォーカスを持っていない GT8D では **`native` 単発の無反応は想定内。`toggle` まで必ず試す**(手順の順序は native→toggle のまま。native だけで戻れば自動化が最も簡単になるので、切り分けのため先に試す) ②CarPlay は本物の iPhone で未案内時もメーターに地図が出る+GT8D のブリッジが `altScreen` を申告 → CarPlay モードの暗転はこれが主因とみてよい(未実測、a0call は効かない) ③AA の未案内時の挙動は未確定 → 実車で「接続直後・案内なしで黒いか」を最初に記録。ログでは `InstrumentClusterStart`(0x8001)も見る ④復活手順の note は HE PRO ULTRA の記事(GT8D ではない) ⑤P3 Pro / R15 世代の仮説は外した。実車テスト手順そのものは変更なし。
