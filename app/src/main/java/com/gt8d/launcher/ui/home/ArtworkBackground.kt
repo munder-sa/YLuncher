@@ -63,7 +63,9 @@ internal class ArtworkBackgroundHolder(
     private val extract: suspend (Bitmap) -> ArtworkColors? = { sampleArtworkColors(it) },
 ) {
     val colors = MutableStateFlow<ArtworkColors?>(null)
-    private val clients = linkedMapOf<Any, NowPlaying?>()
+    private data class ClientState(val now: NowPlaying?, val seq: Long)
+    private val clients = linkedMapOf<Any, ClientState>()
+    private var sequence = 0L
     private var image: ImageKey? = null
     private var generation = 0L
     private var job: Job? = null
@@ -73,21 +75,23 @@ internal class ArtworkBackgroundHolder(
     private var request: Request? = null
 
     fun update(client: Any, now: NowPlaying?) {
-        clients[client] = now
+        clients[client] = ClientState(now, ++sequence)
         select(now)
     }
 
     fun remove(client: Any) {
-        clients.remove(client)
-        generation++
-        if (clients.isNotEmpty()) {
-            select(clients.values.last())
-        } else {
+        val removed = clients.remove(client) ?: return
+        val latest = clients.values.maxByOrNull { it.seq }
+        if (latest == null) {
+            generation++
             job?.cancel()
             job = null
             request = null
             colors.value = null
+        } else if (latest.seq > removed.seq) {
+            select(latest.now)
         }
+        // Older clients must not replace the current image or invalidate pending work.
     }
 
     fun colorsFor(now: NowPlaying?): ArtworkColors? =
@@ -166,9 +170,10 @@ fun rememberArtworkBackground(now: NowPlaying?): State<ArtworkColors?> {
     DisposableEffect(client, holder) {
         onDispose { holder.remove(client) }
     }
-    if (now?.artwork == null) return remember { mutableStateOf(null) }
     val observed = holder.colors.collectAsState()
-    return remember(holder, now, observed.value) { mutableStateOf(holder.imageColorsFor(now)) }
+    return remember(holder, now, observed.value) {
+        mutableStateOf(if (now?.artwork == null) null else holder.imageColorsFor(now))
+    }
 }
 
 fun Modifier.artworkBackground(colors: ArtworkColors?): Modifier = drawWithCache {

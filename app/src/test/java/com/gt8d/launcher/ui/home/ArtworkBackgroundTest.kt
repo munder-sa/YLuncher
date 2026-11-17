@@ -156,6 +156,46 @@ class ArtworkBackgroundTest {
         holder.remove(panel)
     }
 
+    @Test fun staleBackgroundClientDoesNotClearColorsOnPanelClose() = runTest {
+        val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), { red })
+        val home = Any(); val panel = Any()
+        holder.update(home, song(null))
+        holder.update(panel, song(bitmap())); runCurrent()
+        assertEquals(red, holder.colors.value)
+        holder.remove(panel)
+        assertEquals(red, holder.colors.value)
+        holder.remove(home)
+        assertNull(holder.colors.value)
+    }
+
+    @Test fun staleBackgroundClientKeepsPendingExtractionOnPanelClose() = runTest {
+        var calls = 0
+        val pending = CompletableDeferred<ArtworkColors?>()
+        val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), { calls++; pending.await() })
+        val home = Any(); val panel = Any()
+        holder.update(home, song(null))
+        holder.update(panel, song(bitmap())); runCurrent()
+        assertEquals(1, calls)
+        assertNull(holder.colors.value)
+        holder.remove(panel)
+        pending.complete(red); runCurrent()
+        assertEquals(red, holder.colors.value)
+        assertEquals(1, calls)
+        holder.remove(home)
+        assertNull(holder.colors.value)
+    }
+
+    @Test fun newerRemainingClientIsSelectedOnRemove() = runTest {
+        val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), { red })
+        val home = Any(); val panel = Any()
+        holder.update(panel, song(bitmap())); runCurrent()
+        assertEquals(red, holder.colors.value)
+        holder.update(home, song(null))
+        holder.remove(panel)
+        assertNull(holder.colors.value)
+        holder.remove(home)
+    }
+
     @Test fun lateResultIsDropped() = runTest {
         val pending = mutableListOf<CompletableDeferred<ArtworkColors?>>()
         val holder = ArtworkBackgroundHolder(this, StandardTestDispatcher(testScheduler), {
