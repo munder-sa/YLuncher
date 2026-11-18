@@ -2,7 +2,11 @@
 
 最終更新: 2026-11-18 (JST)
 
-## Drive Mode Launcher を分割の行き先で開く (2026-11-18 夜、2.3.10-beta1 / 79 を GT8D に導入、実機確認待ち)
+## Drive Mode Launcher を分割の行き先で開く (2026-11-19、**v2.3.10 正式版(版80)を GT8D に導入・push・GitHub Release 公開**)
+
+- 2.3.10-beta1 の実機確認(Claude が adb で操作): Apple Music+DML(温・冷)、DML+パネルともフリードライブのまま分割。普通のマップを止めてから開くと普通の画面。初回の1回だけ Apple Music の中身が黒かった(タブを押すと出た。4回再現せず。Apple Music 側の一時的な描画とみる)。パネルから DML を押す操作は未確認。
+- 全テスト: app Debug 2,297 件中1件(`PanelActivityTest.longPressAppList_inSplit_showsSettingsInPanel`)失敗→クラス単独の --rerun で33件成功(順番依存。Release 2,294 件・panelhost 各5件は成功)。本体 SHA-256 `d1752fcc…3927`、中継 `93aab297…791e`、`build/releases/v2.3.10/`。GT8D 上で一致を確認。
+- 気づき: `enabled_accessibility_services` に YLuncher が無い(carsyso だけ)。PiP 解除(Task 268)を効かせるなら有効化が要る。
 
 - ユーザーが Play の Driving Mode Launcher(`com.gatolabo.drivemodelauncher` 2.4)を導入。APK を調べた: 画面のない LauncherActivity だけで、`google.navigation:/?free=1&mode=d&entry=fnls` の VIEW をマップに送る(ライセンス確認つき)。YLuncher の meta-data は持たない。
 - **Task 272**(`33b675d`): Task 264 の「普通のマップを常にフリードライブ」をやめた(`ActivityLauncher` の `tryMapsFreeDrive` を削除)。`MapsFreeDriveRedirects` は Drive Mode Launcher だけを「マップ+フリードライブ URI」の redirect にする(GPT Live と同じ扱い。マップが無ければ null)。Task 266/268/270/271 は残し、Drive Mode Launcher で効く。関連テスト 581 件成功。全テストは正式版の前に1回。
