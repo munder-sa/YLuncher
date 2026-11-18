@@ -138,9 +138,14 @@ class AppleLyricsClientTest {
         f.apiAnswer = { ok("""{"data":[],"included":[{"attributes":{"ttml":$quoted}}]}""") }
         result(f.client.fetch(request(), "gb", USER_TOKEN), LyricsState.Missing, AppleLyricsReason.NOT_FOUND)
 
-        // A line just after one second distinguishes a supplied duration from a discarded duration.
-        f.apiAnswer = { ok(lyricsBody(WORDS.replace("begin=\"1\"", "begin=\"1.001\""))) }
-        result(f.client.fetch(request(duration = 1), "gb", USER_TOKEN), LyricsState.Failed, AppleLyricsReason.INVALID)
+        // One second of duration plus the five-second allowance ends at six seconds.
+        val durationWords = """<tt xmlns="http://www.w3.org/ns/ttml"><body><p begin="5.999"><span begin="5.999">A</span></p></body></tt>"""
+        f.apiAnswer = { ok(lyricsBody(durationWords)) }
+        assertEquals(5999L, synced(f.client.fetch(request(duration = 1), "gb", USER_TOKEN)).single().timeMs)
+        f.apiAnswer = { ok(lyricsBody(durationWords.replace("5.999", "6.001"))) }
+        val beyondDuration = f.client.fetch(request(duration = 1), "gb", USER_TOKEN)
+        result(beyondDuration, LyricsState.Failed, AppleLyricsReason.INVALID)
+        assertEquals("beyond-duration", beyondDuration.detail)
         for (duration in listOf(null, Long.MIN_VALUE, -1L, 0L, 3601L, Long.MAX_VALUE, 2L, 3600L)) {
             synced(f.client.fetch(request(duration = duration), "gb", USER_TOKEN))
         }
@@ -248,8 +253,77 @@ class AppleLyricsClientTest {
         f.apiAnswer = { ok(lyricsBody(WORDS.replace("1.5", "0.5"))) }
         val invalid = f.client.fetch(request(), "gb", USER_TOKEN)
         result(invalid, LyricsState.Failed, AppleLyricsReason.INVALID)
-        assertNull(invalid.detail)
+        assertEquals("word-order", invalid.detail)
         assertNull(invalid.lineSynced)
+        assertEquals(emptyList<String>(), DiagLog.dump())
+    }
+
+    @Test fun invalidResponsesCarryOnlyFixedReasonCodes() = runTest {
+        DiagLog.clearForTest()
+        ShadowLog.clear()
+        val f = Fixture(this)
+        val secrets = "$USER_TOKEN $PUBLIC_TOKEN $LYRIC_SECRET $SECRET"
+        val syntheticWords = WORDS.replace("あ😀", secrets)
+        val item = """{"attributes":{"ttml":${JsonPrimitive(syntheticWords)}}}"""
+        val cases = mutableListOf<Pair<AppleLyricsHttpResponse, String>>()
+        for (body in listOf("{\"$secrets\":", "[]", "null", "true")) {
+            cases += ok(body) to "json"
+        }
+        for (errors in listOf("null", "{}", JsonPrimitive(secrets).toString(), "[{\"detail\":${JsonPrimitive(secrets)}}]")) {
+            cases += ok("""{"data":[$item],"errors":$errors}""") to "api-errors"
+        }
+        for (body in listOf("{}", """{"data":null}""", """{"data":{}}""",
+            """{"data":${JsonPrimitive(secrets)}}""", """{"data":[$item,$item]}""")) {
+            cases += ok(body) to "data-shape"
+        }
+        for (body in listOf("""{"data":[null]}""", """{"data":[{}]}""", """{"data":["x"]}""",
+            """{"data":[{"attributes":null}]}""", """{"data":[{"attributes":[]}]}""",
+            """{"data":[{"attributes":{}}]}""")) {
+            cases += ok(body) to "ttml-missing-or-large"
+        }
+        for (ttml in listOf("null", "true", "1", "{}", "[]", "\"\"", "\" \\n\"")) {
+            cases += ok("""{"data":[{"attributes":{"ttml":$ttml}}]}""") to "ttml-missing-or-large"
+        }
+        cases += ok(lyricsBody(paddedTtml(TTML_LIMIT + 1))) to "ttml-missing-or-large"
+        cases += ok(paddedJson(lyricsBody(syntheticWords), API_LIMIT) + " ") to "response-too-large"
+        cases += AppleLyricsHttpResponse(200, secrets, tooLarge = true) to "response-too-large"
+        for (ttml in listOf("<other>$syntheticWords</other>",
+            syntheticWords.replace("http://www.w3.org/ns/ttml", "urn:other"), "<!DOCTYPE tt>$syntheticWords")) {
+            cases += ok(lyricsBody(ttml)) to "ttml-root"
+        }
+        for ((ttml, reason) in listOf(
+            syntheticWords.replace("1.5", "0.5") to "word-order",
+            syntheticWords.replace("1.5", "1.") to "time-format",
+            syntheticWords.replace("end=\"2\"", "end=\"0.999\"") to "element-range",
+            syntheticWords.dropLast(1) to "xml",
+            syntheticWords.replace(secrets, "A".repeat(16385)) to "limit",
+        )) {
+            cases += ok(lyricsBody(ttml)) to reason
+        }
+        val outputs = mutableListOf<String>()
+        for ((response, detail) in cases) {
+            f.apiAnswer = { response }
+            val actual = f.client.fetch(request(), "gb", USER_TOKEN)
+            result(actual, LyricsState.Failed, AppleLyricsReason.INVALID)
+            assertEquals(detail, actual.detail)
+            assertTrue(Regex("[a-zA-Z-]{1,32}").matches(requireNotNull(actual.detail)))
+            assertNull(actual.lineSynced)
+            assertEquals("AppleLyricsResult(state=Failed, reason=INVALID, retryAfterSec=null)", actual.toString())
+            outputs += actual.toString()
+            outputs += requireNotNull(actual.detail)
+        }
+        for (error in listOf(IllegalStateException(secrets), IllegalArgumentException(secrets))) {
+            f.apiAnswer = { throw error }
+            val actual = f.client.fetch(request(), "gb", USER_TOKEN)
+            result(actual, LyricsState.Failed, AppleLyricsReason.INVALID)
+            assertEquals("exception", actual.detail)
+            assertEquals("AppleLyricsResult(state=Failed, reason=INVALID, retryAfterSec=null)", actual.toString())
+            outputs += actual.toString()
+            outputs += requireNotNull(actual.detail)
+        }
+        for (output in outputs + DiagLog.dump() + ShadowLog.getLogs().map { it.msg }) {
+            for (secret in listOf(USER_TOKEN, PUBLIC_TOKEN, LYRIC_SECRET, SECRET)) assertFalse(output.contains(secret))
+        }
         assertEquals(emptyList<String>(), DiagLog.dump())
     }
 

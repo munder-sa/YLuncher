@@ -31,9 +31,9 @@ class TtmlParserTest {
         assertEquals(listOf(LyricLine(62300, "A", listOf(LyricWord(62300, 0)))),
             lines("<div begin=\"1:00.000\" end=\"1:10.000\">" +
                 p("<span begin=\"1:02.300\">A</span>", "1:02.300", "1:05.000") + "</div>"))
-        invalid("<div begin=\"2\" end=\"1\">${p()}</div>")
-        invalid("<div begin=\"2\" end=\"4\">${p()}</div>")
-        invalid("<div begin=\"0\" end=\"2\">${p()}</div>")
+        invalidDiagnostic(xml("<div begin=\"2\" end=\"1\">${p()}</div>"), "element-range")
+        assertEquals(lines(p()), lines("<div begin=\"2\" end=\"4\">${p()}</div>"))
+        assertEquals(lines(p()), lines("<div begin=\"0\" end=\"2\">${p()}</div>"))
     }
 
     private fun xml(body: String) = """<tt xmlns="http://www.w3.org/ns/ttml" xmlns:m="http://www.w3.org/ns/ttml#metadata"><body><div>$body</div></body></tt>"""
@@ -42,6 +42,12 @@ class TtmlParserTest {
     private fun parse(body: String, duration: Long? = null): TtmlParseResult = runBlocking { TtmlParser.parse(xml(body), duration) }
     private fun lines(body: String) = (parse(body) as TtmlParseResult.WordSynced).lines
     private fun invalid(body: String) = assertEquals(TtmlParseResult.Invalid, parse(body))
+    private fun invalidDiagnostic(source: String, reason: String, duration: Long? = null,
+        allowLineSynced: Boolean = false) = runBlocking {
+        val diagnostics = mutableListOf<String>()
+        assertEquals(TtmlParseResult.Invalid, TtmlParser.parse(source, duration, allowLineSynced, diagnostics::add))
+        assertEquals(listOf("Invalid $reason"), diagnostics)
+    }
 
     @Test fun mapsLineAndWordStarts() {
         assertEquals(LyricLine(1000, "AB", listOf(LyricWord(1000, 0), LyricWord(1500, 1))),
@@ -70,9 +76,11 @@ class TtmlParserTest {
         assertEquals(1025L, lines(p("<span begin=\"1.025s\">A</span>")).single().words.single().timeMs)
     }
     @Test fun rejectsInvalidAndOverflowTimes() {
-        for (time in listOf("00:00:60", "00:60:00", "-1", "9223372036854775808", "9223372036854776s", "1f", "1t", "1.0001", "NaN")) {
+        for (time in listOf("00:00:60", "00:60:00", "-1", "9223372036854775808", "9223372036854776s", "1f", "1t", "NaN")) {
             invalid(p("<span begin=\"$time\">A</span>"))
         }
+        assertEquals(LyricLine(1000, "A", listOf(LyricWord(1000, 0))),
+            lines(p("<span begin=\"1.0001\">A</span>")).single())
     }
     @Test fun preservesExplicitSpacesAndEntities() {
         assertEquals(" A & B ", lines(p(" <span begin=\"1\">A &amp; B</span> ")).single().text)
@@ -83,25 +91,35 @@ class TtmlParserTest {
         assertEquals(TtmlParseResult.Unsupported, parse(p("<span begin=\"1\"><span begin=\"2\">A</span></span>")))
     }
     @Test fun wordOrderAndDuplicateTimesRejected() {
-        for (second in listOf("1", "0.5")) invalid(p("<span begin=\"1\">A</span><span begin=\"$second\">B</span>"))
+        assertEquals(LyricLine(1000, "AB", listOf(LyricWord(1000, 0), LyricWord(1000, 1))),
+            lines(p("<span begin=\"1\">A</span><span begin=\"1\">B</span>")).single())
+        invalidDiagnostic(xml(p("<span begin=\"1\">A</span><span begin=\"0.5\">B</span>")), "word-order")
     }
     @Test fun lineStartAndNextLineBounds() {
-        invalid(p("<span begin=\"0.9\">A</span>"))
-        invalid("<p begin=\"1\"><span begin=\"2\">A</span></p>" + p("B", "2", "3"))
-        assertEquals(TtmlParseResult.Invalid, parse(p(), 999))
+        assertEquals(LyricLine(900, "A", listOf(LyricWord(900, 0))),
+            lines(p("<span begin=\"0.9\">A</span>")).single())
+        assertEquals(listOf(LyricLine(1000, "A", listOf(LyricWord(2000, 0))), LyricLine(2000, "B")),
+            lines("<p begin=\"1\"><span begin=\"2\">A</span></p>" + p("B", "2", "3")))
+        assertTrue(parse(p(), 999) is TtmlParseResult.WordSynced)
+        invalidDiagnostic(xml(p("<span begin=\"6\">A</span>", "6", "7")), "beyond-duration", 999)
         assertTrue(parse(p(), 1000) is TtmlParseResult.WordSynced)
         assertEquals(listOf(1000L, 3000L), lines(p("<span begin=\"3\">B</span>", "3", "4") + p()).map { it.timeMs })
     }
     @Test fun overlappingLeadLinesRejected() {
-        invalid(p() + p("B", "2", "4"))
-        invalid(p() + p("B"))
+        val first = LyricLine(1000, "A", listOf(LyricWord(1000, 0)))
+        assertEquals(listOf(first, LyricLine(2000, "B")), lines(p() + p("B", "2", "4")))
+        assertEquals(listOf(first, LyricLine(1000, "B")), lines(p() + p("B")))
+        invalidDiagnostic(xml(p() + p("B", "2", "1")), "element-range")
     }
     @Test fun endValidatedButNotStored() {
         assertEquals(lines(p(end = "2")), lines(p(end = "3")))
-        invalid(p(end = "1"))
-        invalid(p("<span begin=\"1\" end=\"1\">A</span>"))
-        invalid(p("<span begin=\"1\" end=\"4\">A</span>"))
-        invalid(p("<span begin=\"3\">A</span>"))
+        assertEquals(lines(p()), lines(p(end = "1")))
+        assertEquals(lines(p()), lines(p("<span begin=\"1\" end=\"1\">A</span>")))
+        assertEquals(lines(p()), lines(p("<span begin=\"1\" end=\"4\">A</span>")))
+        assertEquals(LyricLine(1000, "A", listOf(LyricWord(3000, 0))),
+            lines(p("<span begin=\"3\">A</span>")).single())
+        invalidDiagnostic(xml(p(end = "0.999")), "element-range")
+        invalidDiagnostic(xml(p("<span begin=\"1\" end=\"0.999\">A</span>")), "element-range")
     }
     @Test fun noWordsIsUnsupported() = assertEquals(TtmlParseResult.Unsupported, parse(p("A")))
     @Test fun lineOnlyTtmlIsLineSyncedOnlyWhenAllowed() = runBlocking {
@@ -129,12 +147,19 @@ class TtmlParserTest {
             assertEquals(body, TtmlParseResult.Unsupported, TtmlParser.parse(xml(body), allowLineSynced = true))
         }
         for (body in listOf(
-            p("A", "3", "1"), p("A", "1", "1"),
-            p("A") + p("B", "2", "4"), p("A") + p("B"), p("A", "bad", "3"),
+            p("A", "3", "1"), p("A", "bad", "3"),
         )) {
             assertEquals(body, TtmlParseResult.Invalid, TtmlParser.parse(xml(body), allowLineSynced = true))
         }
-        assertEquals(TtmlParseResult.Invalid, TtmlParser.parse(xml(p("A")), 999, allowLineSynced = true))
+        assertEquals(TtmlParseResult.LineSynced(listOf(LyricLine(1000, "A"))),
+            TtmlParser.parse(xml(p("A", "1", "1")), allowLineSynced = true))
+        assertEquals(TtmlParseResult.LineSynced(listOf(LyricLine(1000, "A"), LyricLine(2000, "B"))),
+            TtmlParser.parse(xml(p("A") + p("B", "2", "4")), allowLineSynced = true))
+        assertEquals(TtmlParseResult.LineSynced(listOf(LyricLine(1000, "A"), LyricLine(1000, "B"))),
+            TtmlParser.parse(xml(p("A") + p("B")), allowLineSynced = true))
+        assertEquals(TtmlParseResult.LineSynced(listOf(LyricLine(1000, "A"))),
+            TtmlParser.parse(xml(p("A")), 999, allowLineSynced = true))
+        invalidDiagnostic(xml(p("A", "6", "7")), "beyond-duration", 999, allowLineSynced = true)
         assertEquals(TtmlParseResult.LineSynced(listOf(LyricLine(1000, "A"))),
             TtmlParser.parse(xml(p("A")), 1000, allowLineSynced = true))
     }
@@ -142,6 +167,102 @@ class TtmlParserTest {
     @Test fun plainLineWithinWordSyncedSongHasNoWords() {
         assertEquals(LyricLine(3000, "B"), lines(p() + p("B", "3", "4"))[1])
     }
+
+    @Test fun overlappingAndSimultaneousLinesKeepStableOrder() = runBlocking {
+        val entries = listOf(Triple("B", "2", "6"), Triple("A", "1", "4"), Triple("C", "2", "3"))
+        val wordBody = entries.joinToString("") { (text, begin, end) ->
+            p("<span begin=\"$begin\" end=\"$end\">$text</span>", begin, end)
+        }
+        val expected = listOf(
+            LyricLine(1000, "A", listOf(LyricWord(1000, 0))),
+            LyricLine(2000, "B", listOf(LyricWord(2000, 0))),
+            LyricLine(2000, "C", listOf(LyricWord(2000, 0))),
+        )
+        assertEquals(expected, lines(wordBody))
+        assertEquals(TtmlParseResult.WordSynced(expected), TtmlParser.parse(xml(wordBody), allowLineSynced = true))
+        val lineBody = entries.joinToString("") { (text, begin, end) -> p(text, begin, end) }
+        assertEquals(TtmlParseResult.LineSynced(expected.map { LyricLine(it.timeMs, it.text) }),
+            TtmlParser.parse(xml(lineBody), allowLineSynced = true))
+    }
+
+    @Test fun zeroLengthAndOutlyingElementsPreserveWordOffsets() {
+        val space = """<span begin="00:00.000" end="00:00.000"> </span>"""
+        val content = space + """<span begin="1" end="1"><span>あ😀</span></span>""" + space +
+            """<span begin="1" end="2">B</span>""" + space +
+            """<span begin="1.002" end="1.003">C</span>""" + space
+        val body = """<div begin="1" end="1">${p(content, "1.001", "1.001")}</div>"""
+        assertEquals(LyricLine(1000, " あ😀 B C ",
+            listOf(LyricWord(1000, 1), LyricWord(1000, 5), LyricWord(1002, 7))), lines(body).single())
+    }
+
+    @Test fun effectiveLineStartsDriveStableSortAndDuration() {
+        val body = p("<span begin=\"1.5\">B</span>", "2") +
+            p("<span begin=\"1.6\">C</span>", "1.6") + p("<span begin=\"1.5\">A</span>", "1.7")
+        val actual = lines(body)
+        assertEquals(listOf(
+            LyricLine(1500, "B", listOf(LyricWord(1500, 0))),
+            LyricLine(1500, "A", listOf(LyricWord(1500, 0))),
+            LyricLine(1600, "C", listOf(LyricWord(1600, 0))),
+        ), actual)
+        assertTrue(actual.all { line -> line.words.all { it.timeMs >= line.timeMs } })
+        assertEquals(TtmlParseResult.WordSynced(listOf(LyricLine(165999, "A", listOf(LyricWord(165999, 0))))),
+            parse(p("<span begin=\"165.999\">A</span>", "166.001", "167"), 161_000))
+    }
+
+    @Test fun acceptsSingleDigitHoursAndTruncatesSubMillisecondFractions() {
+        for ((time, expected) in listOf("0:01:02.345" to 62345L, "1.2349" to 1234L,
+            "1.234999s" to 1234L, "00:42.1234" to 42123L, "0:01:02.34567" to 62345L)) {
+            assertEquals(LyricLine(expected, "A", listOf(LyricWord(expected, 0))),
+                lines(p("<span begin=\"$time\" end=\"$time\">A</span>", time, time)).single())
+        }
+    }
+
+    @Test fun durationAllowsFiveSecondsButRejectsAnythingLater() {
+        for ((time, expected) in listOf("165.999s" to 165999L, "166.000s" to 166000L)) {
+            assertEquals(TtmlParseResult.WordSynced(listOf(LyricLine(expected, "A", listOf(LyricWord(expected, 0))))),
+                parse(p("<span begin=\"$time\">A</span>", time, "170"), 161_000))
+        }
+        invalidDiagnostic(xml(p("<span begin=\"166.001s\">A</span>", "166.001s", "170")),
+            "beyond-duration", 161_000)
+    }
+
+    @Test fun durationAllowanceSaturatesAndIgnoresNegativeValues() {
+        val time = "9223372036854775.807"
+        val body = p("<span begin=\"$time\">A</span>", time, time)
+        val expected = TtmlParseResult.WordSynced(listOf(LyricLine(Long.MAX_VALUE, "A", listOf(LyricWord(Long.MAX_VALUE, 0)))))
+        for (duration in listOf(null, -1L, Long.MIN_VALUE, Long.MAX_VALUE - 5000, Long.MAX_VALUE - 4999, Long.MAX_VALUE)) {
+            assertEquals(expected, parse(body, duration))
+        }
+        assertTrue(parse(p("<span begin=\"5\">A</span>", "5", "6"), 0) is TtmlParseResult.WordSynced)
+        invalidDiagnostic(xml(p("<span begin=\"5.001\">A</span>", "5.001", "6")), "beyond-duration", 0)
+    }
+
+    @Test fun invalidTimeFormatsCarryOnlyFixedReasonCode() {
+        for (time in listOf("1.", "1.s", "0:01:02.", "-1", "00:60:00", "00:00:60",
+            "9223372036854775808", "9223372036854775.808", "9223372036854775808:00:00",
+            "2562047788016:00:00")) {
+            invalidDiagnostic(xml(p("<span begin=\"$time\">A</span>")), "time-format")
+        }
+    }
+
+    @Test fun doctypeAndMalformedXmlCarryOnlyFixedReasonCodes() {
+        for (declaration in listOf("<!DOCTYPE tt>", "<!DOCTYPE tt [<!ENTITY x SYSTEM 'file:///unreadable-ttml-entity'>]>",
+            "<!DOCTYPE tt SYSTEM 'https://invalid.example/ttml'>")) {
+            invalidDiagnostic(declaration + xml(p()), "doctype")
+        }
+        for (source in listOf("", xml(p()).dropLast(1), xml(p("&unknown;")), xml(p(p())))) {
+            invalidDiagnostic(source, "xml")
+        }
+    }
+
+    @Test fun everyResourceLimitCarriesLimitReasonCode() {
+        invalidDiagnostic(xml("<div>".repeat(60) + p() + "</div>".repeat(60)), "limit")
+        invalidDiagnostic(xml(p().repeat(2001)), "limit")
+        // Empty timed spans still count at START_TAG even though they add no words or text.
+        invalidDiagnostic(xml(p("<span begin=\"0\" end=\"0\"/>".repeat(20001))), "limit")
+        invalidDiagnostic(xml(p("<span begin=\"1\">${"A".repeat(16385)}</span>")), "limit")
+    }
+
     @Test fun doctypeAndExternalEntitiesRejected() = runBlocking {
         for (declaration in listOf("<!DOCTYPE tt>", "<!DOCTYPE tt [<!ENTITY x SYSTEM 'file:///unreadable-ttml-entity'>]>", "<!DOCTYPE tt SYSTEM 'https://invalid.example/ttml'>")) {
             assertEquals(TtmlParseResult.Invalid, TtmlParser.parse(declaration + xml(p()), null))

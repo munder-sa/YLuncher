@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -64,7 +65,7 @@ class AppleLyricsClient(
         val trace = if (diagnosticsEnabled) AppleConnectionTrace(AppleConnectionTrace.Operation.CONNECT) else null
         try {
             val outcome = bounded(
-                35_000L, { AppleConnectResult.Unavailable(it) },
+                35_000L, { reason, _ -> AppleConnectResult.Unavailable(reason) },
             ) {
                 val cleanToken = cleanToken(userToken)
                     ?: return@bounded AppleConnectResult.Unavailable(AppleLyricsReason.INVALID)
@@ -92,7 +93,7 @@ class AppleLyricsClient(
     }
 
     suspend fun fetch(request: LyricsRequest, storefront: String, userToken: String): AppleLyricsResult = bounded(
-        5_000L, { failed(it) },
+        5_000L, { reason, detail -> failed(reason, detail = detail) },
     ) {
         val cleanToken = cleanToken(userToken)
         val id = request.identity.appleMusicId
@@ -102,7 +103,7 @@ class AppleLyricsClient(
         ) return@bounded AppleLyricsResult(LyricsState.Missing, AppleLyricsReason.NOT_APPLICABLE)
 
         when (val result = authenticatedRequest("$API_ROOT/v1/catalog/$storefront/songs/$id/syllable-lyrics", cleanToken)) {
-            is ApiResult.Unavailable -> failed(result.reason, result.retryAfterSec)
+            is ApiResult.Unavailable -> failed(result.reason, result.retryAfterSec, result.detail)
             is ApiResult.Response -> when (result.value.code) {
                 404 -> AppleLyricsResult(LyricsState.Missing, AppleLyricsReason.NOT_FOUND)
                 200 -> parseLyrics(result.value.body, request.query.durationSec)
@@ -158,7 +159,7 @@ class AppleLyricsClient(
                 currentCoroutineContext().ensureActive()
                 val tooLarge = response.tooLarge || response.body.toByteArray(Charsets.UTF_8).size > MAX_RESPONSE_BYTES
                 currentCoroutineContext().ensureActive()
-                if (tooLarge) return@withLock ApiResult.Unavailable(AppleLyricsReason.INVALID)
+                if (tooLarge) return@withLock ApiResult.Unavailable(AppleLyricsReason.INVALID, detail = "response-too-large")
                 when (response.code) {
                     401, 403 -> {
                         if (attempt == 1) return@withLock ApiResult.Unavailable(AppleLyricsReason.AUTH_REQUIRED)
@@ -180,24 +181,28 @@ class AppleLyricsClient(
     }
 
     private suspend fun parseLyrics(body: String, durationSec: Long?): AppleLyricsResult {
-        val json = parseObject(body) ?: return failed(AppleLyricsReason.INVALID)
+        val json = parseObject(body) ?: return failed(AppleLyricsReason.INVALID, detail = "json")
         if ("errors" in json) {
-            val errors = json["errors"] as? JsonArray ?: return failed(AppleLyricsReason.INVALID)
-            if (errors.isNotEmpty()) return failed(AppleLyricsReason.INVALID)
+            val errors = json["errors"] as? JsonArray ?: return failed(AppleLyricsReason.INVALID, detail = "api-errors")
+            if (errors.isNotEmpty()) return failed(AppleLyricsReason.INVALID, detail = "api-errors")
         }
-        val data = json["data"] as? JsonArray ?: return failed(AppleLyricsReason.INVALID)
+        val data = json["data"] as? JsonArray ?: return failed(AppleLyricsReason.INVALID, detail = "data-shape")
         if (data.isEmpty()) return AppleLyricsResult(LyricsState.Missing, AppleLyricsReason.NOT_FOUND)
-        val attributes = (data.singleOrNull() as? JsonObject)?.get("attributes") as? JsonObject
-        val ttml = attributes?.get("ttml").stringValue() ?: return failed(AppleLyricsReason.INVALID)
+        if (data.size != 1) return failed(AppleLyricsReason.INVALID, detail = "data-shape")
+        val attributes = (data.single() as? JsonObject)?.get("attributes") as? JsonObject
+        val ttml = attributes?.get("ttml").stringValue()
+            ?: return failed(AppleLyricsReason.INVALID, detail = "ttml-missing-or-large")
         if (ttml.isBlank() || ttml.toByteArray(Charsets.UTF_8).size > MAX_TTML_BYTES) {
-            return failed(AppleLyricsReason.INVALID)
+            return failed(AppleLyricsReason.INVALID, detail = "ttml-missing-or-large")
         }
-        if (!hasTtmlRoot(ttml)) return failed(AppleLyricsReason.INVALID)
+        if (!hasTtmlRoot(ttml)) return failed(AppleLyricsReason.INVALID, detail = "ttml-root")
         val durationMs = durationSec?.takeIf { it in 1L..3600L }?.let { it * 1000L }
         var detail: String? = null
         val parsed = TtmlParser.parse(ttml, durationMs, allowLineSynced = true) { diagnostic ->
             if (diagnostic.startsWith("Unsupported ")) {
-                detail = diagnostic.removePrefix("Unsupported ").takeIf { UNSUPPORTED_DETAIL.matches(it) }
+                detail = diagnostic.removePrefix("Unsupported ").takeIf { DETAIL_CODE.matches(it) }
+            } else if (diagnostic.startsWith("Invalid ")) {
+                detail = diagnostic.removePrefix("Invalid ").takeIf { DETAIL_CODE.matches(it) }
             }
         }
         currentCoroutineContext().ensureActive()
@@ -209,13 +214,19 @@ class AppleLyricsClient(
             TtmlParseResult.Unsupported -> AppleLyricsResult(
                 LyricsState.Missing, AppleLyricsReason.UNSUPPORTED, detail = detail,
             )
-            TtmlParseResult.Invalid -> failed(AppleLyricsReason.INVALID)
+            TtmlParseResult.Invalid -> failed(AppleLyricsReason.INVALID, detail = detail)
         }
     }
 
     private suspend fun parseObject(body: String): JsonObject? {
         currentCoroutineContext().ensureActive()
-        val json = Json.parseToJsonElement(body)
+        val json = try {
+            Json.parseToJsonElement(body)
+        } catch (_: SerializationException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
         currentCoroutineContext().ensureActive()
         return json as? JsonObject
     }
@@ -242,7 +253,7 @@ class AppleLyricsClient(
 
     private suspend fun <T : Any> bounded(
         timeoutMillis: Long,
-        failure: (AppleLyricsReason) -> T,
+        failure: (AppleLyricsReason, String?) -> T,
         action: suspend () -> T,
     ): T {
         currentCoroutineContext().ensureActive()
@@ -260,22 +271,23 @@ class AppleLyricsClient(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: IOException) {
-                failure(AppleLyricsReason.NETWORK)
+                failure(AppleLyricsReason.NETWORK, null)
             } catch (_: Exception) {
                 // Do not attach a response, credential, exception message, or cause to results.
-                failure(AppleLyricsReason.INVALID)
+                failure(AppleLyricsReason.INVALID, "exception")
             }
             // Even a non-cooperative dependency that throws after the deadline cannot publish a result.
             currentCoroutineContext().ensureActive()
             outcome
-        } ?: failure(AppleLyricsReason.TIMEOUT)
+        } ?: failure(AppleLyricsReason.TIMEOUT, null)
         currentCoroutineContext().ensureActive()
         return result
     }
 
     private sealed interface ApiResult {
         class Response(val value: AppleLyricsHttpResponse) : ApiResult
-        class Unavailable(val reason: AppleLyricsReason, val retryAfterSec: Long? = null) : ApiResult
+        class Unavailable(val reason: AppleLyricsReason, val retryAfterSec: Long? = null,
+            val detail: String? = null) : ApiResult
     }
 
     private companion object {
@@ -286,7 +298,7 @@ class AppleLyricsClient(
         const val MAX_TOKEN_BYTES = 16 * 1024
         val STOREFRONT = Regex("[a-z]{2}")
         val APPLE_ID = Regex("[0-9]{1,20}")
-        val UNSUPPORTED_DETAIL = Regex("[a-zA-Z-]{1,32}")
+        val DETAIL_CODE = Regex("[a-zA-Z-]{1,32}")
         val THOUSAND: BigInteger = BigInteger.valueOf(1000L)
         val MAX_LONG: BigInteger = BigInteger.valueOf(Long.MAX_VALUE)
 
@@ -299,9 +311,9 @@ class AppleLyricsClient(
         fun kotlinx.serialization.json.JsonElement?.stringValue(): String? =
             (this as? JsonPrimitive)?.takeIf { it.isString }?.content
 
-        fun failed(reason: AppleLyricsReason, retry: Long? = null) = AppleLyricsResult(
+        fun failed(reason: AppleLyricsReason, retry: Long? = null, detail: String? = null) = AppleLyricsResult(
             if (reason == AppleLyricsReason.NETWORK) LyricsState.Offline else LyricsState.Failed,
-            reason, retry,
+            reason, retry, detail = detail?.takeIf { DETAIL_CODE.matches(it) },
         )
 
         fun retryDeadline(now: Long, seconds: Long): Long = BigInteger.valueOf(now)
