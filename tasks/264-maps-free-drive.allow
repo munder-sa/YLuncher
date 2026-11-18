@@ -1,0 +1,7 @@
+create app/src/main/java/com/gt8d/launcher/apps/MapsFreeDrive.kt
+write app/src/main/java/com/gt8d/launcher/split/ActivityLauncher.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/test/java/com/gt8d/launcher/split/AndroidActivityLauncherTest.kt
+write app/src/test/java/com/gt8d/launcher/apps/SplitRedirectTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.split.AndroidActivityLauncherTest' --tests 'com.gt8d.launcher.apps.SplitRedirectTest' --tests 'com.gt8d.launcher.sets.SetRunnerTest'
