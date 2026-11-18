@@ -31,13 +31,14 @@
 - **【解決・実証済み(2026-11-15 夜、Task 242)】carprobe は abstract ソケット `gt8d-ipv6-guard` 方式で a0call を root 実行できる(`/system` 無改造)。** この端末の adbd は `service.adb.listen_addrs=localabstract:gt8d-ipv6-guard` により abstract unix ソケット `@gt8d-ipv6-guard` で素の(非 TLS)adb を開く(TCP 5555 は一切 LISTEN しない)。`ro.adb.secure=0`+Permissive なので、通常アプリが `LocalSocket`(ABSTRACT, 名前 `gt8d-ipv6-guard`)で繋ぎ `CNXN`(認証なし)→`OPEN shell:` すれば root(uid=0)。ユーザーの別アプリ `GT8D-IPv6-Guard`(`local.gt8d.ipv6guard`、`/mnt/f/YLuncher/GT8D-IPv6-Guard/`、repo 外)が実証済みで、その `LocalAdb`/`Bootstrap` を手本にした。carprobe の `AdbClient` を TCP→`LocalSocket` に差し替え、**接続を先に試し未起動時のみ** `setprop service.adb.listen_addrs localabstract:gt8d-ipv6-guard`+`ctl.restart adbd` で bootstrap(ワイヤレス ADB を無用に切らない)。`INTERNET` 権限は削除。コミット `(Task 242)`。**実機で正の経路を実証**: carprobe 起動で `adb: OK (uid=0 @localabstract:gt8d-ipv6-guard)`、`Run a0call status` で `OK (exit=0)`・`Controller=efb45bb0 ready=1`、セッションログ `/sdcard/Download/rav4_probe_*.log` 作成、ホスト ADB 維持(bootstrap 不要だった=ipv6guard が毎起動 socket を立てているため)。**要件: Finish と ipv6guard の競合** — ipv6guard の `guard.sh` 監視は adbd を再起動しないが、`Bootstrap.ensure()`(起動時・15分周期ジョブ・アプリ起動時に発火)は socket が落ちていると `ctl.restart adbd` する。よって carprobe の Finish で adbd を止めても ipv6guard 有効中は再有効化される。carprobe の Finish 画面/ログにその注記を追加済み(完全停止は ipv6guard で「自動適用を停止」)。**追補(締め作業)**: Finish を自己切断に強い構成へ修正。`settings put global adb_wifi_enabled 0; adb_enabled 0` は root が要るので adbd シェル越し(実機確認済み: これらは adbd も `@gt8d-ipv6-guard` も切らない)。**`service.adb.listen_addrs ""` と `ctl.stop adbd` は、Bootstrap と同じく通常アプリから直接 `/system/bin/setprop` で叩ける**ため、ADB シェル越しではなく**アプリ側 `ProcessBuilder`(`AdbClient.setPropertyLocal`)で `listen_addrs ""`→`ctl.stop adbd` の順**に実行。こうすると adbd 停止でソケットが切れても後続処理・UI 完了判定が `EOFException`/エラーにならず綺麗に閉じる(旧実装は `ctl.stop adbd` を ADB シェル越しに叩き自己切断でエラー表示になっていた)。`listen_addrs ""` 先行で adbd 再起動時の再 open も防ぐ。cold boot 直後の自己 bootstrap の確実性のため `AdbClient.waitForSocket` の待機を 8→15 回(約3s)に延長。コード上の最終確認: ①`adbd` 完全停止(`@gt8d-ipv6-guard` 未開放)から carprobe を開くと、`connect` は即 `IOException`(ハングなし)→ `setprop listen_addrs`+`ctl.restart adbd`+最大3s リトライ→接続、で**タイムアウトで固まらず繋がる**。②Finish は `service.adb.listen_addrs ""`+`ctl.stop adbd` で確実に停止(接続断は想定どおり成功扱い)。これで a0call を**車内(host 無し)でも**動かせる(ipv6guard が socket を立てる or carprobe が自己 bootstrap)。以下の旧「不成立」記録は loopback(TCP 5555)方式についての経緯。
 
 - **【ipv6guard の adbd ライフサイクル改修(2026-11-15 夜、投影遅延対策)】** 投影遅延の真因は `local.gt8d.ipv6guard` が起動時に `adbd` を立てて止めず、車載 USB モードで adbd が `FUNCTIONFS_BIND` リトライを回し続けること。`GT8D-IPv6-Guard/` のソースを改修(`Guard.java`/`Bootstrap.java`): ① **root 不要の事前チェック** `guardEffectiveNoRoot()`=通常アプリが `/system/bin/ip -6 rule show` を読み(uid 10208・untrusted_app・Permissive で可能)、ルール `32000: from all unreachable` があれば **adbd に一切触れず終了**(apply/status とも)。② 剥がれていたときだけ従来どおり bootstrap で adbd 起動→適用し、適用後に **自分で起こした場合のみ**(`adbdWasUp=Bootstrap.listening()` が false)かつ **`adb_wifi_enabled != 1`** のとき `setprop ctl.stop adbd`。③ 監視 `guard.sh` は PPID=1(init)で adbd 停止後も生存(実機確認)。元の署名鍵 `GT8D-IPv6-Guard/guard-signing.p12`(gitignore)+`build.ps1`(Windows PowerShell)でビルドし `install -r` 済み。**実機で確認**: ルール有り時は全トリガー(boot/job/app)が `already effective (adbd untouched)`=adbd を起こさない。ルール剥がれ時は再適用し新監視を起動。adbd が既に起動中(無線デバッグ中)なら `adbd was already running; left untouched`=停止しない(carprobe 使用中の横槍防止)。→ **carprobe の Finish 後も、ルールが残っていれば ipv6guard は adbd を再起動しない**(主眼を達成)。車内(adb_wifi!=1)での「起動→適用→即停止」は events.log に `adbd stopped (self-started, car mode)` が出る。ソース: `GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/`。
+- **【ipv6guard v1.1 ワンショット化(2026-11-18、Task 258、`1f7044e`)】上記 11-15 版を置き換え。** `guard.sh` 常駐ループを全廃(11-18 の実機 guard.log 15 起動分で rule 32000 は起動ごとに1回入れれば消えないと確認済み)。非 root の `rulePresentNoRoot()` でルール有りなら adbd に一切触れない。無いときだけ `Bootstrap.begin` で `listen_addrs=localabstract:gt8d-ipv6-guard`+`ctl.restart adbd`→root で `rule add` のみ→`Bootstrap.end` で `listen_addrs ""`+`ctl.stop adbd`(無線デバッグ ON なら restart、最初から待受中=carprobe 使用中なら何もしない)。旧 `/data/local/gt8d-ipv6-guard` はワンショット時に削除。**APK** v1.1/2、SHA-256 `129281dc…bdbc4440`、署名証明書 `70331f95…b337a500`(旧版と同一)、ビルドは `GT8D_GUARD_KS_PASS="$(cat ~/.gt8d_guard_kspass)" WSLENV=GT8D_GUARD_KS_PASS powershell.exe -File F:\YLuncher\GT8D-IPv6-Guard\build.ps1`。**実機で確認(無線デバッグ OFF で再起動)**: events.log に `bootstrap: configured…`→`socket ready`→`listen_addrs cleared`→`adbd stopped`→`GUARD_ONESHOT_OK`(09:57:13→14、約1秒)、以降のトリガーは `rule present (adbd untouched)`、rule 32000 有り・旧ディレクトリ消滅・`listen_addrs` 空。**→ 起動時に `@gt8d-ipv6-guard` socket は残らない。carprobe は自己 bootstrap で接続する(Task 242 で実証済み)。**
 
 ### 実車テスト手順(carprobe の DHU 画面だけで a0call。PC 不要)
 
 **目的**: 実車で、メーター内地図のブラックアウト時に a0call で NAV フォーカス(ID 13)を送り、復帰するか確認する。併せて実車のサービス一覧(クラスター用シンク/ナビサービスの申告)を記録する。a0call は何も書き換えないので、終了後に戻す作業はない。
 
 **事前準備(自宅で設定済みを確認)**:
-- `RAV4 Probe`(`com.gt8d.carprobe`)導入済み。`GT8D-IPv6-Guard`(`local.gt8d.ipv6guard`)導入済み・自動適用 ON(毎起動で abstract ソケット `gt8d-ipv6-guard` を立てる=carprobe の接続先)。`a0call` が `/data/local/tmp/a0call` にある。
+- `RAV4 Probe`(`com.gt8d.carprobe`)導入済み。`GT8D-IPv6-Guard`(`local.gt8d.ipv6guard`)v1.1 導入済み・自動適用 ON(起動時にルールだけ入れて adbd を止める。socket は残さない。carprobe は開いたときに自分で socket を立てる)。`a0call` が `/data/local/tmp/a0call` にある。
 - 実車持ち込みは**有線 AA モード(`cp_aa=2000`)**が基本方針。ワイヤレスデバッグは不要(carprobe は端末内 socket を使う)。
 
 **車内の手順(ユーザー確定版、2026-11-16)**:
@@ -48,7 +49,7 @@
    - 事前に iPhone で、この車の CarPlay を無効にしておく(設定 > 一般 > CarPlay > この車)。ペアリング済みだと、テザリングや Bluetooth の接続をきっかけに無線 CarPlay が自動で始まり、その時点でメーターが黒くなることがある。
    - メーターの表示設定を地図(ナビ)にしておく。ルート案内はしない。
    - CarPlay が一瞬でも先に繋がると黒が残り、2 の結果が「有線 AA だけで黒くなったのか」区別できなくなる。黒が残っていたら、CarPlay を切ったまま純正ナビで案内を開始→終了する(note の復活手順)などで純正地図に戻してから 2 に進む。
-2. **GT8D を有線 AA で繋ぎ、メーターが暗転するかを確かめる**: GT8D を USB に挿す → 起動と有線 AA の投影が安定するまで待つ。**ルート案内なし**のまま、メーターの地図が黒くなるかを記録する(ipv6guard が起動時に socket を立てるので、ワイヤレスデバッグは不要)。
+2. **GT8D を有線 AA で繋ぎ、メーターが暗転するかを確かめる**: GT8D を USB に挿す → 起動と有線 AA の投影が安定するまで待つ。**ルート案内なし**のまま、メーターの地図が黒くなるかを記録する(ワイヤレスデバッグは不要。この時点では adbd は止まっている)。
    - **暗転しなければ**: 結果を記録して、念のため 3 の `Save Boot Log & Services`(サービス一覧の記録)だけ行い、Finish へ。
 3. **暗転したら carprobe**: GT8D で **RAV4 Probe** を開き、上部が **`adb: OK (uid=0 @localabstract:gt8d-ipv6-guard)`** になることを確認(NO のときは数秒待って再度開く/ボタンを押す。carprobe は socket 未起動なら自己 bootstrap する)。次の順に押し、**それぞれ SS を取る**:
    1. `Save Boot Log & Services`(暗転した状態の記録) → SS
@@ -58,7 +59,7 @@
    4. `toggle 800ms` → メーターを見る → SS
    5. `toggle 3000ms` → メーターを見る → SS
    6. 最後にもう一度 `Save Boot Log & Services` → SS(toggle の送信と、その後の受信の記録を残すため)
-4. **終了**: `Finish & Disable ADB` を押す(adbd を止める。ipv6guard が有効なら、起動時・15 分ごとに socket が戻る)。
+4. **終了**: `Finish & Disable ADB` を押す(adbd を止める。ipv6guard v1.1 はルールが残っている限り adbd を再起動しない)。
 
 **ログの残り方**: `Save Boot Log & Services` は押すたびに新しいファイル `/sdcard/Download/rav4_probe_<日時>.log` を作り、全ログとサービス要約を保存する。a0call の結果は、直前に作ったファイルに追記される。自宅で全ファイルを回収する。
 
