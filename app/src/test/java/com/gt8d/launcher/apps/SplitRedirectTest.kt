@@ -5,8 +5,10 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.net.Uri
 import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
+import com.gt8d.launcher.config.Defaults
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -21,6 +23,23 @@ class SplitRedirectTest {
     private val reader = AndroidSplitRedirects(app.packageManager)
     private val source = "local.aibox.gptlive"
     private val target = "com.openai.chatgpt"
+
+    @Test fun mapsWithoutBaseRedirect_returnsFreeDriveUri() {
+        val redirects = MapsFreeDriveRedirects(SplitRedirects { null })
+        val expected = SplitRedirect(Defaults.PKG_MAPS, null, Uri.parse("google.navigation:/?free=1&mode=d&entry=fnls"))
+        assertEquals(expected, redirects.forPackage(Defaults.PKG_MAPS))
+    }
+
+    @Test fun mapsWithBaseRedirect_keepsBaseResult() {
+        val redirect = SplitRedirect(target, null, null)
+        val redirects = MapsFreeDriveRedirects(SplitRedirects { pkg -> redirect.takeIf { pkg == Defaults.PKG_MAPS } })
+        assertSame(redirect, redirects.forPackage(Defaults.PKG_MAPS))
+    }
+
+    @Test fun otherPackageWithoutBaseRedirect_returnsNull() {
+        val redirects = MapsFreeDriveRedirects(SplitRedirects { null })
+        assertNull(redirects.forPackage(source))
+    }
 
     private fun activity(pkg: String, cls: String = "$pkg.Main", metadata: Bundle? = null) {
         val pm = shadowOf(app.packageManager)

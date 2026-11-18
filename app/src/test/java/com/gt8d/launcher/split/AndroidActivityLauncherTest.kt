@@ -1,6 +1,7 @@
 package com.gt8d.launcher.split
 
 import android.app.Application
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.ContextWrapper
@@ -9,6 +10,8 @@ import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageInfo
 import androidx.test.core.app.ApplicationProvider
+import com.gt8d.launcher.apps.MapsFreeDrive
+import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.diag.DiagLog
 import org.junit.Assert.*
 import org.junit.Test
@@ -24,10 +27,12 @@ class AndroidActivityLauncherTest {
         app, com.gt8d.launcher.pip.PipDetector { it == pkg },
     )
 
-    private fun registerApp() {
+    private val mapsLauncher = ComponentName(Defaults.PKG_MAPS, "${Defaults.PKG_MAPS}.LauncherAlias")
+
+    private fun registerApp(component: ComponentName = selected) {
         Shadows.shadowOf(app.packageManager).apply {
-            addOrUpdateActivity(ActivityInfo().apply { name = selected.className; packageName = selected.packageName })
-            addIntentFilterForActivity(selected, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+            addOrUpdateActivity(ActivityInfo().apply { name = component.className; packageName = component.packageName })
+            addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         }
     }
 
@@ -35,6 +40,54 @@ class AndroidActivityLauncherTest {
         assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK)
         assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
         assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+    }
+
+    @Test fun startApp_maps_opensFreeDriveFullscreen() {
+        assertTrue(AndroidActivityLauncher(app).startApp(Defaults.PKG_MAPS, adjacent = false))
+        val intent = Shadows.shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals(MapsFreeDrive.URI, intent.dataString)
+        assertEquals(Defaults.PKG_MAPS, intent.`package`)
+        assertNull(intent.component)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, intent.flags)
+    }
+
+    @Test fun startComponent_maps_opensFreeDriveAdjacentWithoutLauncherComponent() {
+        assertTrue(pipLauncher("other.app").startComponent(mapsLauncher, adjacent = true))
+        val intent = Shadows.shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals(MapsFreeDrive.URI, intent.dataString)
+        assertEquals(Defaults.PKG_MAPS, intent.`package`)
+        assertNull(intent.component)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK, intent.flags)
+    }
+
+    private fun launchWithoutViewHandler(launch: (AndroidActivityLauncher) -> Boolean): Intent {
+        val actions = mutableListOf<String?>()
+        val context = object : ContextWrapper(app) {
+            override fun startActivity(intent: Intent) {
+                actions += intent.action
+                if (intent.action == Intent.ACTION_VIEW) throw ActivityNotFoundException()
+                super.startActivity(intent)
+            }
+        }
+        assertTrue(launch(AndroidActivityLauncher(context)))
+        assertEquals(listOf(Intent.ACTION_VIEW, Intent.ACTION_MAIN), actions)
+        return Shadows.shadowOf(app).nextStartedActivity
+    }
+
+    @Test fun startApp_mapsWithoutViewHandler_usesPackageLauncher() {
+        registerApp(mapsLauncher)
+        val intent = launchWithoutViewHandler { it.startApp(Defaults.PKG_MAPS, adjacent = false) }
+        assertEquals(mapsLauncher, intent.component)
+        assertFullscreen(intent)
+    }
+
+    @Test fun startComponent_mapsWithoutViewHandler_usesSelectedComponent() {
+        val intent = launchWithoutViewHandler { it.startComponent(mapsLauncher, adjacent = true) }
+        assertEquals(mapsLauncher, intent.component)
+        assertTrue(intent.hasCategory(Intent.CATEGORY_LAUNCHER))
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK, intent.flags)
     }
 
     @Test fun startApp_adjacent_pipTarget_launchesFullscreenWithoutAdjacent() {
@@ -57,6 +110,7 @@ class AndroidActivityLauncherTest {
         registerApp()
         assertTrue(pipLauncher("other.app").startApp(selected.packageName, true))
         val intent = Shadows.shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_MAIN, intent.action)
         for (flag in listOf(Intent.FLAG_ACTIVITY_NEW_TASK, Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT, Intent.FLAG_ACTIVITY_MULTIPLE_TASK)) {
             assertEquals(flag, intent.flags and flag)
         }

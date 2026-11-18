@@ -23,11 +23,13 @@ import com.gt8d.launcher.media.lyrics.LyricsRepository
 import com.gt8d.launcher.media.lyrics.LrclibClient
 import com.gt8d.launcher.media.lyrics.UrlConnectionTransport
 import com.gt8d.launcher.notice.NoticeOverlay
+import com.gt8d.launcher.apps.AndroidSplitRedirects
 import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.apps.AppCatalogState
 import com.gt8d.launcher.apps.FrequentApp
 import com.gt8d.launcher.apps.FrequentAppsRefresher
 import com.gt8d.launcher.apps.LaunchLog
+import com.gt8d.launcher.apps.MapsFreeDriveRedirects
 import com.gt8d.launcher.apps.UsageHistory
 import com.gt8d.launcher.apps.settingsComponent
 import com.gt8d.launcher.apps.HiddenApps
@@ -274,7 +276,7 @@ object AppGraph {
                 vendor = VendorSplitLauncher(bridge),
                 appPair = null,
                 apps = apps,
-                redirects = com.gt8d.launcher.apps.AndroidSplitRedirects(app.packageManager),
+                redirects = MapsFreeDriveRedirects(AndroidSplitRedirects(app.packageManager)),
                 watcher = watcher,
                 warm = warm,
                 stockLauncherWarmup = StockLauncherWarmup(
