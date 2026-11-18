@@ -5,10 +5,12 @@ import com.gt8d.launcher.apps.OwnPackages
 import com.gt8d.launcher.apps.SplitRedirect
 import com.gt8d.launcher.apps.SplitRedirects
 import com.gt8d.launcher.notice.Notice
+import com.gt8d.launcher.pip.PipDetector
 import com.gt8d.launcher.ui.home.numberedSetLabel
 import com.gt8d.launcher.config.LauncherConfig
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Side
+import com.gt8d.launcher.config.appPkgAt
 import com.gt8d.launcher.config.panelSide
 import com.gt8d.launcher.config.slotAt
 import com.gt8d.launcher.config.Slot
@@ -74,6 +76,7 @@ data class SetRunnerDeps(
     // A supplied executor controls delayed tests; otherwise use the executor
     // bound to the watcher, including when dependencies replace that watcher.
     val foregroundPoll: ForegroundPoll? = null,
+    val pip: PipDetector = PipDetector { false },
 )
 
 class SetRunner(private val d: SetRunnerDeps) {
@@ -147,6 +150,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var guardLastPanelHomeMs: Long? = null
     private var warmupTimer: Cancellable? = null
     private var preparing = false
+    private var waitingForPip: ScreenSet? = null
     private var vendorWaiting = false
     private var operationGeneration = 0L
     private var pollGeneration = 0L
@@ -238,30 +242,25 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun home() {
-        stopCancelGuard()
-        val cfg = configForOperation() ?: return
-        home(cfg)
+        open(SetNavigator.HOME)
     }
 
-    private fun home(cfg: LauncherConfig) {
-        cancelLinkCallbacks()
-        DiagLog.d("SetRunner", "home")
-        if (_opening.value != null) {
-            pollGeneration++
-            pending = PendingOpen(SetNavigator.HOME, false)
-            d.curtain.update(targetFor(SetNavigator.HOME, cfg))
-            return
-        }
+    private fun home(cfg: LauncherConfig, useCurtain: Boolean) {
         panelSessionReady = false
-        onSetEnded("home")
+        onSetEnded(if (useCurtain) "home" else "boot home")
+        openingForBoot = false
         currentIndex = SetNavigator.HOME
         d.lastIndex.lastSetIndex = SetNavigator.HOME
         lastOpenedPair = null
         lastOpenedAtMs = null
         lastReadyAtMs = null
-        d.curtain.show(targetFor(SetNavigator.HOME, cfg), WarmTracker.WARM_MS, d.watcher.available())
+        if (useCurtain) {
+            d.curtain.show(targetFor(SetNavigator.HOME, cfg), WarmTracker.WARM_MS, d.watcher.available())
+        } else {
+            _opening.value = null
+        }
         d.startHome()
-        d.curtain.ready()
+        if (useCurtain) d.curtain.ready()
     }
 
     fun open(index: Int) {
@@ -270,45 +269,28 @@ class SetRunner(private val d: SetRunnerDeps) {
         open(index, cfg)
     }
 
-    private fun open(index: Int, cfg: LauncherConfig) {
+    private fun open(index: Int, cfg: LauncherConfig, useCurtain: Boolean = true) {
         cancelLinkCallbacks()
-        DiagLog.d("SetRunner", "open index=$index")
-        if (_opening.value != null) {
+        DiagLog.d("SetRunner", "open index=$index useCurtain=$useCurtain")
+        val pipSet = waitingForPip
+        if (pipSet != null) {
+            if (index == currentIndex && pipSet === cfg.screenSets.getOrNull(index - 1) &&
+                openingForBoot == !useCurtain) return
+            cancelTimers()
+        } else if (_opening.value != null) {
             pollGeneration++
-            pending = PendingOpen(index, false)
-            d.curtain.update(targetFor(index, cfg))
+            pending = PendingOpen(index, !useCurtain)
+            if (useCurtain) d.curtain.update(targetFor(index, cfg))
             DiagLog.d("SetRunner", "open deferred pending=$index")
             return
         }
-        if (index == SetNavigator.HOME) {
-            home(cfg)
-            return
-        }
-        openInternal(index, cfg, useCurtain = true)
+        openInternal(index, cfg, useCurtain)
     }
 
     fun openForBoot(index: Int) {
         stopCancelGuard()
         val cfg = configForOperation() ?: return
-        cancelLinkCallbacks()
-        DiagLog.d("SetRunner", "openForBoot index=$index")
-        if (_opening.value != null) {
-            pollGeneration++
-            pending = PendingOpen(index, true)
-            return
-        }
-        if (index == SetNavigator.HOME) {
-            panelSessionReady = false
-            onSetEnded("boot home")
-            currentIndex = SetNavigator.HOME
-            d.lastIndex.lastSetIndex = SetNavigator.HOME
-            lastOpenedPair = null
-            lastOpenedAtMs = null
-            lastReadyAtMs = null
-            d.startHome()
-            return
-        }
-        openInternal(index, cfg, useCurtain = false)
+        open(index, cfg, useCurtain = false)
     }
 
     fun abortBootToHome(timedOut: Boolean = false) {
@@ -451,18 +433,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         linkFallback = null
         val set = cfg.screenSets.getOrNull(index - 1)
         if (set == null) {
-            if (useCurtain) {
-                home(cfg)
-            } else {
-                panelSessionReady = false
-                onSetEnded("boot home")
-                currentIndex = SetNavigator.HOME
-                d.lastIndex.lastSetIndex = SetNavigator.HOME
-                lastOpenedPair = null
-                lastOpenedAtMs = null
-                lastReadyAtMs = null
-                d.startHome()
-            }
+            home(cfg, useCurtain)
             return
         }
 
@@ -476,21 +447,64 @@ class SetRunner(private val d: SetRunnerDeps) {
         panelSessionReady = false
         onSetEnded("open ${set.id}")
         val forLink = linkFallback != null
-        val panelSide = set.panelSide
-        val originalLeft = when (val l = set.left) {
-            is Slot.App -> l.pkg
-            Slot.Panel -> d.panelHostPkg
-        }
-        val originalRight = when (val r = set.right) {
-            is Slot.App -> r.pkg
-            is Slot.Panel -> d.panelHostPkg
-        }
-        var leftRedirect = if (!forLink && set.left is Slot.App) d.redirects.forPackage(originalLeft) else null
-        var rightRedirect = if (!forLink && set.right is Slot.App) d.redirects.forPackage(originalRight) else null
+        val leftApp = set.appPkgAt(Side.Left)
+        val rightApp = set.appPkgAt(Side.Right)
+        val originalLeft = leftApp ?: d.panelHostPkg
+        val originalRight = rightApp ?: d.panelHostPkg
+        var leftRedirect = if (forLink) null else leftApp?.let(d.redirects::forPackage)
+        var rightRedirect = if (forLink) null else rightApp?.let(d.redirects::forPackage)
         if ((leftRedirect?.targetPkg ?: originalLeft) == (rightRedirect?.targetPkg ?: originalRight)) {
             leftRedirect = null
             rightRedirect = null
         }
+        val pinned = listOfNotNull(leftApp, leftRedirect?.targetPkg, rightApp, rightRedirect?.targetPkg)
+            .distinct().filter(d.pip::isInPip)
+        fun launch() = launchSet(set, target, useCurtain, forLink, leftRedirect, rightRedirect)
+        if (pinned.isEmpty()) {
+            launch()
+            return
+        }
+
+        val id = ++operationGeneration
+        val startedAt = d.clock.nowMs()
+        waitingForPip = set
+        openingForBoot = !useCurtain
+        _opening.value = Opening(
+            leftRedirect?.targetPkg ?: originalLeft, rightRedirect?.targetPkg ?: originalRight, startedAt,
+        )
+        for (pkg in pinned) {
+            if (id != operationGeneration) return
+            val sent = d.pip.expand(pkg)
+            DiagLog.d("SetRunner", "pip expand pkg=$pkg sent=$sent")
+        }
+        fun poll() {
+            if (id != operationGeneration) return
+            val remaining = (startedAt + PIP_TIMEOUT_MS - d.clock.nowMs()).coerceAtLeast(0L)
+            activeTimers.add(d.scheduler.schedule(minOf(PIP_POLL_MS, remaining)) {
+                if (id != operationGeneration) return@schedule
+                val stillPinned = pinned.filter(d.pip::isInPip)
+                val waited = d.clock.nowMs() - startedAt
+                if (stillPinned.isNotEmpty() && waited < PIP_TIMEOUT_MS) {
+                    poll()
+                    return@schedule
+                }
+                for (pkg in stillPinned) {
+                    DiagLog.d("SetRunner", "pip still pinned pkg=$pkg waited=$waited")
+                }
+                waitingForPip = null
+                launch()
+            })
+        }
+        poll()
+    }
+
+    private fun launchSet(
+        set: ScreenSet, target: CurtainTarget, useCurtain: Boolean, forLink: Boolean,
+        leftRedirect: SplitRedirect?, rightRedirect: SplitRedirect?,
+    ) {
+        val panelSide = set.panelSide
+        val originalLeft = set.appPkgAt(Side.Left) ?: d.panelHostPkg
+        val originalRight = set.appPkgAt(Side.Right) ?: d.panelHostPkg
         val left = leftRedirect?.targetPkg ?: originalLeft
         val right = rightRedirect?.targetPkg ?: originalRight
         val appPkg = if (panelSide == Side.Left) originalRight else originalLeft
@@ -1011,6 +1025,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         pollWhenIdle = null
         warmupTimer?.cancel()
         warmupTimer = null
+        waitingForPip = null
         preparing = false
         vendorWaiting = false
         activeTimers.forEach { it.cancel() }
@@ -1071,6 +1086,8 @@ class SetRunner(private val d: SetRunnerDeps) {
     companion object {
         const val STOCK_LAUNCHER_PKG = "com.android.launcher3"
         const val POLL_MS = 200L
+        private const val PIP_POLL_MS = 100L
+        private const val PIP_TIMEOUT_MS = 1500L
         private const val LATE_REDIRECT_MS = 10_000L
         const val RETRY_AT_MS = 3000L
         const val BOOT_CLEAR_MS = 10000L

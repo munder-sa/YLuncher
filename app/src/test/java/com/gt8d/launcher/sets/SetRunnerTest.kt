@@ -1,6 +1,7 @@
 package com.gt8d.launcher.sets
 
 import com.gt8d.launcher.notice.Notice
+import com.gt8d.launcher.pip.PipDetector
 import com.gt8d.launcher.apps.MapsFreeDrive
 import com.gt8d.launcher.apps.MapsFreeDriveRedirects
 import com.gt8d.launcher.apps.SplitRedirect
@@ -48,6 +49,94 @@ import com.gt8d.launcher.split.StockLauncherWarmupState
 @org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
 @org.robolectric.annotation.Config(sdk = [35], application = android.app.Application::class)
 class SetRunnerTest {
+    private class FakePip(vararg packages: String) : PipDetector {
+        val pinned = packages.toMutableSet()
+        val expanded = mutableListOf<String>()
+        var expandSent = true
+
+        override fun isInPip(pkg: String) = pkg in pinned
+        override fun expand(pkg: String): Boolean {
+            expanded.add(pkg)
+            return expandSent
+        }
+    }
+
+    @Test fun pip_noPinnedApp_opensImmediatelyWithoutExpanding() {
+        val pip = FakePip("com.gt8d.launcher.panel", "maps")
+        val e = TestEnv(pip = pip)
+        e.runner.open(1)
+        assertTrue(pip.expanded.isEmpty())
+        assertEquals(listOf(SplitCall("youtube", "com.gt8d.launcher.panel", SplitRatio.R6_4)), e.vendor.calls)
+        assertTrue(e.curtain.isShowing)
+    }
+
+    @Test fun pip_waitsForBothAppsAndRedirectTargetBeforeShowingCurtainAndLaunching() {
+        val pip = FakePip("youtube", "applemusic", "maps")
+        val e = TestEnv(pip = pip)
+        e.redirects = SplitRedirects { if (it == "applemusic") SplitRedirect("maps", null, null) else null }
+        e.runner.open(2)
+        assertNotNull(e.runner.opening.value)
+        assertEquals(listOf("applemusic", "maps", "youtube"), pip.expanded.sorted())
+        assertFalse(e.curtain.isShowing)
+        assertTrue(e.vendor.calls.isEmpty())
+
+        pip.pinned.remove("youtube")
+        pip.pinned.remove("applemusic")
+        e.scheduler.advanceBy(100)
+        assertTrue(e.vendor.calls.isEmpty())
+        pip.pinned.clear()
+        e.scheduler.advanceBy(99)
+        assertFalse(e.curtain.isShowing)
+        assertTrue(e.vendor.calls.isEmpty())
+        e.scheduler.advanceBy(1)
+        assertTrue(e.curtain.isShowing)
+        assertEquals(listOf(SplitCall("youtube", "maps", SplitRatio.R6_4)), e.vendor.calls)
+    }
+
+    @Test fun pip_stillPinnedAt1500ms_bootLaunchesOnceWithoutCurtainOrFailure() {
+        val pip = FakePip("maps").apply { expandSent = false }
+        val e = TestEnv(pip = pip)
+        e.runner.openForBoot(3)
+        e.scheduler.advanceBy(1499)
+        e.runner.openForBoot(3)
+        assertEquals(listOf("maps"), pip.expanded)
+        assertTrue(e.vendor.calls.isEmpty())
+        e.scheduler.advanceBy(1)
+        assertEquals(listOf(SplitCall("youtube", "maps", SplitRatio.R5_5)), e.vendor.calls)
+        assertTrue(e.curtainView.shownTargets.isEmpty())
+        assertTrue(e.messenger.notices.isEmpty())
+        assertEquals(SplitModeState(), e.store.state)
+    }
+
+    @Test fun pip_newSetSupersedesWait_withoutLaunchingOldSet() {
+        val pip = FakePip("maps")
+        val e = TestEnv(pip = pip)
+        e.runner.openForBoot(3)
+        e.scheduler.advanceBy(50)
+        e.runner.open(2)
+        val expected = listOf(SplitCall("youtube", "applemusic", SplitRatio.R6_4))
+        assertEquals(expected, e.vendor.calls)
+        assertTrue(e.curtain.isShowing)
+        pip.pinned.clear()
+        e.scheduler.advanceBy(1500)
+        assertEquals(expected, e.vendor.calls)
+    }
+
+    @Test fun pip_homeAndCancellationDiscardWait() {
+        for (home in listOf(true, false)) {
+            val e = TestEnv(pip = FakePip("maps"))
+            e.runner.open(3)
+            e.scheduler.advanceBy(50)
+            if (home) e.runner.home() else e.runner.cancelOpening()
+            assertNull(e.runner.opening.value)
+            assertEquals(SetNavigator.HOME, e.runner.currentIndex)
+            e.scheduler.advanceBy(1500)
+            assertEquals(1, e.startHomeCount)
+            assertTrue(e.vendor.calls.isEmpty())
+            assertTrue(e.messenger.notices.isEmpty())
+        }
+    }
+
     @Test fun reopenWithApp_buildsPanelAndAppPair_usesCurrentSetRatioOrDefault() {
         for (side in listOf(Side.Left, Side.Right)) {
             for (sameSide in listOf(false, true)) {
@@ -2040,6 +2129,7 @@ class SetRunnerTest {
         var loading: Boolean = false,
         private val scope: CoroutineScope? = null,
         private val homeVisible: () -> Boolean = { false },
+        private val pip: PipDetector = PipDetector { false },
     ) {
         val ownPkg = "com.gt8d.launcher"
         var config = LauncherConfig(
@@ -2093,6 +2183,7 @@ class SetRunnerTest {
                 appPair = appPair,
                 apps = apps,
                 redirects = SplitRedirects { redirects.forPackage(it) },
+                pip = pip,
                 watcher = watcher,
                 warm = warm,
                 stockLauncherWarmup = createWarmup(),

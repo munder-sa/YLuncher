@@ -23,6 +23,7 @@ import com.gt8d.launcher.media.lyrics.LyricsRepository
 import com.gt8d.launcher.media.lyrics.LrclibClient
 import com.gt8d.launcher.media.lyrics.UrlConnectionTransport
 import com.gt8d.launcher.notice.NoticeOverlay
+import com.gt8d.launcher.pip.AndroidPipDetector
 import com.gt8d.launcher.apps.AndroidSplitRedirects
 import com.gt8d.launcher.apps.AppCatalog
 import com.gt8d.launcher.apps.AppCatalogState
@@ -277,6 +278,7 @@ object AppGraph {
                 appPair = null,
                 apps = apps,
                 redirects = MapsFreeDriveRedirects(AndroidSplitRedirects(app.packageManager)),
+                pip = AndroidPipDetector,
                 watcher = watcher,
                 warm = warm,
                 stockLauncherWarmup = StockLauncherWarmup(
