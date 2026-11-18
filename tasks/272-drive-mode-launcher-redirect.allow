@@ -1,0 +1,8 @@
+write app/src/main/java/com/gt8d/launcher/apps/MapsFreeDrive.kt
+write app/src/main/java/com/gt8d/launcher/split/ActivityLauncher.kt
+write app/src/main/java/com/gt8d/launcher/AppGraph.kt
+write app/src/main/java/com/gt8d/launcher/ui/panel/PanelActivity.kt
+write app/src/test/java/com/gt8d/launcher/apps/SplitRedirectTest.kt
+write app/src/test/java/com/gt8d/launcher/split/AndroidActivityLauncherTest.kt
+write app/src/test/java/com/gt8d/launcher/sets/SetRunnerTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.apps.*' --tests 'com.gt8d.launcher.sets.*' --tests 'com.gt8d.launcher.split.*' --tests 'com.gt8d.launcher.ui.panel.*'
