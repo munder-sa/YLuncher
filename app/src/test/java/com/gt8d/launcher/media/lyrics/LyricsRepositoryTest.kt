@@ -66,7 +66,7 @@ class LyricsRepositoryTest {
         assertTrue(DiagLog.dump().any { it.contains("amll result Synced source=LRCLIB") })
         for ((body, expected) in listOf(
             """<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="1">private lyric</p></div></body></tt>""" to "Unsupported no-timed-words",
-            """<tt xmlns="http://www.w3.org/ns/ttml"><body><p begin="bad"/></body></tt>""" to "Invalid timing-or-limit",
+            """<tt xmlns="http://www.w3.org/ns/ttml"><body><p begin="bad"/></body></tt>""" to "Invalid time-format",
         )) {
             DiagLog.clearForTest()
             AmllClient(AmllTransport { _, _ -> HttpResponse(200, body, null) }, "test")
