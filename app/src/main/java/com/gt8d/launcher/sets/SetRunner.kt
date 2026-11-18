@@ -271,7 +271,11 @@ class SetRunner(private val d: SetRunnerDeps) {
 
     private fun open(index: Int, cfg: LauncherConfig, useCurtain: Boolean = true) {
         cancelLinkCallbacks()
-        DiagLog.d("SetRunner", "open index=$index useCurtain=$useCurtain")
+        DiagLog.d("SetRunner", when {
+            index == SetNavigator.HOME && useCurtain -> "home"
+            useCurtain -> "open index=$index"
+            else -> "openForBoot index=$index"
+        })
         val pipSet = waitingForPip
         if (pipSet != null) {
             if (index == currentIndex && pipSet === cfg.screenSets.getOrNull(index - 1) &&
