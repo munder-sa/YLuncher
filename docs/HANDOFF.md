@@ -11,7 +11,7 @@
 - 未確認: 端末を再起動した直後の自動オープン(openForBoot)での実機確認(同じ処理を通る)。
 - 確認: 全テスト 2,299 件成功、2.3.9 の APK の SHA-256 を GT8D 上で照合済み。
 
-## Apple 単語同期歌詞の INVALID 対策 (2026-11-18、**v2.3.8 正式版(版72)を GT8D に導入・push・GitHub Release 公開済み(Latest)**)
+## Apple 単語同期歌詞の INVALID 対策 (2026-11-18、v2.3.8 公開)
 
 - 事象: 「はいよろこんで」「それもいいね」など Apple Music 本体で単語同期が出る曲が `apple result accepted=false reason=INVALID` で破棄され、LRCLIB 行単位に落ちていた。仕様はユーザー提供の指示書。
 - **Task 259**(`e74fe1e`): `TtmlParser` で行の重なり・同時開始、0ms 要素、親子境界のはみ出し、同時刻の隣接単語、空白だけの span、曲長+5秒、1桁時間・4桁以上の小数秒を受理。先頭単語が行より早いときは行の開始をそれに合わせる。Invalid は固定コード(`doctype/xml/limit/time-format/element-range/word-order/beyond-duration`)。`AppleLyricsClient` の INVALID に非機密 `detail`(`json/api-errors/data-shape/ttml-missing-or-large/ttml-root/response-too-large/exception` と上記)。歌詞関連 5 クラス 83 件成功。全テストは未実行(正式版にする前に1回)。
