@@ -460,49 +460,59 @@ class SetRunnerTest {
         redirects = MapsFreeDriveRedirects(SplitRedirects { null })
     }
 
-    @Test fun coldMaps_afterPip_prelaunchesOnceAndSplits1500msAfterForeground() {
+    private fun mapsFreeDriveCall() = SplitRedirect(
+        Defaults.PKG_MAPS, null, android.net.Uri.parse(MapsFreeDrive.URI),
+    ) to false
+
+    @Test fun coldMaps_afterPip_closesCurtainAtReadyAndSendsOnce2500msLater() {
         val maps = Defaults.PKG_MAPS
         val pip = FakePip(maps)
         val e = mapsEnv(pip = pip)
         e.runner.open(1)
-        e.events.events.add(ResumeEvent(maps, 50))
+        e.warm.markForeground(maps)
         e.scheduler.advanceBy(100)
-        assertTrue(e.apps.startAppCalls.isEmpty())
+        assertTrue(e.vendor.calls.isEmpty())
         pip.pinned.clear()
         e.scheduler.advanceBy(100)
-        assertEquals(listOf(StartAppCall(maps, false)), e.apps.startAppCalls)
-        assertTrue(e.warm.isWarm(maps))
-        assertNotNull(e.runner.opening.value)
-
-        e.runner.open(1)
-        e.events.events.add(ResumeEvent(maps, e.scheduler.nowMs() + 5900))
-        e.scheduler.advanceBy(5900 + 1499L)
-        assertEquals(listOf(StartAppCall(maps, false)), e.apps.startAppCalls)
-        assertTrue(e.vendor.calls.isEmpty())
-        assertFalse(e.curtain.isShowing)
-        e.scheduler.advanceBy(1)
+        assertTrue(e.apps.startAppCalls.isEmpty())
         assertEquals(listOf(SplitCall(maps, "com.gt8d.launcher.panel", SplitRatio.R6_4)), e.vendor.calls)
+        e.runner.panelPlacementChanged(PanelPlacement.Right)
         resumePanelApp(e, maps)
         assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        assertFalse(e.curtain.isShowing)
         assertTrue(e.apps.redirectCalls.isEmpty())
+        e.events.events.add(ResumeEvent(maps, e.scheduler.nowMs()))
+        e.scheduler.advanceBy(2499)
+        assertTrue(e.apps.redirectCalls.isEmpty())
+        e.scheduler.advanceBy(1)
+        assertEquals(listOf(mapsFreeDriveCall()), e.apps.redirectCalls)
+        e.scheduler.advanceBy(10_000)
+        assertEquals(listOf(mapsFreeDriveCall()), e.apps.redirectCalls)
     }
 
-    @Test fun prelaunchedMaps_afterSafety_sendsOnlyPartnerRedirect() {
+    @Test fun coldMaps_afterSafety_sendsPartnerAtLateReadyAndMapsOnce2500msLater() {
         val maps = Defaults.PKG_MAPS
         val e = mapsEnv(panel = false)
         val partner = SplitRedirect("applemusic", null, android.net.Uri.parse("music://play"))
         e.redirects = MapsFreeDriveRedirects(SplitRedirects { if (it == "youtube") partner else null })
         e.runner.open(1)
-        e.events.events.add(ResumeEvent(maps, 100))
-        e.scheduler.advanceBy(1600)
         assertEquals(listOf(SplitCall(maps, partner.targetPkg, SplitRatio.R6_4)), e.vendor.calls)
         e.events.events.add(ResumeEvent(partner.targetPkg, e.scheduler.nowMs() + 1))
         e.scheduler.advanceBy(CurtainController.SAFETY_MS)
         assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
         assertTrue(e.apps.redirectCalls.isEmpty())
+        e.scheduler.advanceBy(9000)
         e.events.events.add(ResumeEvent(maps, e.scheduler.nowMs()))
         e.scheduler.advanceBy(SetRunner.POLL_MS)
         assertEquals(listOf(partner to false), e.apps.redirectCalls)
+        e.events.events.add(ResumeEvent(maps, e.scheduler.nowMs() + 1))
+        e.scheduler.advanceBy(2499)
+        assertEquals(listOf(partner to false), e.apps.redirectCalls)
+        e.scheduler.advanceBy(1)
+        val expected = listOf(partner to false, mapsFreeDriveCall())
+        assertEquals(expected, e.apps.redirectCalls)
+        e.scheduler.advanceBy(10_000)
+        assertEquals(expected, e.apps.redirectCalls)
     }
 
     @Test fun warmMaps_splitsImmediatelyAndSendsFreeDriveWhenReady() {
@@ -518,51 +528,72 @@ class SetRunnerTest {
         assertEquals(listOf(redirect to false), e.apps.redirectCalls)
     }
 
-    @Test fun mapsPrelaunchFailure_splitsImmediately() {
+    @Test fun coldMaps_resumedOnlyBeforeReady_stillSendsDelayedRedirect() {
+        // 実機ではマップは ready より前に前面になり、その後は前面化の記録が増えない。
         val maps = Defaults.PKG_MAPS
         val e = mapsEnv()
-        e.apps.startAppResult = false
         e.runner.open(1)
-        assertEquals(listOf(StartAppCall(maps, false)), e.apps.startAppCalls)
-        assertEquals(listOf(SplitCall(maps, "com.gt8d.launcher.panel", SplitRatio.R6_4)), e.vendor.calls)
-        assertFalse(e.warm.isWarm(maps))
-        assertTrue(e.messenger.notices.isEmpty())
+        e.runner.panelPlacementChanged(PanelPlacement.Right)
+        resumePanelApp(e, maps)
+        assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        e.scheduler.advanceBy(2499)
+        assertTrue(e.apps.redirectCalls.isEmpty())
+        e.scheduler.advanceBy(1)
+        assertEquals(1, e.apps.redirectCalls.size)
+        e.scheduler.advanceBy(5000)
+        assertEquals(1, e.apps.redirectCalls.size)
     }
 
-    @Test fun coldMaps_bootSplitsAt6000msWithoutForeground() {
+    @Test fun coldMaps_panelLeavesSplitDuringDelay_discardsRedirect() {
+        for (placement in listOf(PanelPlacement.Full, null)) {
+            val e = mapsEnv()
+            e.runner.open(1)
+            e.runner.panelPlacementChanged(PanelPlacement.Right)
+            resumePanelApp(e, Defaults.PKG_MAPS)
+            e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
+            e.scheduler.advanceBy(2499)
+            e.runner.panelPlacementChanged(placement)
+            e.scheduler.advanceBy(1)
+            assertTrue(e.apps.redirectCalls.isEmpty())
+        }
+    }
+
+    @Test fun coldMaps_bootSplitsImmediatelyAndDelaysRedirectWithoutCurtain() {
         val maps = Defaults.PKG_MAPS
         val e = mapsEnv()
         e.config = e.config.copy(screenSets = listOf(e.config.screenSets.first().swapped()))
         e.runner.openForBoot(1)
-        assertEquals(listOf(StartAppCall(maps, false)), e.apps.startAppCalls)
-        e.scheduler.advanceBy(5999)
-        assertTrue(e.vendor.calls.isEmpty())
-        e.scheduler.advanceBy(1)
+        assertTrue(e.apps.startAppCalls.isEmpty())
         assertEquals(listOf(SplitCall("com.gt8d.launcher.panel", maps, SplitRatio.R4_6)), e.vendor.calls)
+        e.runner.panelPlacementChanged(PanelPlacement.Left)
+        resumePanelApp(e, maps)
+        assertNull(e.runner.opening.value)
+        e.events.events.add(ResumeEvent(maps, e.scheduler.nowMs() + 1))
+        e.scheduler.advanceBy(2499)
+        assertTrue(e.apps.redirectCalls.isEmpty())
+        e.scheduler.advanceBy(1)
+        assertEquals(listOf(mapsFreeDriveCall()), e.apps.redirectCalls)
         assertTrue(e.curtainView.shownTargets.isEmpty())
         assertTrue(e.messenger.notices.isEmpty())
         assertEquals(SplitModeState(), e.store.state)
     }
 
-    @Test fun mapsPrelaunch_newSetHomeAndCancelDiscardWait() {
+    @Test fun coldMaps_newSetHomeAndCancelDuringDelayDiscardRedirect() {
         for (action in listOf("open", "home", "cancel")) {
             val e = mapsEnv()
             e.runner.open(1)
-            if (action != "home") e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, 100))
-            e.scheduler.advanceBy(100)
-            val expected = if (action == "open") {
-                e.runner.open(2)
-                finishApps(e)
-                listOf(SplitCall("youtube", "applemusic", SplitRatio.R6_4))
-            } else {
-                if (action == "home") e.runner.home() else e.runner.cancelOpening()
-                assertEquals(1, e.startHomeCount)
-                emptyList()
+            e.runner.panelPlacementChanged(PanelPlacement.Right)
+            resumePanelApp(e, Defaults.PKG_MAPS)
+            assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+            e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
+            e.scheduler.advanceBy(2499)
+            when (action) {
+                "open" -> { e.runner.open(2); finishApps(e) }
+                "home" -> e.runner.home()
+                "cancel" -> e.runner.cancelOpening()
             }
-            e.scheduler.advanceBy(6000)
-            assertEquals(action, expected, e.vendor.calls)
-            assertNull(e.runner.opening.value)
-            assertTrue(e.messenger.notices.isEmpty())
+            e.scheduler.advanceBy(2500)
+            assertTrue(action, e.apps.redirectCalls.isEmpty())
         }
     }
 

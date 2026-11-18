@@ -93,6 +93,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         Single,
         Both,
         LateRedirect,
+        MapsRedirectDelay,
     }
 
     private val _opening = MutableStateFlow<Opening?>(null)
@@ -135,6 +136,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var pending: PendingOpen? = null
     private var waitKind: WaitKind = WaitKind.None
     private var panelResumed: Boolean = false
+    private var panelPlacement: PanelPlacement? = null
     private var panelSessionReady = false
     private var ownScreenSeen: Boolean = false
     private var bothProgress: (() -> Boolean)? = null
@@ -205,7 +207,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun cancelOpening() {
-        stopLateRedirect()
+        stopRedirectWait("cancel")
         if (d.curtain.isShowing) {
             d.curtain.cancel()
         } else if (_opening.value != null) {
@@ -329,6 +331,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun panelPlacementChanged(p: PanelPlacement?) {
+        panelPlacement = p
         if (p == PanelPlacement.Left || p == PanelPlacement.Right) cancelGuardPanelSignal()
     }
 
@@ -374,7 +377,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun onSetEnded(reason: String) {
-        stopLateRedirect()
+        stopRedirectWait(reason)
         saver?.end(reason)
         DiagLog.d("SetRunner", "session ended reason=$reason")
     }
@@ -462,15 +465,17 @@ class SetRunner(private val d: SetRunnerDeps) {
             leftRedirect = null
             rightRedirect = null
         }
+        val coldMapsRedirect = listOfNotNull(leftRedirect, rightRedirect).firstOrNull {
+            it.component == null && it.uri != null && MapsFreeDrive.isMaps(it.targetPkg) && !d.warm.isWarm(it.targetPkg)
+        }
         val pinned = listOfNotNull(leftApp, leftRedirect?.targetPkg, rightApp, rightRedirect?.targetPkg)
             .distinct().filter(d.pip::isInPip)
-        val maps = if (forLink) null else listOfNotNull(leftApp, rightApp).firstOrNull(MapsFreeDrive::isMaps)
-        fun launch(mapsPrelaunched: Boolean) {
+        fun launch() {
             waitingBeforeLaunch = null
-            launchSet(set, target, useCurtain, forLink, leftRedirect, rightRedirect, mapsPrelaunched)
+            launchSet(set, target, useCurtain, forLink, leftRedirect, rightRedirect, coldMapsRedirect)
         }
-        if (pinned.isEmpty() && (maps == null || d.warm.isWarm(maps))) {
-            launch(false)
+        if (pinned.isEmpty()) {
+            launch()
             return
         }
 
@@ -481,15 +486,6 @@ class SetRunner(private val d: SetRunnerDeps) {
         _opening.value = Opening(
             leftRedirect?.targetPkg ?: originalLeft, rightRedirect?.targetPkg ?: originalRight, startedAt,
         )
-        fun afterPip() {
-            if (id != operationGeneration) return
-            if (maps != null && !d.warm.isWarm(maps)) prelaunchMaps(maps, id, ::launch)
-            else launch(false)
-        }
-        if (pinned.isEmpty()) {
-            afterPip()
-            return
-        }
         for (pkg in pinned) {
             if (id != operationGeneration) return
             val sent = d.pip.expand(pkg)
@@ -498,7 +494,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         fun poll() {
             if (id != operationGeneration) return
             val remaining = (startedAt + PIP_TIMEOUT_MS - d.clock.nowMs()).coerceAtLeast(0L)
-            activeTimers.add(d.scheduler.schedule(minOf(PRELAUNCH_POLL_MS, remaining)) {
+            activeTimers.add(d.scheduler.schedule(minOf(PIP_POLL_MS, remaining)) {
                 if (id != operationGeneration) return@schedule
                 val stillPinned = pinned.filter(d.pip::isInPip)
                 val waited = d.clock.nowMs() - startedAt
@@ -509,43 +505,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 for (pkg in stillPinned) {
                     DiagLog.d("SetRunner", "pip still pinned pkg=$pkg waited=$waited")
                 }
-                afterPip()
-            })
-        }
-        poll()
-    }
-
-    private fun prelaunchMaps(maps: String, id: Long, launch: (Boolean) -> Unit) {
-        val startedAt = d.clock.nowMs()
-        val started = d.apps.startApp(maps, false)
-        d.warm.recordAppLaunch(maps, started)
-        DiagLog.d("SetRunner", "maps prelaunch started=$started")
-        if (id != operationGeneration) return
-        if (!started) {
-            launch(false)
-            return
-        }
-
-        fun poll() {
-            val remaining = (startedAt + MAPS_FOREGROUND_TIMEOUT_MS - d.clock.nowMs()).coerceAtLeast(0L)
-            activeTimers.add(d.scheduler.schedule(minOf(PRELAUNCH_POLL_MS, remaining)) {
-                if (id != operationGeneration) return@schedule
-                val seen = maps in d.watcher.foregroundPkgsSince(startedAt)
-                if (id != operationGeneration) return@schedule
-                val waited = d.clock.nowMs() - startedAt
-                when {
-                    seen -> activeTimers.add(d.scheduler.schedule(MAPS_SETTLE_MS) {
-                        if (id == operationGeneration) {
-                            DiagLog.d("SetRunner", "maps prelaunch settled waited=${d.clock.nowMs() - startedAt}")
-                            launch(true)
-                        }
-                    })
-                    waited >= MAPS_FOREGROUND_TIMEOUT_MS -> {
-                        DiagLog.d("SetRunner", "maps prelaunch foreground timeout waited=$waited")
-                        launch(true)
-                    }
-                    else -> poll()
-                }
+                if (id == operationGeneration) launch()
             })
         }
         poll()
@@ -553,7 +513,7 @@ class SetRunner(private val d: SetRunnerDeps) {
 
     private fun launchSet(
         set: ScreenSet, target: CurtainTarget, useCurtain: Boolean, forLink: Boolean,
-        leftRedirect: SplitRedirect?, rightRedirect: SplitRedirect?, mapsPrelaunched: Boolean,
+        leftRedirect: SplitRedirect?, rightRedirect: SplitRedirect?, coldMapsRedirect: SplitRedirect?,
     ) {
         val panelSide = set.panelSide
         val originalLeft = set.appPkgAt(Side.Left) ?: d.panelHostPkg
@@ -562,9 +522,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         val right = rightRedirect?.targetPkg ?: originalRight
         val appPkg = if (panelSide == Side.Left) originalRight else originalLeft
         val waitPkg = if (panelSide == Side.Left) right else left
-        val redirects = listOfNotNull(leftRedirect, rightRedirect).filterNot {
-            mapsPrelaunched && it.component == null && MapsFreeDrive.isMaps(it.targetPkg)
-        }
+        val redirects = listOfNotNull(leftRedirect, rightRedirect)
 
         val startMs = d.clock.nowMs()
         d.watcher.foregroundPkgsSince(startMs)
@@ -669,7 +627,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                 }
                 if (id != operationGeneration || _opening.value == null) return
                 waitBoth(left, right, panelSide, set, set.ratio, launcher, splitStartMs,
-                    useCurtain, appPkg, redirects, vendor = true,
+                    useCurtain, appPkg, redirects, coldMapsRedirect, vendor = true,
                     initialRequest = { launcher.open(left, right, set.ratio) })
             }
             if (d.stockLauncherWarmup.needsWarmup()) {
@@ -703,6 +661,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                     useCurtain = useCurtain,
                     originalAppPkg = appPkg,
                     redirects = redirects,
+                    coldMapsRedirect = coldMapsRedirect,
                 )
             }
         }
@@ -755,6 +714,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         useCurtain: Boolean,
         originalAppPkg: String,
         redirects: List<SplitRedirect>,
+        coldMapsRedirect: SplitRedirect?,
         vendor: Boolean = false,
         initialRequest: (() -> LaunchResult)? = null,
     ) {
@@ -783,13 +743,22 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
 
         val sendable = redirects.filter { it.component != null || it.uri != null }
+        val immediate = sendable.filterNot { it == coldMapsRedirect }
+        var mapsToDelay = coldMapsRedirect
+        fun redirectWhenReady(readyAtMs: Long, logLabel: String) {
+            mapsToDelay?.let { redirect ->
+                mapsToDelay = null
+                delayMapsRedirect(redirect, readyAtMs, sinceMs, panelSide != null)
+            }
+            sendRedirects(immediate, logLabel)
+        }
         if (useCurtain && sendable.isNotEmpty()) {
             startLateRedirect = { deadline ->
                 waitKind = WaitKind.LateRedirect
                 val lateGeneration = operationGeneration
                 fun expire() {
                     DiagLog.d("SetRunner", "late redirect expired left=$left right=$right")
-                    stopLateRedirect()
+                    stopRedirectWait("expired")
                 }
                 activeTimers.add(d.scheduler.schedule((deadline - d.clock.nowMs()).coerceAtLeast(0L)) {
                     if (lateGeneration == operationGeneration) expire()
@@ -797,12 +766,13 @@ class SetRunner(private val d: SetRunnerDeps) {
                 pollUntilBothReady(left, right, panelSide, sinceMs, canPoll = {
                     when {
                         d.clock.nowMs() >= deadline -> { expire(); false }
-                        !d.watcher.available() -> { stopLateRedirect(); false }
+                        !d.watcher.available() -> { stopRedirectWait("monitoring unavailable"); false }
                         else -> true
                     }
                 }) {
-                    stopLateRedirect()
-                    sendRedirects(sendable, "late redirect")
+                    val readyAtMs = d.clock.nowMs()
+                    stopRedirectWait("late ready")
+                    redirectWhenReady(readyAtMs, "late redirect")
                 }
             }
         }
@@ -822,7 +792,8 @@ class SetRunner(private val d: SetRunnerDeps) {
                 !stopMonitoringIfUnavailable(startMs, useCurtain)
             }) {
                 DiagLog.d("SetRunner", "waitBoth ready left=$left right=$right")
-                lastReadyAtMs = d.clock.nowMs()
+                val readyAtMs = d.clock.nowMs()
+                lastReadyAtMs = readyAtMs
                 waitKind = WaitKind.None
                 cancelTimers()
                 readyCount++
@@ -833,7 +804,7 @@ class SetRunner(private val d: SetRunnerDeps) {
                     panelSessionReady = true
                     onSetReady(set, appPkg)
                 }
-                sendRedirects(sendable, "redirect")
+                redirectWhenReady(readyAtMs, "redirect")
                 if (useCurtain) d.curtain.ready() else finishWithoutCurtain()
             }
         }
@@ -935,8 +906,36 @@ class SetRunner(private val d: SetRunnerDeps) {
         }
     }
 
-    private fun stopLateRedirect() {
-        if (waitKind != WaitKind.LateRedirect) return
+    private fun delayMapsRedirect(redirect: SplitRedirect, readyAtMs: Long, openedAtMs: Long, withPanel: Boolean) {
+        waitKind = WaitKind.MapsRedirectDelay
+        val id = operationGeneration
+        val remaining = (readyAtMs + MAPS_COLD_REDIRECT_DELAY_MS - d.clock.nowMs()).coerceAtLeast(0L)
+        DiagLog.d("SetRunner", "maps redirect delayed ms=$MAPS_COLD_REDIRECT_DELAY_MS")
+        activeTimers.add(d.scheduler.schedule(remaining) {
+            if (id != operationGeneration) return@schedule
+            // マップは ready より前に前面になるため、開き始めからの前面化を見る。
+            val visible = redirect.targetPkg in d.watcher.foregroundPkgsSince(openedAtMs)
+            if (id != operationGeneration) return@schedule
+            val reason = when {
+                !visible -> "maps not foreground"
+                withPanel && panelPlacement != PanelPlacement.Left && panelPlacement != PanelPlacement.Right ->
+                    "panel placement=$panelPlacement"
+                else -> null
+            }
+            if (reason != null) {
+                stopRedirectWait(reason)
+            } else {
+                waitKind = WaitKind.None
+                cancelTimers()
+                sendRedirects(listOf(redirect), "maps redirect")
+            }
+        })
+    }
+
+    private fun stopRedirectWait(reason: String) {
+        if (waitKind == WaitKind.MapsRedirectDelay) {
+            DiagLog.d("SetRunner", "maps redirect discarded reason=$reason")
+        } else if (waitKind != WaitKind.LateRedirect) return
         waitKind = WaitKind.None
         cancelTimers()
     }
@@ -1023,8 +1022,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         val ready = linkReady.takeIf { linkWaitBoth }
         val lateRedirect = startLateRedirect?.takeIf { progressed == true && d.watcher.available() }
         cancelLinkCallbacks()
-        waitKind = WaitKind.None
-        cancelTimers()
+        finishOpeningWait()
         lateRedirect?.invoke(hiddenAtMs + LATE_REDIRECT_MS)
         openingForBoot = false
         val cancelledOpening = _opening.value
@@ -1059,11 +1057,17 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun finishWithoutCurtain() {
-        waitKind = WaitKind.None
-        cancelTimers()
+        finishOpeningWait()
         openingForBoot = false
         _opening.value = null
         runPendingIfNeeded()
+    }
+
+    private fun finishOpeningWait() {
+        // Split ready already cleared the opening timers. Its Maps timer outlives the curtain.
+        if (waitKind == WaitKind.MapsRedirectDelay) return
+        waitKind = WaitKind.None
+        cancelTimers()
     }
 
     private fun runPendingIfNeeded() {
@@ -1142,10 +1146,9 @@ class SetRunner(private val d: SetRunnerDeps) {
     companion object {
         const val STOCK_LAUNCHER_PKG = "com.android.launcher3"
         const val POLL_MS = 200L
-        private const val PRELAUNCH_POLL_MS = 100L
+        private const val PIP_POLL_MS = 100L
         private const val PIP_TIMEOUT_MS = 1500L
-        private const val MAPS_SETTLE_MS = 1500L
-        private const val MAPS_FOREGROUND_TIMEOUT_MS = 6000L
+        private const val MAPS_COLD_REDIRECT_DELAY_MS = 2500L
         private const val LATE_REDIRECT_MS = 10_000L
         const val RETRY_AT_MS = 3000L
         const val BOOT_CLEAR_MS = 10000L
