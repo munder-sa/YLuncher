@@ -21,23 +21,39 @@ import org.robolectric.annotation.Config
 class SplitRedirectTest {
     private val app = ApplicationProvider.getApplicationContext<Application>()
     private val reader = AndroidSplitRedirects(app.packageManager)
+    private val redirects = MapsFreeDriveRedirects(reader, app.packageManager::hasLauncherActivity)
+    private val driveModeLauncher = "com.gatolabo.drivemodelauncher"
     private val source = "local.aibox.gptlive"
     private val target = "com.openai.chatgpt"
 
-    @Test fun mapsWithoutBaseRedirect_returnsFreeDriveUri() {
-        val redirects = MapsFreeDriveRedirects(SplitRedirects { null })
+    @Test fun driveModeLauncherWithMapsInstalled_returnsFreeDriveUri() {
+        activity(driveModeLauncher)
+        activity(Defaults.PKG_MAPS)
         val expected = SplitRedirect(Defaults.PKG_MAPS, null, Uri.parse("google.navigation:/?free=1&mode=d&entry=fnls"))
-        assertEquals(expected, redirects.forPackage(Defaults.PKG_MAPS))
+        assertEquals(expected, redirects.forPackage(driveModeLauncher))
     }
 
-    @Test fun mapsWithBaseRedirect_keepsBaseResult() {
+    @Test fun driveModeLauncherWithoutMaps_returnsNull() {
+        activity(driveModeLauncher)
+        assertNull(redirects.forPackage(driveModeLauncher))
+    }
+
+    @Test fun mapsWithoutBaseRedirect_returnsNull() {
+        activity(Defaults.PKG_MAPS)
+        assertNull(redirects.forPackage(Defaults.PKG_MAPS))
+    }
+
+    @Test fun baseRedirectTakesPrecedence() {
         val redirect = SplitRedirect(target, null, null)
-        val redirects = MapsFreeDriveRedirects(SplitRedirects { pkg -> redirect.takeIf { pkg == Defaults.PKG_MAPS } })
-        assertSame(redirect, redirects.forPackage(Defaults.PKG_MAPS))
+        for (pkg in listOf(driveModeLauncher, Defaults.PKG_MAPS)) {
+            val base = SplitRedirects { if (it == pkg) redirect else null }
+            val redirects = MapsFreeDriveRedirects(base) { error("base redirect already resolved") }
+            assertSame(redirect, redirects.forPackage(pkg))
+        }
     }
 
     @Test fun otherPackageWithoutBaseRedirect_returnsNull() {
-        val redirects = MapsFreeDriveRedirects(SplitRedirects { null })
+        activity(Defaults.PKG_MAPS)
         assertNull(redirects.forPackage(source))
     }
 

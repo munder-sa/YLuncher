@@ -3,7 +3,6 @@ package com.gt8d.launcher.split
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import com.gt8d.launcher.apps.MapsFreeDrive
 import com.gt8d.launcher.apps.SplitRedirect
 import com.gt8d.launcher.pip.PipDetector
 import com.gt8d.launcher.pip.AndroidPipDetector
@@ -51,19 +50,7 @@ class AndroidActivityLauncher(
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
         } else Intent.FLAG_ACTIVITY_NEW_TASK
 
-    private fun tryMapsFreeDrive(pkg: String, adjacent: Boolean): Boolean {
-        if (!MapsFreeDrive.isMaps(pkg)) return false
-        return try {
-            context.startActivity(MapsFreeDrive.intent().addFlags(launchFlags(pkg, adjacent)))
-            true
-        } catch (e: Exception) {
-            DiagLog.d("Launch", "Maps free drive failed, using launcher intent: ${e.javaClass.simpleName}: ${e.message}")
-            false
-        }
-    }
-
     fun startComponent(component: ComponentName, adjacent: Boolean): Boolean {
-        if (tryMapsFreeDrive(component.packageName, adjacent)) return true
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             .setComponent(component)
             .addFlags(launchFlags(component.packageName, adjacent))
@@ -110,7 +97,6 @@ class AndroidActivityLauncher(
     }
 
     override fun startApp(pkg: String, adjacent: Boolean): Boolean {
-        if (tryMapsFreeDrive(pkg, adjacent)) return true
         val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return false
         intent.addFlags(launchFlags(pkg, adjacent))
         return try {

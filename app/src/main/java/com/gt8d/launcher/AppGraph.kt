@@ -31,6 +31,7 @@ import com.gt8d.launcher.apps.FrequentApp
 import com.gt8d.launcher.apps.FrequentAppsRefresher
 import com.gt8d.launcher.apps.LaunchLog
 import com.gt8d.launcher.apps.MapsFreeDriveRedirects
+import com.gt8d.launcher.apps.hasLauncherActivity
 import com.gt8d.launcher.apps.UsageHistory
 import com.gt8d.launcher.apps.settingsComponent
 import com.gt8d.launcher.apps.HiddenApps
@@ -277,7 +278,10 @@ object AppGraph {
                 vendor = VendorSplitLauncher(bridge),
                 appPair = null,
                 apps = apps,
-                redirects = MapsFreeDriveRedirects(AndroidSplitRedirects(app.packageManager)),
+                redirects = MapsFreeDriveRedirects(
+                    AndroidSplitRedirects(app.packageManager),
+                    app.packageManager::hasLauncherActivity,
+                ),
                 pip = AndroidPipDetector,
                 watcher = watcher,
                 warm = warm,

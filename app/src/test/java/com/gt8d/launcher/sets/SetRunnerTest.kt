@@ -71,17 +71,18 @@ class SetRunnerTest {
     }
 
     @Test fun pip_waitsForBothAppsAndRedirectTargetBeforeShowingCurtainAndLaunching() {
-        val pip = FakePip("youtube", "applemusic", "maps")
-        val e = TestEnv(pip = pip)
-        e.redirects = SplitRedirects { if (it == "applemusic") SplitRedirect("maps", null, null) else null }
-        e.runner.open(2)
+        val source = MapsFreeDrive.DRIVE_MODE_LAUNCHER
+        val maps = Defaults.PKG_MAPS
+        val pip = FakePip(source, maps, "youtube")
+        val e = mapsEnv(panel = false, pip = pip)
+        e.runner.open(1)
         assertNotNull(e.runner.opening.value)
-        assertEquals(listOf("applemusic", "maps", "youtube"), pip.expanded.sorted())
+        assertEquals(listOf(source, maps, "youtube").sorted(), pip.expanded.sorted())
         assertFalse(e.curtain.isShowing)
         assertTrue(e.vendor.calls.isEmpty())
 
         pip.pinned.remove("youtube")
-        pip.pinned.remove("applemusic")
+        pip.pinned.remove(source)
         e.scheduler.advanceBy(100)
         assertTrue(e.vendor.calls.isEmpty())
         pip.pinned.clear()
@@ -90,7 +91,7 @@ class SetRunnerTest {
         assertTrue(e.vendor.calls.isEmpty())
         e.scheduler.advanceBy(1)
         assertTrue(e.curtain.isShowing)
-        assertEquals(listOf(SplitCall("youtube", "maps", SplitRatio.R6_4)), e.vendor.calls)
+        assertEquals(listOf(SplitCall(maps, "youtube", SplitRatio.R6_4)), e.vendor.calls)
     }
 
     @Test fun pip_stillPinnedAt1500ms_bootLaunchesOnceWithoutCurtainOrFailure() {
@@ -452,17 +453,34 @@ class SetRunnerTest {
         e.scheduler.advanceBy(10000); assertEquals(1, ready); assertEquals(0, failed)
     }
 
-    private fun mapsEnv(panel: Boolean = true, pip: PipDetector = FakePip()) = TestEnv(pip = pip).apply {
+    private fun mapsEnv(
+        panel: Boolean = true,
+        pip: PipDetector = FakePip(),
+        source: String = MapsFreeDrive.DRIVE_MODE_LAUNCHER,
+    ) = TestEnv(pip = pip).apply {
         val partner = if (panel) Slot.Panel else Slot.App("youtube")
-        val mapsSet = ScreenSet("maps", Slot.App(Defaults.PKG_MAPS), partner, SplitRatio.R6_4)
+        val mapsSet = ScreenSet("maps", Slot.App(source), partner, SplitRatio.R6_4)
         config = config.copy(screenSets = listOf(mapsSet, config.screenSets[1]))
         installed.add(Defaults.PKG_MAPS)
-        redirects = MapsFreeDriveRedirects(SplitRedirects { null })
+        installed.add(source)
+        redirects = MapsFreeDriveRedirects(SplitRedirects { null }, installed::contains)
     }
 
     private fun mapsFreeDriveCall() = SplitRedirect(
         Defaults.PKG_MAPS, null, android.net.Uri.parse(MapsFreeDrive.URI),
     ) to false
+
+    @Test fun ordinaryMapsSet_opensMapsWithoutSendingRedirect() {
+        val maps = Defaults.PKG_MAPS
+        val e = mapsEnv(source = maps)
+        e.runner.open(1)
+        assertEquals(listOf(SplitCall(maps, "com.gt8d.launcher.panel", SplitRatio.R6_4)), e.vendor.calls)
+        e.runner.panelPlacementChanged(PanelPlacement.Right)
+        resumePanelApp(e, maps)
+        assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        e.scheduler.advanceBy(10_000)
+        assertTrue(e.apps.redirectCalls.isEmpty())
+    }
 
     @Test fun coldMaps_afterPip_closesCurtainAtReadyAndSendsOnce2500msLater() {
         val maps = Defaults.PKG_MAPS
@@ -494,7 +512,10 @@ class SetRunnerTest {
         val maps = Defaults.PKG_MAPS
         val e = mapsEnv(panel = false)
         val partner = SplitRedirect("applemusic", null, android.net.Uri.parse("music://play"))
-        e.redirects = MapsFreeDriveRedirects(SplitRedirects { if (it == "youtube") partner else null })
+        e.redirects = MapsFreeDriveRedirects(
+            SplitRedirects { if (it == "youtube") partner else null },
+            e.installed::contains,
+        )
         e.runner.open(1)
         assertEquals(listOf(SplitCall(maps, partner.targetPkg, SplitRatio.R6_4)), e.vendor.calls)
         e.events.events.add(ResumeEvent(partner.targetPkg, e.scheduler.nowMs() + 1))

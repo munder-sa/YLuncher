@@ -30,6 +30,7 @@ import com.gt8d.launcher.AppGraph
 import com.gt8d.launcher.apps.stockLauncherIntent
 import com.gt8d.launcher.apps.AndroidSplitRedirects
 import com.gt8d.launcher.apps.MapsFreeDriveRedirects
+import com.gt8d.launcher.apps.hasLauncherActivity
 import com.gt8d.launcher.apps.SplitRedirect
 import com.gt8d.launcher.apps.SplitRedirects
 import com.gt8d.launcher.safety.SafetyGuard
@@ -95,7 +96,10 @@ class PanelActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // 中継が、自分で閉じたのかプロセスごと消えたのかを見分けるため。
         setResult(RESULT_OK)
-        redirects = MapsFreeDriveRedirects(AndroidSplitRedirects(packageManager))
+        redirects = MapsFreeDriveRedirects(
+            AndroidSplitRedirects(packageManager),
+            packageManager::hasLauncherActivity,
+        )
         AppGraph.panelAlive = true
         safetyMode = SafetyGuard.isFallbackActive(this)
         settingsOpen = savedInstanceState?.getBoolean("settings_open") ?: false
