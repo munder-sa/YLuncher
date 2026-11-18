@@ -1,0 +1,6 @@
+write app/src/main/java/com/gt8d/launcher/media/lyrics/TtmlParser.kt
+write app/src/main/java/com/gt8d/launcher/media/lyrics/AppleLyricsClient.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/TtmlParserTest.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/AppleLyricsClientTest.kt
+write app/src/test/java/com/gt8d/launcher/media/lyrics/AmllClientTest.kt
+command /home/munde/tools/gradle-run.sh :app:testDebugUnitTest --tests 'com.gt8d.launcher.media.lyrics.TtmlParserTest' --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsClientTest' --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsCacheTest' --tests 'com.gt8d.launcher.media.lyrics.AppleLyricsRepositoryTest' --tests 'com.gt8d.launcher.media.lyrics.AmllClientTest'
