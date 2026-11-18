@@ -1,0 +1,6 @@
+write GT8D-IPv6-Guard/AndroidManifest.xml
+write GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/Bootstrap.java
+write GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/Guard.java
+write GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/MainActivity.java
+write GT8D-IPv6-Guard/README.md
+command /home/munde/tools/jdk17/bin/javac -encoding UTF-8 -source 8 -target 8 -Xlint:all -Xlint:-options -classpath /home/munde/tools/android-sdk/platforms/android-35/android.jar -d /tmp/gt8d-guard-258-classes GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/BootReceiver.java GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/Bootstrap.java GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/Guard.java GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/LocalAdb.java GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/MainActivity.java GT8D-IPv6-Guard/src/local/gt8d/ipv6guard/RetryJob.java
