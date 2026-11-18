@@ -909,26 +909,41 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun delayMapsRedirect(redirect: SplitRedirect, readyAtMs: Long, openedAtMs: Long, withPanel: Boolean) {
         waitKind = WaitKind.MapsRedirectDelay
         val id = operationGeneration
-        val remaining = (readyAtMs + MAPS_COLD_REDIRECT_DELAY_MS - d.clock.nowMs()).coerceAtLeast(0L)
-        DiagLog.d("SetRunner", "maps redirect delayed ms=$MAPS_COLD_REDIRECT_DELAY_MS")
-        activeTimers.add(d.scheduler.schedule(remaining) {
-            if (id != operationGeneration) return@schedule
+        val redirectAtMs = readyAtMs + MAPS_COLD_REDIRECT_DELAY_MS
+        val placementDeadlineMs = redirectAtMs + MAPS_PLACEMENT_WAIT_MS
+
+        fun checkAndSend(recheckingPlacement: Boolean) {
+            if (id != operationGeneration) return
+            val remainingMs = placementDeadlineMs - d.clock.nowMs()
+            if (recheckingPlacement && remainingMs < 0) {
+                stopRedirectWait("panel placement timeout")
+                return
+            }
+            if (withPanel && panelPlacement != PanelPlacement.Left && panelPlacement != PanelPlacement.Right) {
+                if (remainingMs > 0) {
+                    activeTimers.add(d.scheduler.schedule(minOf(POLL_MS, remainingMs)) {
+                        checkAndSend(recheckingPlacement = true)
+                    })
+                } else {
+                    stopRedirectWait("panel placement=$panelPlacement")
+                }
+                return
+            }
             // マップは ready より前に前面になるため、開き始めからの前面化を見る。
             val visible = redirect.targetPkg in d.watcher.foregroundPkgsSince(openedAtMs)
-            if (id != operationGeneration) return@schedule
-            val reason = when {
-                !visible -> "maps not foreground"
-                withPanel && panelPlacement != PanelPlacement.Left && panelPlacement != PanelPlacement.Right ->
-                    "panel placement=$panelPlacement"
-                else -> null
+            if (id != operationGeneration) return
+            if (!visible) {
+                stopRedirectWait("maps not foreground")
+                return
             }
-            if (reason != null) {
-                stopRedirectWait(reason)
-            } else {
-                waitKind = WaitKind.None
-                cancelTimers()
-                sendRedirects(listOf(redirect), "maps redirect")
-            }
+            waitKind = WaitKind.None
+            cancelTimers()
+            sendRedirects(listOf(redirect), "maps redirect")
+        }
+
+        DiagLog.d("SetRunner", "maps redirect delayed ms=$MAPS_COLD_REDIRECT_DELAY_MS")
+        activeTimers.add(d.scheduler.schedule((redirectAtMs - d.clock.nowMs()).coerceAtLeast(0L)) {
+            checkAndSend(recheckingPlacement = false)
         })
     }
 
@@ -1149,6 +1164,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         private const val PIP_POLL_MS = 100L
         private const val PIP_TIMEOUT_MS = 1500L
         private const val MAPS_COLD_REDIRECT_DELAY_MS = 2500L
+        private const val MAPS_PLACEMENT_WAIT_MS = 3000L
         private const val LATE_REDIRECT_MS = 10_000L
         const val RETRY_AT_MS = 3000L
         const val BOOT_CLEAR_MS = 10000L

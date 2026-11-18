@@ -544,6 +544,22 @@ class SetRunnerTest {
         assertEquals(1, e.apps.redirectCalls.size)
     }
 
+    @Test fun coldMaps_panelReturnsDuringPlacementWait_sendsRedirectOnce() {
+        val e = mapsEnv()
+        e.runner.open(1)
+        e.runner.panelPlacementChanged(PanelPlacement.Right)
+        resumePanelApp(e, Defaults.PKG_MAPS)
+        e.runner.panelPlacementChanged(null)
+        e.scheduler.advanceBy(2500)
+        e.scheduler.schedule(600) { e.runner.panelPlacementChanged(PanelPlacement.Right) }
+        e.scheduler.advanceBy(599)
+        assertTrue(e.apps.redirectCalls.isEmpty())
+        e.scheduler.advanceBy(1)
+        assertEquals(listOf(mapsFreeDriveCall()), e.apps.redirectCalls)
+        e.scheduler.advanceBy(3000)
+        assertEquals(listOf(mapsFreeDriveCall()), e.apps.redirectCalls)
+    }
+
     @Test fun coldMaps_panelLeavesSplitDuringDelay_discardsRedirect() {
         for (placement in listOf(PanelPlacement.Full, null)) {
             val e = mapsEnv()
@@ -555,7 +571,22 @@ class SetRunnerTest {
             e.runner.panelPlacementChanged(placement)
             e.scheduler.advanceBy(1)
             assertTrue(e.apps.redirectCalls.isEmpty())
+            e.scheduler.advanceBy(3000)
+            e.runner.panelPlacementChanged(PanelPlacement.Right)
+            e.scheduler.advanceBy(3000)
+            assertTrue(e.apps.redirectCalls.isEmpty())
         }
+    }
+
+    @Test fun coldMaps_homeDuringPlacementWait_discardsRedirect() {
+        val e = mapsEnv()
+        e.runner.open(1)
+        resumePanelApp(e, Defaults.PKG_MAPS)
+        e.scheduler.advanceBy(2500 + 400L)
+        e.runner.home()
+        e.runner.panelPlacementChanged(PanelPlacement.Right)
+        e.scheduler.advanceBy(3000)
+        assertTrue(e.apps.redirectCalls.isEmpty())
     }
 
     @Test fun coldMaps_bootSplitsImmediatelyAndDelaysRedirectWithoutCurtain() {
