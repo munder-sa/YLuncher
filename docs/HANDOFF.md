@@ -2,6 +2,12 @@
 
 最終更新: 2026-11-18 (JST)
 
+## Drive Mode Launcher を分割の行き先で開く (2026-11-18 夜、2.3.10-beta1 / 79 を GT8D に導入、実機確認待ち)
+
+- ユーザーが Play の Driving Mode Launcher(`com.gatolabo.drivemodelauncher` 2.4)を導入。APK を調べた: 画面のない LauncherActivity だけで、`google.navigation:/?free=1&mode=d&entry=fnls` の VIEW をマップに送る(ライセンス確認つき)。YLuncher の meta-data は持たない。
+- **Task 272**(`33b675d`): Task 264 の「普通のマップを常にフリードライブ」をやめた(`ActivityLauncher` の `tryMapsFreeDrive` を削除)。`MapsFreeDriveRedirects` は Drive Mode Launcher だけを「マップ+フリードライブ URI」の redirect にする(GPT Live と同じ扱い。マップが無ければ null)。Task 266/268/270/271 は残し、Drive Mode Launcher で効く。関連テスト 581 件成功。全テストは正式版の前に1回。
+- 実機で確かめること: セット「X | Drive Mode Launcher」(冷えた・温かいマップ)、パネルから押す、普通のマップがフリードライブにならないこと。
+
 ## Google マップをフリードライブで開く (2026-11-18、**v2.3.9 正式版(版78)を GT8D に導入・push・GitHub Release 公開済み(Latest)**)
 
 - Task 264: マップは `google.navigation:/?free=1&mode=d&entry=fnls` の VIEW で開く(`MapsFreeDrive`)。ホーム・パネルは `AndroidActivityLauncher` で、セットは `MapsFreeDriveRedirects` の redirect で。ユーザー決定: 常に free=1(案内中に開き直すと案内が切り替わるのは許容)。
