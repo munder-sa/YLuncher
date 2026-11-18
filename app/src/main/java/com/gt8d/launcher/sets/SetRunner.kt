@@ -88,6 +88,7 @@ class SetRunner(private val d: SetRunnerDeps) {
         None,
         Single,
         Both,
+        LateRedirect,
     }
 
     private val _opening = MutableStateFlow<Opening?>(null)
@@ -133,6 +134,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private var panelSessionReady = false
     private var ownScreenSeen: Boolean = false
     private var bothProgress: (() -> Boolean)? = null
+    private var startLateRedirect: ((Long) -> Unit)? = null
     private var openingForBoot = false
     private var monitoringAvailable: Boolean = true
     private var expectedDelayMs: Long = WarmTracker.COLD_MS
@@ -198,6 +200,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     fun cancelOpening() {
+        stopLateRedirect()
         if (d.curtain.isShowing) {
             d.curtain.cancel()
         } else if (_opening.value != null) {
@@ -384,6 +387,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun onSetEnded(reason: String) {
+        stopLateRedirect()
         saver?.end(reason)
         DiagLog.d("SetRunner", "session ended reason=$reason")
     }
@@ -685,7 +689,6 @@ class SetRunner(private val d: SetRunnerDeps) {
         initialRequest: (() -> LaunchResult)? = null,
     ) {
         val id = operationGeneration
-        val opening = _opening.value
         val sinceMs = startMs
         waitKind = WaitKind.Both
         linkWaitBoth = linkReady != null
@@ -709,75 +712,29 @@ class SetRunner(private val d: SetRunnerDeps) {
             }
         }
 
-        fun pollingCurrent() = id == operationGeneration && _opening.value === opening &&
-            opening != null && waitKind == WaitKind.Both && monitoringAvailable
-
-        fun schedulePoll() {
-            if (!pollingCurrent()) return
-            if (pollInFlight) {
-                // At most one continuation for the current opening; no queued
-                // background queries while an old opening's Binder call remains.
-                pollWhenIdle = ::schedulePoll
-                return
-            }
-            val timer = d.scheduler.schedule(POLL_MS) {
-                if (!pollingCurrent()) return@schedule
-                if (stopMonitoringIfUnavailable(startMs, useCurtain)) return@schedule
-                if (pollInFlight) {
-                    pollWhenIdle = ::schedulePoll
-                    return@schedule
+        val sendable = redirects.filter { it.component != null || it.uri != null }
+        if (useCurtain && sendable.isNotEmpty()) {
+            startLateRedirect = { deadline ->
+                waitKind = WaitKind.LateRedirect
+                val lateGeneration = operationGeneration
+                fun expire() {
+                    DiagLog.d("SetRunner", "late redirect expired left=$left right=$right")
+                    stopLateRedirect()
                 }
-                val pollId = pollGeneration
-                val query = d.watcher.prepareRead(sinceMs)
-                pollInFlight = true
-                (d.foregroundPoll ?: d.watcher.poll).launch(query::read) { result ->
-                    pollInFlight = false
-                    val whenIdle = pollWhenIdle
-                    pollWhenIdle = null
-                    // Check operation and permission before ANY shared-state or
-                    // skew/log commitment. The watcher then checks request order.
-                    val accepted = pollingCurrent() && pollId == pollGeneration &&
-                        !stopMonitoringIfUnavailable(startMs, useCurtain) && d.watcher.commitRead(result)
-                    val seen = if (accepted) result.resumed.orEmpty().asSequence()
-                        .filter { it.timeMs >= sinceMs }.map { it.pkg }.toSet() else emptySet()
-                    val ready = accepted && if (panelSide != null) panelResumed && appPkg in seen
-                        else left in seen && right in seen
-                    if (accepted && stopMonitoringIfUnavailable(startMs, useCurtain)) {
-                        whenIdle?.invoke()
-                        return@launch
+                activeTimers.add(d.scheduler.schedule((deadline - d.clock.nowMs()).coerceAtLeast(0L)) {
+                    if (lateGeneration == operationGeneration) expire()
+                })
+                pollUntilBothReady(left, right, panelSide, sinceMs, canPoll = {
+                    when {
+                        d.clock.nowMs() >= deadline -> { expire(); false }
+                        !d.watcher.available() -> { stopLateRedirect(); false }
+                        else -> true
                     }
-                    if (ready) {
-                        DiagLog.d("SetRunner", "waitBoth ready left=$left right=$right")
-                        lastReadyAtMs = d.clock.nowMs()
-                        waitKind = WaitKind.None
-                        cancelTimers()
-                        readyCount++
-                        d.selector.onSuccess()
-                        d.warm.markForeground(left)
-                        d.warm.markForeground(right)
-                        if (panelSide != null) {
-                            panelSessionReady = true
-                            onSetReady(set, appPkg)
-                        }
-                        redirects.forEach { redirect ->
-                            if (redirect.component != null || redirect.uri != null) {
-                                val sent = d.apps.startRedirect(redirect, adjacent = false)
-                                DiagLog.d("SetRunner", "redirect target=${redirect.targetPkg} sent=$sent")
-                            }
-                        }
-                        if (useCurtain) {
-                            d.curtain.ready()
-                        } else {
-                            finishWithoutCurtain()
-                        }
-                    } else if (pollingCurrent()) {
-                        // Includes results superseded by synchronous retry/Safety.
-                        schedulePoll()
-                    }
-                    whenIdle?.invoke()
+                }) {
+                    stopLateRedirect()
+                    sendRedirects(sendable, "late redirect")
                 }
             }
-            activeTimers.add(timer)
         }
 
         if (initialRequest != null) {
@@ -790,7 +747,26 @@ class SetRunner(private val d: SetRunnerDeps) {
             }
         }
 
-        if (monitoringAvailable) schedulePoll()
+        if (monitoringAvailable) {
+            pollUntilBothReady(left, right, panelSide, sinceMs, canPoll = {
+                !stopMonitoringIfUnavailable(startMs, useCurtain)
+            }) {
+                DiagLog.d("SetRunner", "waitBoth ready left=$left right=$right")
+                lastReadyAtMs = d.clock.nowMs()
+                waitKind = WaitKind.None
+                cancelTimers()
+                readyCount++
+                d.selector.onSuccess()
+                d.warm.markForeground(left)
+                d.warm.markForeground(right)
+                if (panelSide != null) {
+                    panelSessionReady = true
+                    onSetReady(set, appPkg)
+                }
+                sendRedirects(sendable, "redirect")
+                if (useCurtain) d.curtain.ready() else finishWithoutCurtain()
+            }
+        }
 
         val retryTimer = d.scheduler.schedule(if (vendor) (startMs + RETRY_AT_MS - d.clock.nowMs()).coerceAtLeast(0L) else RETRY_AT_MS) {
             if (id != operationGeneration || _opening.value == null || !monitoringAvailable) return@schedule
@@ -827,6 +803,72 @@ class SetRunner(private val d: SetRunnerDeps) {
             }
             activeTimers.add(bootTimer)
         }
+    }
+
+    private fun pollUntilBothReady(
+        left: String,
+        right: String,
+        panelSide: Side?,
+        sinceMs: Long,
+        canPoll: () -> Boolean,
+        onReady: () -> Unit,
+    ) {
+        val id = operationGeneration
+        val kind = waitKind
+        val opening = _opening.value
+        val appPkg = if (panelSide == Side.Left) right else left
+        fun pollingCurrent() = id == operationGeneration && waitKind == kind && monitoringAvailable &&
+            (kind == WaitKind.LateRedirect || (opening != null && _opening.value === opening))
+
+        fun schedulePoll() {
+            if (!pollingCurrent()) return
+            if (pollInFlight) {
+                // Wait for the old Binder call to finish before starting another read.
+                pollWhenIdle = ::schedulePoll
+                return
+            }
+            activeTimers.add(d.scheduler.schedule(POLL_MS) {
+                if (!pollingCurrent() || !canPoll()) return@schedule
+                if (pollInFlight) {
+                    pollWhenIdle = ::schedulePoll
+                    return@schedule
+                }
+                val pollId = pollGeneration
+                val query = d.watcher.prepareRead(sinceMs)
+                pollInFlight = true
+                (d.foregroundPoll ?: d.watcher.poll).launch(query::read) { result ->
+                    pollInFlight = false
+                    val whenIdle = pollWhenIdle
+                    pollWhenIdle = null
+                    // Reject obsolete reads before committing any watcher state.
+                    val accepted = pollingCurrent() && pollId == pollGeneration &&
+                        canPoll() && d.watcher.commitRead(result)
+                    if (accepted && canPoll()) {
+                        val seen = result.resumed.orEmpty().asSequence()
+                            .filter { it.timeMs >= sinceMs }.map { it.pkg }.toSet()
+                        val ready = if (panelSide != null) panelResumed && appPkg in seen
+                            else left in seen && right in seen
+                        if (ready) onReady()
+                    }
+                    if (pollingCurrent()) schedulePoll()
+                    whenIdle?.invoke()
+                }
+            })
+        }
+        schedulePoll()
+    }
+
+    private fun sendRedirects(redirects: List<SplitRedirect>, logLabel: String) {
+        for (redirect in redirects) {
+            val sent = d.apps.startRedirect(redirect, adjacent = false)
+            DiagLog.d("SetRunner", "$logLabel target=${redirect.targetPkg} sent=$sent")
+        }
+    }
+
+    private fun stopLateRedirect() {
+        if (waitKind != WaitKind.LateRedirect) return
+        waitKind = WaitKind.None
+        cancelTimers()
     }
 
     private fun waitSingle(pkg: String, startMs: Long, useCurtain: Boolean) {
@@ -896,6 +938,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     }
 
     private fun onCurtainHidden(reason: HideReason) {
+        val hiddenAtMs = d.clock.nowMs()
         val progressed = if (monitoringAvailable && reason == HideReason.Safety && waitKind == WaitKind.Both) {
             bothProgress?.invoke() == true
         } else null
@@ -908,9 +951,11 @@ class SetRunner(private val d: SetRunnerDeps) {
         val kind = waitKind
         val fallback = linkFallback
         val ready = linkReady.takeIf { linkWaitBoth }
+        val lateRedirect = startLateRedirect?.takeIf { progressed == true && d.watcher.available() }
         cancelLinkCallbacks()
         waitKind = WaitKind.None
         cancelTimers()
+        lateRedirect?.invoke(hiddenAtMs + LATE_REDIRECT_MS)
         openingForBoot = false
         val cancelledOpening = _opening.value
         _opening.value = null
@@ -962,6 +1007,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     private fun cancelTimers() {
         operationGeneration++
         pollGeneration++
+        startLateRedirect = null
         pollWhenIdle = null
         warmupTimer?.cancel()
         warmupTimer = null
@@ -1025,6 +1071,7 @@ class SetRunner(private val d: SetRunnerDeps) {
     companion object {
         const val STOCK_LAUNCHER_PKG = "com.android.launcher3"
         const val POLL_MS = 200L
+        private const val LATE_REDIRECT_MS = 10_000L
         const val RETRY_AT_MS = 3000L
         const val BOOT_CLEAR_MS = 10000L
         const val CANCEL_GUARD_MS = 5000L

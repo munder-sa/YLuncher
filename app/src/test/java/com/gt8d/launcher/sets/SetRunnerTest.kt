@@ -1,10 +1,13 @@
 package com.gt8d.launcher.sets
 
 import com.gt8d.launcher.notice.Notice
+import com.gt8d.launcher.apps.MapsFreeDrive
+import com.gt8d.launcher.apps.MapsFreeDriveRedirects
 import com.gt8d.launcher.apps.SplitRedirect
 import com.gt8d.launcher.apps.SplitRedirects
 
 import com.gt8d.launcher.config.LauncherConfig
+import com.gt8d.launcher.config.Defaults
 import com.gt8d.launcher.config.ScreenSet
 import com.gt8d.launcher.config.Slot
 import com.gt8d.launcher.config.Side
@@ -42,6 +45,8 @@ import com.gt8d.launcher.split.PanelPlacement
 import com.gt8d.launcher.split.StockLauncherWarmup
 import com.gt8d.launcher.split.StockLauncherWarmupState
 
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [35], application = android.app.Application::class)
 class SetRunnerTest {
     @Test fun reopenWithApp_buildsPanelAndAppPair_usesCurrentSetRatioOrDefault() {
         for (side in listOf(Side.Left, Side.Right)) {
@@ -356,6 +361,79 @@ class SetRunnerTest {
         e.scheduler.advanceBy(600); assertEquals(0, ready); assertEquals(0, failed)
         finishApps(e); assertEquals(1, ready); assertEquals(0, failed)
         e.scheduler.advanceBy(10000); assertEquals(1, ready); assertEquals(0, failed)
+    }
+
+    private fun openColdMaps(panel: Boolean = true, progress: Boolean = true): TestEnv = TestEnv().apply {
+        val partner = if (panel) Slot.Panel else Slot.App("youtube")
+        val mapsSet = ScreenSet("coldMaps", Slot.App(Defaults.PKG_MAPS), partner, SplitRatio.R6_4)
+        config = config.copy(screenSets = listOf(mapsSet, config.screenSets[1]))
+        installed.add(Defaults.PKG_MAPS)
+        redirects = MapsFreeDriveRedirects(SplitRedirects { null })
+        runner.open(1)
+        if (progress) events.events.add(ResumeEvent(SetRunner.STOCK_LAUNCHER_PKG, 100))
+        scheduler.advanceBy(CurtainController.SAFETY_MS)
+        assertEquals(listOf(HideReason.Safety), curtainView.hiddenReasons)
+        assertTrue(apps.redirectCalls.isEmpty())
+    }
+
+    @Test fun coldMaps_afterSafety_sendsFreeDriveOnceWhenBothSidesResume() {
+        for (panel in listOf(true, false)) {
+            val e = openColdMaps(panel = panel)
+            e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
+            e.scheduler.advanceBy(SetRunner.POLL_MS)
+            assertTrue(e.apps.redirectCalls.isEmpty())
+
+            if (panel) e.runner.panelResumedInSplit()
+            else e.events.events.add(ResumeEvent("youtube", e.scheduler.nowMs()))
+            e.scheduler.advanceBy(SetRunner.POLL_MS)
+            val expected = SplitRedirect(Defaults.PKG_MAPS, null, android.net.Uri.parse(MapsFreeDrive.URI))
+            assertEquals(listOf(expected to false), e.apps.redirectCalls)
+            e.scheduler.advanceBy(10_000)
+            assertEquals(1, e.apps.redirectCalls.size)
+            assertEquals(0, e.runner.readyCount)
+            assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+            assertEquals(listOf(Notice.Slow), e.messenger.notices)
+        }
+    }
+
+    @Test fun lateRedirect_expiresTenSecondsAfterSafety() {
+        for (withinDeadline in listOf(true, false)) {
+            val e = openColdMaps()
+            e.scheduler.advanceBy(if (withinDeadline) 9_600 else 10_001)
+            e.runner.panelResumedInSplit()
+            e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
+            e.scheduler.advanceBy(SetRunner.POLL_MS)
+            assertEquals(if (withinDeadline) 1 else 0, e.apps.redirectCalls.size)
+        }
+    }
+
+    @Test fun lateRedirect_discardedOnSetChangeHomeCancelOrMonitoringLoss() {
+        for (action in listOf("open", "home", "cancel", "unavailable", "queryFailure")) {
+            val e = openColdMaps()
+            when (action) {
+                "open" -> e.runner.open(2)
+                "home" -> e.runner.home()
+                "cancel" -> e.runner.cancelOpening()
+                "unavailable" -> e.events.isAvailable = false
+                "queryFailure" -> e.events.queryFails = true
+            }
+            e.scheduler.advanceBy(SetRunner.POLL_MS)
+            e.events.isAvailable = true
+            e.events.queryFails = false
+            e.runner.panelResumedInSplit()
+            e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
+            e.scheduler.advanceBy(SetRunner.POLL_MS)
+            assertTrue(action, e.apps.redirectCalls.isEmpty())
+        }
+    }
+
+    @Test fun lateRedirect_safetyWithoutProgressDiscardsMapsEvenIfBothResumeLater() {
+        val e = openColdMaps(progress = false)
+        assertEquals(1, e.selector.state.consecutiveFailures)
+        e.runner.panelResumedInSplit()
+        e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
+        e.scheduler.advanceBy(SetRunner.POLL_MS)
+        assertTrue(e.apps.redirectCalls.isEmpty())
     }
 
     @org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
