@@ -2,12 +2,13 @@
 
 最終更新: 2026-11-18 (JST)
 
-## Apple 単語同期歌詞の INVALID 対策 (2026-11-18、**2.3.8-beta1(版71)を GT8D に導入、実機OK**)
+## Apple 単語同期歌詞の INVALID 対策 (2026-11-18、**v2.3.8 正式版(版72)を GT8D に導入・ローカルでタグ `v2.3.8-release` 済み、push・公開は承認待ち**)
 
 - 事象: 「はいよろこんで」「それもいいね」など Apple Music 本体で単語同期が出る曲が `apple result accepted=false reason=INVALID` で破棄され、LRCLIB 行単位に落ちていた。仕様はユーザー提供の指示書。
 - **Task 259**(`e74fe1e`): `TtmlParser` で行の重なり・同時開始、0ms 要素、親子境界のはみ出し、同時刻の隣接単語、空白だけの span、曲長+5秒、1桁時間・4桁以上の小数秒を受理。先頭単語が行より早いときは行の開始をそれに合わせる。Invalid は固定コード(`doctype/xml/limit/time-format/element-range/word-order/beyond-duration`)。`AppleLyricsClient` の INVALID に非機密 `detail`(`json/api-errors/data-shape/ttml-missing-or-large/ttml-root/response-too-large/exception` と上記)。歌詞関連 5 クラス 83 件成功。全テストは未実行(正式版にする前に1回)。
 - **Task 260**(`0eda9b9`): 2.3.8-beta1 / 71。本体 SHA-256 `3936cf86…62e6`、中継 `781a1f08…e934`、`build/releases/v2.3.8-beta1/`。実機で2曲とも `accepted=true reason=OK`(lines=61 words=313 / lines=42 words=237)、ユーザー目視で単語同期 OK。
-- 次: 正式版 2.3.8 にするなら、全テスト1回 → 版を 2.3.8 / 72 → release ビルド → 実機 → push/公開(公開はユーザー承認)。
+- **正式版**: 全テスト 2,278 件中 1 件失敗(`LyricsRepositoryTest.logsAmllFailuresAndLrclibSelection` の AMLL ログ期待値 `Invalid timing-or-limit`=Task 259 の理由コード化による想定内)→ **Task 262**(`7f6c562`)で `Invalid time-format` に更新、同クラス 44 件成功。**Task 263** で 2.3.8 / 72 の release ビルド(44秒)、`7da12fa`+タグ `v2.3.8-release`(ローカル)。本体 SHA-256 `55a8ff47…ceb9`、中継 `e2bd8bb6…7606`、`build/releases/v2.3.8/`(SHA256SUMS.txt・RELEASE_NOTES.md)。実機へ install -r、版・ハッシュ一致、HOME・通知リスナー維持、正式版でも `apple result accepted=true reason=OK lines=42 words=237`。
+- 次: ユーザー承認後に `git push origin main v2.3.8-release` → gh.exe で下書き Release → digest 照合 → 公開。
 - 同日: ipv6guard v1.1(Task 258)。下の「ipv6guard v1.1 ワンショット化」を参照。
 
 ## Apple Music のジャケット・背景色の欠落対策 (2026-11-17、**v2.3.6 正式版(版68)を GT8D に導入・push 済み**)
