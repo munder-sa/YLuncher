@@ -452,12 +452,134 @@ class SetRunnerTest {
         e.scheduler.advanceBy(10000); assertEquals(1, ready); assertEquals(0, failed)
     }
 
-    private fun openColdMaps(panel: Boolean = true, progress: Boolean = true): TestEnv = TestEnv().apply {
+    private fun mapsEnv(panel: Boolean = true, pip: PipDetector = FakePip()) = TestEnv(pip = pip).apply {
         val partner = if (panel) Slot.Panel else Slot.App("youtube")
-        val mapsSet = ScreenSet("coldMaps", Slot.App(Defaults.PKG_MAPS), partner, SplitRatio.R6_4)
+        val mapsSet = ScreenSet("maps", Slot.App(Defaults.PKG_MAPS), partner, SplitRatio.R6_4)
         config = config.copy(screenSets = listOf(mapsSet, config.screenSets[1]))
         installed.add(Defaults.PKG_MAPS)
         redirects = MapsFreeDriveRedirects(SplitRedirects { null })
+    }
+
+    @Test fun coldMaps_afterPip_prelaunchesOnceAndSplits1500msAfterForeground() {
+        val maps = Defaults.PKG_MAPS
+        val pip = FakePip(maps)
+        val e = mapsEnv(pip = pip)
+        e.runner.open(1)
+        e.events.events.add(ResumeEvent(maps, 50))
+        e.scheduler.advanceBy(100)
+        assertTrue(e.apps.startAppCalls.isEmpty())
+        pip.pinned.clear()
+        e.scheduler.advanceBy(100)
+        assertEquals(listOf(StartAppCall(maps, false)), e.apps.startAppCalls)
+        assertTrue(e.warm.isWarm(maps))
+        assertNotNull(e.runner.opening.value)
+
+        e.runner.open(1)
+        e.events.events.add(ResumeEvent(maps, e.scheduler.nowMs() + 5900))
+        e.scheduler.advanceBy(5900 + 1499L)
+        assertEquals(listOf(StartAppCall(maps, false)), e.apps.startAppCalls)
+        assertTrue(e.vendor.calls.isEmpty())
+        assertFalse(e.curtain.isShowing)
+        e.scheduler.advanceBy(1)
+        assertEquals(listOf(SplitCall(maps, "com.gt8d.launcher.panel", SplitRatio.R6_4)), e.vendor.calls)
+        resumePanelApp(e, maps)
+        assertEquals(listOf(HideReason.Ready), e.curtainView.hiddenReasons)
+        assertTrue(e.apps.redirectCalls.isEmpty())
+    }
+
+    @Test fun prelaunchedMaps_afterSafety_sendsOnlyPartnerRedirect() {
+        val maps = Defaults.PKG_MAPS
+        val e = mapsEnv(panel = false)
+        val partner = SplitRedirect("applemusic", null, android.net.Uri.parse("music://play"))
+        e.redirects = MapsFreeDriveRedirects(SplitRedirects { if (it == "youtube") partner else null })
+        e.runner.open(1)
+        e.events.events.add(ResumeEvent(maps, 100))
+        e.scheduler.advanceBy(1600)
+        assertEquals(listOf(SplitCall(maps, partner.targetPkg, SplitRatio.R6_4)), e.vendor.calls)
+        e.events.events.add(ResumeEvent(partner.targetPkg, e.scheduler.nowMs() + 1))
+        e.scheduler.advanceBy(CurtainController.SAFETY_MS)
+        assertEquals(listOf(HideReason.Safety), e.curtainView.hiddenReasons)
+        assertTrue(e.apps.redirectCalls.isEmpty())
+        e.events.events.add(ResumeEvent(maps, e.scheduler.nowMs()))
+        e.scheduler.advanceBy(SetRunner.POLL_MS)
+        assertEquals(listOf(partner to false), e.apps.redirectCalls)
+    }
+
+    @Test fun warmMaps_splitsImmediatelyAndSendsFreeDriveWhenReady() {
+        val maps = Defaults.PKG_MAPS
+        val e = mapsEnv()
+        e.warm.markForeground(maps)
+        e.runner.open(1)
+        assertTrue(e.apps.startAppCalls.isEmpty())
+        assertEquals(listOf(SplitCall(maps, "com.gt8d.launcher.panel", SplitRatio.R6_4)), e.vendor.calls)
+        assertTrue(e.apps.redirectCalls.isEmpty())
+        resumePanelApp(e, maps)
+        val redirect = SplitRedirect(maps, null, android.net.Uri.parse(MapsFreeDrive.URI))
+        assertEquals(listOf(redirect to false), e.apps.redirectCalls)
+    }
+
+    @Test fun mapsPrelaunchFailure_splitsImmediately() {
+        val maps = Defaults.PKG_MAPS
+        val e = mapsEnv()
+        e.apps.startAppResult = false
+        e.runner.open(1)
+        assertEquals(listOf(StartAppCall(maps, false)), e.apps.startAppCalls)
+        assertEquals(listOf(SplitCall(maps, "com.gt8d.launcher.panel", SplitRatio.R6_4)), e.vendor.calls)
+        assertFalse(e.warm.isWarm(maps))
+        assertTrue(e.messenger.notices.isEmpty())
+    }
+
+    @Test fun coldMaps_bootSplitsAt6000msWithoutForeground() {
+        val maps = Defaults.PKG_MAPS
+        val e = mapsEnv()
+        e.config = e.config.copy(screenSets = listOf(e.config.screenSets.first().swapped()))
+        e.runner.openForBoot(1)
+        assertEquals(listOf(StartAppCall(maps, false)), e.apps.startAppCalls)
+        e.scheduler.advanceBy(5999)
+        assertTrue(e.vendor.calls.isEmpty())
+        e.scheduler.advanceBy(1)
+        assertEquals(listOf(SplitCall("com.gt8d.launcher.panel", maps, SplitRatio.R4_6)), e.vendor.calls)
+        assertTrue(e.curtainView.shownTargets.isEmpty())
+        assertTrue(e.messenger.notices.isEmpty())
+        assertEquals(SplitModeState(), e.store.state)
+    }
+
+    @Test fun mapsPrelaunch_newSetHomeAndCancelDiscardWait() {
+        for (action in listOf("open", "home", "cancel")) {
+            val e = mapsEnv()
+            e.runner.open(1)
+            if (action != "home") e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, 100))
+            e.scheduler.advanceBy(100)
+            val expected = if (action == "open") {
+                e.runner.open(2)
+                finishApps(e)
+                listOf(SplitCall("youtube", "applemusic", SplitRatio.R6_4))
+            } else {
+                if (action == "home") e.runner.home() else e.runner.cancelOpening()
+                assertEquals(1, e.startHomeCount)
+                emptyList()
+            }
+            e.scheduler.advanceBy(6000)
+            assertEquals(action, expected, e.vendor.calls)
+            assertNull(e.runner.opening.value)
+            assertTrue(e.messenger.notices.isEmpty())
+        }
+    }
+
+    @Test fun setWithoutMapsAndLinkWithColdMaps_splitWithoutPrelaunch() {
+        val e = mapsEnv()
+        e.runner.open(2)
+        finishApps(e)
+        assertTrue(e.runner.openForLink("youtube", Defaults.PKG_MAPS, {}, {}))
+        assertEquals(listOf(
+            SplitCall("youtube", "applemusic", SplitRatio.R6_4),
+            SplitCall("youtube", Defaults.PKG_MAPS, SplitRatio.R5_5),
+        ), e.vendor.calls)
+        assertTrue(e.apps.startAppCalls.isEmpty())
+    }
+
+    private fun openWarmMapsUntilSafety(panel: Boolean = true, progress: Boolean = true) = mapsEnv(panel).apply {
+        warm.markForeground(Defaults.PKG_MAPS)
         runner.open(1)
         if (progress) events.events.add(ResumeEvent(SetRunner.STOCK_LAUNCHER_PKG, 100))
         scheduler.advanceBy(CurtainController.SAFETY_MS)
@@ -465,9 +587,9 @@ class SetRunnerTest {
         assertTrue(apps.redirectCalls.isEmpty())
     }
 
-    @Test fun coldMaps_afterSafety_sendsFreeDriveOnceWhenBothSidesResume() {
+    @Test fun warmMaps_afterSafety_sendsFreeDriveOnceWhenBothSidesResume() {
         for (panel in listOf(true, false)) {
-            val e = openColdMaps(panel = panel)
+            val e = openWarmMapsUntilSafety(panel = panel)
             e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
             e.scheduler.advanceBy(SetRunner.POLL_MS)
             assertTrue(e.apps.redirectCalls.isEmpty())
@@ -487,7 +609,7 @@ class SetRunnerTest {
 
     @Test fun lateRedirect_expiresTenSecondsAfterSafety() {
         for (withinDeadline in listOf(true, false)) {
-            val e = openColdMaps()
+            val e = openWarmMapsUntilSafety()
             e.scheduler.advanceBy(if (withinDeadline) 9_600 else 10_001)
             e.runner.panelResumedInSplit()
             e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
@@ -498,7 +620,7 @@ class SetRunnerTest {
 
     @Test fun lateRedirect_discardedOnSetChangeHomeCancelOrMonitoringLoss() {
         for (action in listOf("open", "home", "cancel", "unavailable", "queryFailure")) {
-            val e = openColdMaps()
+            val e = openWarmMapsUntilSafety()
             when (action) {
                 "open" -> e.runner.open(2)
                 "home" -> e.runner.home()
@@ -517,7 +639,7 @@ class SetRunnerTest {
     }
 
     @Test fun lateRedirect_safetyWithoutProgressDiscardsMapsEvenIfBothResumeLater() {
-        val e = openColdMaps(progress = false)
+        val e = openWarmMapsUntilSafety(progress = false)
         assertEquals(1, e.selector.state.consecutiveFailures)
         e.runner.panelResumedInSplit()
         e.events.events.add(ResumeEvent(Defaults.PKG_MAPS, e.scheduler.nowMs()))
