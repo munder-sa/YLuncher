@@ -2,6 +2,15 @@
 
 最終更新: 2026-11-18 (JST)
 
+## Google マップをフリードライブで開く (2026-11-18、**v2.3.9 正式版(版78)を GT8D に導入・push・GitHub Release 公開済み(Latest)**)
+
+- Task 264: マップは `google.navigation:/?free=1&mode=d&entry=fnls` の VIEW で開く(`MapsFreeDrive`)。ホーム・パネルは `AndroidActivityLauncher` で、セットは `MapsFreeDriveRedirects` の redirect で。ユーザー決定: 常に free=1(案内中に開き直すと案内が切り替わるのは許容)。
+- フリードライブ中のマップは自動で PiP に入るが、GT8D では PiP の窓が見えず、ユーザー補助の窓一覧にも出ないまま分割を妨げる。**端末側で `appops set com.google.android.apps.maps PICTURE_IN_PICTURE ignore`(初期化後は再設定)**。YLuncher のユーザー補助(PiP の判定)も有効化済み。
+- Task 266: 幕が Safety で閉じた後に分割が整ったら redirect を遅れて送る(10秒まで)。Task 268: セットを開く前に PiP のアプリを解く(マップには効かないが、判定できるアプリ向けに残した)。
+- 冷えたマップ(起動直後など)の試行錯誤: ready 直後に送る(beta2)は5回中3回、先にフリードライブで全画面起動してから分割(Task 269、beta3)は4回中2回で、分割が解ける・黒くなるが出た。Gemini の「onNewIntent 飲み込み」説も検証したが主因ではなかった。**Task 270/271: 冷えたマップは分割 ready から2.5秒後に1回だけ送る。パネルの位置が一時 null なら最大3秒待つ**(beta5 で冷えた状態から6回中6回成功)。温かいマップは従来どおり即送る。
+- 未確認: 端末を再起動した直後の自動オープン(openForBoot)での実機確認(同じ処理を通る)。
+- 確認: 全テスト 2,299 件成功、2.3.9 の APK の SHA-256 を GT8D 上で照合済み。
+
 ## Apple 単語同期歌詞の INVALID 対策 (2026-11-18、**v2.3.8 正式版(版72)を GT8D に導入・push・GitHub Release 公開済み(Latest)**)
 
 - 事象: 「はいよろこんで」「それもいいね」など Apple Music 本体で単語同期が出る曲が `apple result accepted=false reason=INVALID` で破棄され、LRCLIB 行単位に落ちていた。仕様はユーザー提供の指示書。
