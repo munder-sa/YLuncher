@@ -35,7 +35,7 @@ public final class MainActivity extends Activity {
         }));
         apply = button(layout, "今すぐ適用", view -> runTask(() -> Guard.apply(this, "manual apply")));
         refresh = button(layout, "状態を更新", view -> runTask(() -> Guard.status(this)));
-        layout.addView(text("端末内のADB接続を使用します。PCへの接続は不要です。", 15));
+        layout.addView(text("起動時に一度だけ設定し、常駐しません。必要なときだけ端末内のADBを一瞬使い、すぐ停止します。PCへの接続は不要です。", 15));
         updateButtons();
         runTask(() -> {
             if (!Guard.preferences(this).getBoolean("initialized", false)) {
