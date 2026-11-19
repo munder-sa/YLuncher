@@ -1,0 +1,4 @@
+create tools/aameta/aameta.c
+create tools/aameta/aameta-watch.sh
+command env ZIG_GLOBAL_CACHE_DIR=/tmp/aameta-zig ZIG_LOCAL_CACHE_DIR=/tmp/aameta-zig /home/munde/bin/zig cc -target arm-linux-musleabihf -static -Os tools/aameta/aameta.c -o /tmp/aameta-zig/aameta
+command sh -n tools/aameta/aameta-watch.sh
