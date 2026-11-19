@@ -94,6 +94,14 @@ final class Guard {
                         + stopCommand() + "; rm -rf " + ROOT + "; "
                         + "/system/bin/ip -6 rule show | /system/bin/grep -Eq '^32000:[[:space:]]+from all unreachable([[:space:]]|$)' "
                         + "|| /system/bin/ip -6 rule add priority 32000 unreachable; "
+                        // 有線 AA へ曲情報を送る aameta-watch(YLuncher Task 273)。置いてあり、まだ動いていなければ起動する
+                        // watch が起動する logcat で判定する。[M] はこのコマンド自身(sh -c の引数にパスを含む)に一致させないため
+                        + "if [ -x /data/local/tmp/aameta ] && [ -r /data/local/tmp/aameta-watch.sh ] "
+                        + "&& ! /system/bin/pgrep -f 'logcat -v raw -s [M]ediaInfo:D' >/dev/null; then "
+                        // 背景に回すのは単純なコマンドだけ。{ } を背景に回すと外側の sh が adb の出力を握り、LocalAdb.shell が終わらない
+                        // adbd の cgroup に残ると ctl.stop adbd で init に一緒に終了させられるので、子を作る前にルートの cgroup へ移る
+                        + "/system/bin/nohup /system/bin/sh -c 'echo $$ >/sys/fs/cgroup/cgroup.procs; exec /system/bin/sh /data/local/tmp/aameta-watch.sh' "
+                        + "</dev/null >/dev/null 2>&1 & fi; "
                         + "echo GUARD_ONESHOT_OK";
                 result = LocalAdb.shell(command);
                 if (!result.contains("GUARD_ONESHOT_OK")) {
