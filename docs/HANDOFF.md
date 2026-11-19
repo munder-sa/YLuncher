@@ -2,6 +2,13 @@
 
 最終更新: 2026-11-18 (JST)
 
+## 有線 AA へ曲名・アーティスト・アルバムを送る aameta (2026-11-19、Task 273、**DHU で曲送りの追従を確認。実車は未確認**)
+- 原因: MainAiBox は `AT#CQ1..4`(変わった項目だけ)→`CQ5` を送るが、`sdAutoReverse` は CQ5 でバッファを消すだけで車へ送らない。さらに `libSdAutoReverse.so` の `MediaPlaybackStatusEndpoint::sendMsgPlaybackMeta`(0x202844)は**メッセージ番号を誤って 0x8001(再生状態)で送る**(同じライブラリの `routeMessage` は 0x8003 を曲情報として扱う)。実引数の並びは (this, 曲名, アルバム, アーティスト, s4, bytes, len, 曲長ms, 評価)。
+- `tools/aameta/aameta.c`(a0call と同じ ptrace 方式、`/system` 無改造): endpoint = `*(*(*(base+0x802d60)+0xc)+0x74)`、`+4` の準備フラグを確かめ、呼ぶ間だけ 0x2029de の `movw r1,#0x8001` の imm8 を 0x03 にして(このプロセスの私有ページだけ)、呼んだら戻す。`status`/`conn`/`send`。`tools/aameta/aameta-watch.sh`: `logcat -T 1` の `reportMediaInfo duration=…`(毎回4項目そろう)を保持し、`sendCQCmd=true`(=CQ5)で一組送る。`conn`(pid:endpoint)が変わったら(初回・つなぎ直し)現在の組を送り直す。Codex は ptrace を理由に実装を断ったので、Claude が実装した。
+- DHU で確認(23:23): 「背を向けて寝る癖」→次の曲「藍の意味を」。MainAiBox は CQ4 と CQ1 だけ送り、watch が 60ms 後に `藍の意味を/Leina/tulip - EP` を送った。DHU の Song が切り替わり、Album/Artist も欠けなかった。DHU の窓は UTF-8 を Latin-1 で表示する(文字化けのバイトは UTF-8 と1バイトずつ一致)。
+- 副作用: 最初の試し撃ち(0x8001 のまま)で、DHU の State/Source が `STOPPED / tulip - EP` に上書きされた。純正は音声の開始/停止のときだけ再生状態を送るので、一時停止→再生では戻らない。つなぎ直しで戻るはず(未確認)。
+- 未確認: 別アーティスト・別アルバムへの曲送り、投影の切断→再接続、実車のメーター。常駐の方法(現在は adb から `nohup sh /data/local/tmp/aameta-watch.sh &`、再起動で消える)は未決。
+
 ## Drive Mode Launcher を分割の行き先で開く (2026-11-19、**v2.3.10 正式版(版80)を GT8D に導入・push・GitHub Release 公開**)
 
 - 2.3.10-beta1 の実機確認(Claude が adb で操作): Apple Music+DML(温・冷)、DML+パネルともフリードライブのまま分割。普通のマップを止めてから開くと普通の画面。初回の1回だけ Apple Music の中身が黒かった(タブを押すと出た。4回再現せず。Apple Music 側の一時的な描画とみる)。パネルから DML を押す操作は未確認。
